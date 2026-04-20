@@ -35,7 +35,7 @@
 
 Ensure your code is pushed to GitHub at:
 ```
-https://github.com/DefoxxAnalytics/Versatex_Analytics2.0
+https://github.com/DefoxxAnalytics/versatex-analytics
 ```
 
 All necessary files are already committed:
@@ -167,12 +167,12 @@ This will open a browser window to authenticate.
    - Select your GitHub organization/account
    - Choose repository access:
      - Select "Only select repositories"
-     - Choose: `Versatex_Analytics2.0`
+     - Choose: `versatex-analytics`
    - Click "Install & Authorize"
 
 4. **Select Your Repository**:
    - You should now see your repo in the list
-   - Click on: `DefoxxAnalytics/Versatex_Analytics2.0`
+   - Click on: `DefoxxAnalytics/versatex-analytics`
 
 5. **Railway will start deploying** - STOP IT:
    - Click the X or Cancel on the deployment
@@ -311,7 +311,7 @@ The Celery worker handles background tasks (CSV uploads, analytics calculations)
 1. **Click "+ New"**
 2. **Select "GitHub Repo"**
 3. **Select the same repository**:
-   - `DefoxxAnalytics/Versatex_Analytics2.0`
+   - `DefoxxAnalytics/versatex-analytics`
 4. **Cancel the auto-deployment** (we need to configure first)
 
 ### Step 5.2: Configure Celery Worker

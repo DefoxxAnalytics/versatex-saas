@@ -319,7 +319,7 @@ GitHub Actions workflow runs on push/PR to master:
 - Security: Trivy vulnerability scanning
 
 Badges:
-- [![CI](https://github.com/DefoxxAnalytics/Versatex_Analytics2.0/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/DefoxxAnalytics/Versatex_Analytics2.0/actions/workflows/ci.yml)
+- [![CI](https://github.com/DefoxxAnalytics/versatex-analytics/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DefoxxAnalytics/versatex-analytics/actions/workflows/ci.yml)
 
 ## Test Coverage
 

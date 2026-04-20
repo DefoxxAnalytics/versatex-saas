@@ -69,7 +69,7 @@ Ensure these files are committed:
 1. **Go to Railway Dashboard**: https://railway.app/dashboard
 2. **Click "New Project"**
 3. **Select "Deploy from GitHub repo"**
-4. **Choose your repository**: `DefoxxAnalytics/Versatex_Analytics2.0`
+4. **Choose your repository**: `DefoxxAnalytics/versatex-analytics`
 5. **Railway will detect your services** from docker-compose.yml
 
 #### Option B: Using Railway CLI
