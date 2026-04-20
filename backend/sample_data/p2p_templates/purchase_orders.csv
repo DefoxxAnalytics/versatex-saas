@@ -1,0 +1,11 @@
+po_number,supplier_name,total_amount,currency,tax_amount,freight_amount,status,category,created_date,approval_date,sent_date,required_date,promised_date,pr_number,is_contract_backed
+PO-2024-001,TechCorp Solutions,15000.00,USD,1200.00,150.00,fully_received,IT Equipment,2024-01-10,2024-01-11,2024-01-12,2024-02-01,2024-01-28,PR-2024-001,true
+PO-2024-002,Creative Displays Inc,8500.00,USD,680.00,350.00,fully_received,Marketing Materials,2024-01-16,2024-01-17,2024-01-18,2024-02-15,2024-02-10,PR-2024-002,false
+PO-2024-003,Industrial Storage Co,12000.00,USD,960.00,500.00,partially_received,Warehouse Equipment,2024-01-20,2024-01-21,2024-01-22,2024-02-20,2024-02-18,PR-2024-003,false
+PO-2024-004,Software Solutions Ltd,5000.00,USD,400.00,0.00,closed,Software Licenses,2024-01-12,2024-01-13,2024-01-14,2024-01-20,2024-01-18,PR-2024-005,true
+PO-2024-005,TechCorp Solutions,35000.00,USD,2800.00,200.00,fully_received,IT Equipment,2024-01-15,2024-01-16,2024-01-17,2024-02-10,2024-02-05,PR-2024-006,true
+PO-2024-006,Industrial Parts Supply,3500.00,USD,280.00,75.00,fully_received,Maintenance Parts,2024-01-24,2024-01-25,2024-01-26,2024-02-05,2024-02-01,PR-2024-007,false
+PO-2024-007,Learning Solutions Corp,18000.00,USD,1440.00,0.00,sent_to_supplier,Training Services,2024-02-01,2024-02-02,2024-02-03,2024-03-01,2024-02-28,PR-2024-009,true
+PO-2024-008,AccountingPro LLC,45000.00,USD,3600.00,0.00,approved,Professional Services,2024-02-02,2024-02-03,,2024-03-15,,PR-2024-010,true
+PO-2024-009,Office Supplies Co,2500.00,USD,200.00,50.00,fully_received,Office Supplies,2024-02-05,2024-02-06,2024-02-07,2024-02-20,2024-02-15,,false
+PO-2024-010,Cleaning Services Inc,4000.00,USD,320.00,0.00,closed,Facility Services,2024-02-08,2024-02-09,2024-02-10,2024-02-28,2024-02-25,,true

@@ -1,0 +1,389 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content_title %}<h1>Delete All Data</h1>{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='procurement' %}">Procurement</a>
+    &rsaquo; <a href="{% url 'admin:procurement_dataupload_changelist' %}">Data uploads</a>
+    &rsaquo; Delete All Data
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .delete-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 30px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .delete-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .delete-header h2 {
+        color: #f59e0b;
+        font-size: 1.5rem;
+        margin-bottom: 10px;
+        background: none;
+    }
+
+    .delete-header p {
+        color: #6b7280;
+        font-size: 0.95rem;
+    }
+
+    .warning-box {
+        background: #fffbeb;
+        border: 2px solid #fcd34d;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+
+    .warning-box h4 {
+        color: #b45309;
+        font-size: 1rem;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .warning-box p {
+        color: #92400e;
+        font-size: 0.9rem;
+        margin-bottom: 12px;
+    }
+
+    .warning-box .will-delete {
+        color: #dc2626;
+        font-weight: 600;
+    }
+
+    .warning-box .will-preserve {
+        color: #059669;
+        font-weight: 600;
+    }
+
+    .info-box {
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+    }
+
+    .info-box h4 {
+        color: #166534;
+        font-size: 0.95rem;
+        margin-bottom: 8px;
+    }
+
+    .info-box ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #166534;
+        font-size: 0.9rem;
+    }
+
+    .form-group {
+        margin-bottom: 24px;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+    }
+
+    .form-group select,
+    .form-group input[type="text"],
+    .delete-container select,
+    .delete-container input[type="text"],
+    #id_organization,
+    #id_confirmation {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #d1d5db !important;
+        border-radius: 8px;
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+        font-size: 0.95rem;
+        color-scheme: light !important;
+        -webkit-appearance: menulist !important;
+        appearance: menulist !important;
+    }
+
+    .form-group select option,
+    .delete-container select option,
+    #id_organization option {
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+    }
+
+    .form-group select:focus,
+    .form-group input[type="text"]:focus {
+        outline: none;
+        border-color: #f59e0b;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+    }
+
+    .form-group .help-text {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 6px;
+    }
+
+    .confirmation-input {
+        font-family: monospace;
+        font-size: 1rem !important;
+        text-transform: uppercase;
+    }
+
+    .submit-row {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .btn-cancel {
+        background: #f3f4f6;
+        color: #374151;
+        padding: 12px 28px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        text-decoration: none;
+        display: inline-block;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-cancel:hover {
+        background: #e5e7eb;
+    }
+
+    .btn-warning {
+        background: #f59e0b;
+        color: white;
+        padding: 12px 28px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-warning:hover {
+        background: #d97706;
+    }
+
+    .btn-warning:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+    }
+
+    .errorlist {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #dc2626;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        list-style: none;
+    }
+
+    .required-star {
+        color: #dc2626;
+    }
+
+    .org-info {
+        background: #f3f4f6;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 24px;
+    }
+
+    .org-info strong {
+        color: #1e3a8a;
+    }
+
+    /* Selection display label */
+    .selection-display {
+        margin-top: 8px;
+        padding: 10px 14px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 6px;
+        font-size: 0.95rem;
+        color: #1e40af;
+        font-weight: 500;
+        display: none;
+    }
+
+    .selection-display.visible {
+        display: block;
+    }
+
+    .selection-display::before {
+        content: "Selected: ";
+        color: #6b7280;
+        font-weight: 400;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="delete-container">
+    <div class="delete-header">
+        <h2>Delete All Transaction Data</h2>
+        <p>Remove all transaction data while preserving master data.</p>
+    </div>
+
+    <div class="warning-box">
+        <h4>&#9888; Warning: This action cannot be undone!</h4>
+        <p><span class="will-delete">Will be deleted:</span></p>
+        <ul style="margin: 0 0 12px 20px; color: #dc2626;">
+            <li>All <strong>Transactions</strong></li>
+            <li>All <strong>Data Upload</strong> records</li>
+        </ul>
+    </div>
+
+    <div class="info-box">
+        <h4>&#10003; Data that will be preserved:</h4>
+        <ul>
+            <li>Suppliers</li>
+            <li>Categories</li>
+            <li>Contracts</li>
+            <li>Spending Policies</li>
+            <li>Column Mapping Templates</li>
+        </ul>
+    </div>
+
+    {% if not request.user.is_superuser and organization %}
+    <div class="org-info">
+        Organization: <strong>{{ organization.name }}</strong>
+    </div>
+    {% endif %}
+
+    <form method="post" id="delete-form" novalidate>
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <ul class="errorlist">
+            {% for field in form %}
+                {% for error in field.errors %}
+                <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if request.user.is_superuser %}
+        <div class="form-group">
+            <label for="{{ form.organization.id_for_label }}">
+                Organization <span class="required-star">*</span>
+            </label>
+            {{ form.organization }}
+            <div id="org-selection-display" class="selection-display"></div>
+            {% if form.organization.help_text %}
+            <p class="help-text">{{ form.organization.help_text }}</p>
+            {% endif %}
+        </div>
+        {% else %}
+        {{ form.organization }}
+        {% endif %}
+
+        <div class="form-group">
+            <label for="{{ form.confirmation.id_for_label }}">
+                Confirm Deletion <span class="required-star">*</span>
+            </label>
+            {{ form.confirmation }}
+            {% if form.confirmation.help_text %}
+            <p class="help-text">{{ form.confirmation.help_text }}</p>
+            {% endif %}
+        </div>
+
+        <div class="submit-row">
+            <a href="{% url 'admin:procurement_dataupload_changelist' %}" class="btn-cancel">Cancel</a>
+            <button type="submit" class="btn-warning" id="delete-btn" disabled>Delete All Data</button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmInput = document.querySelector('.confirmation-input');
+    const deleteBtn = document.getElementById('delete-btn');
+    const orgSelect = document.getElementById('id_organization');
+    const selectionDisplay = document.getElementById('org-selection-display');
+
+    // Force select text color to be visible
+    function forceSelectVisibility() {
+        if (orgSelect) {
+            orgSelect.style.setProperty('color', '#000000', 'important');
+            orgSelect.style.setProperty('background-color', '#ffffff', 'important');
+            orgSelect.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+            orgSelect.style.setProperty('opacity', '1', 'important');
+
+            // Also style all options
+            Array.from(orgSelect.options).forEach(function(opt) {
+                opt.style.setProperty('color', '#000000', 'important');
+                opt.style.setProperty('background-color', '#ffffff', 'important');
+                opt.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+            });
+        }
+    }
+
+    function updateSelectionDisplay() {
+        if (orgSelect && selectionDisplay) {
+            const selectedOption = orgSelect.options[orgSelect.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                selectionDisplay.textContent = selectedOption.text;
+                selectionDisplay.classList.add('visible');
+            } else {
+                selectionDisplay.textContent = '';
+                selectionDisplay.classList.remove('visible');
+            }
+        }
+    }
+
+    function updateState() {
+        const confirmation = confirmInput.value.trim().toUpperCase();
+        const hasOrg = !orgSelect || orgSelect.value || '{{ organization.pk }}';
+
+        deleteBtn.disabled = !(confirmation === 'DELETE ALL' && hasOrg);
+        updateSelectionDisplay();
+        forceSelectVisibility();
+    }
+
+    confirmInput.addEventListener('input', updateState);
+    if (orgSelect) {
+        orgSelect.addEventListener('change', updateState);
+    }
+
+    // Initial state
+    forceSelectVisibility();
+    updateState();
+});
+</script>
+{% endblock %}

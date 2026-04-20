@@ -1,0 +1,11 @@
+pr_number,department,cost_center,description,estimated_amount,currency,budget_code,status,priority,created_date,submitted_date,approval_date,supplier_suggested,category
+PR-2024-001,Engineering,CC-ENG-001,Laptop computers for new hires,15000.00,USD,BUD-IT-2024,approved,high,2024-01-05,2024-01-06,2024-01-08,TechCorp Solutions,IT Equipment
+PR-2024-002,Marketing,CC-MKT-001,Trade show booth materials,8500.00,USD,BUD-MKT-2024,approved,medium,2024-01-10,2024-01-11,2024-01-14,Creative Displays Inc,Marketing Materials
+PR-2024-003,Operations,CC-OPS-001,Warehouse shelving units,12000.00,USD,BUD-OPS-2024,approved,medium,2024-01-15,2024-01-16,2024-01-18,Industrial Storage Co,Warehouse Equipment
+PR-2024-004,HR,CC-HR-001,Office furniture for new floor,25000.00,USD,BUD-HR-2024,pending_approval,low,2024-01-20,2024-01-21,,Office Furniture Plus,Office Furniture
+PR-2024-005,Finance,CC-FIN-001,Accounting software licenses,5000.00,USD,BUD-FIN-2024,converted_to_po,high,2024-01-08,2024-01-09,2024-01-10,Software Solutions Ltd,Software Licenses
+PR-2024-006,Engineering,CC-ENG-001,Server hardware upgrade,35000.00,USD,BUD-IT-2024,approved,critical,2024-01-12,2024-01-12,2024-01-13,TechCorp Solutions,IT Equipment
+PR-2024-007,Operations,CC-OPS-001,Forklift maintenance parts,3500.00,USD,BUD-OPS-2024,approved,medium,2024-01-18,2024-01-19,2024-01-22,Industrial Parts Supply,Maintenance Parts
+PR-2024-008,Marketing,CC-MKT-001,Print advertising materials,6000.00,USD,BUD-MKT-2024,rejected,low,2024-01-22,2024-01-23,,PrintWorks Inc,Marketing Materials
+PR-2024-009,HR,CC-HR-001,Employee training program,18000.00,USD,BUD-HR-2024,approved,high,2024-01-25,2024-01-26,2024-01-29,Learning Solutions Corp,Training Services
+PR-2024-010,Finance,CC-FIN-001,Audit services contract,45000.00,USD,BUD-FIN-2024,converted_to_po,high,2024-01-28,2024-01-28,2024-01-30,AccountingPro LLC,Professional Services

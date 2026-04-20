@@ -1,0 +1,477 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content_title %}<h1>Upload Detail</h1>{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='procurement' %}">Procurement</a>
+    &rsaquo; <a href="{% url 'admin:procurement_dataupload_changelist' %}">Data uploads</a>
+    &rsaquo; {{ upload.file_name }}
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .detail-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 30px;
+    }
+
+    .detail-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+        color: white;
+        padding: 24px;
+        border-radius: 12px;
+        margin-bottom: 24px;
+    }
+
+    .detail-header h2 {
+        font-size: 1.5rem;
+        margin: 0 0 8px 0;
+        background: none;
+        color: white;
+    }
+
+    .detail-header .meta {
+        display: flex;
+        gap: 24px;
+        font-size: 0.9rem;
+        opacity: 0.9;
+        flex-wrap: wrap;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+    }
+
+    .status-completed { background: #10b981; color: white; }
+    .status-partial { background: #6366f1; color: white; }
+    .status-failed { background: #ef4444; color: white; }
+    .status-processing { background: #f59e0b; color: white; }
+    .status-pending { background: #6b7280; color: white; }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .stat-card .number {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .stat-card .label {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 4px;
+    }
+
+    .stat-success .number { color: #10b981; }
+    .stat-failed .number { color: #ef4444; }
+    .stat-duplicate .number { color: #6366f1; }
+    .stat-total .number { color: #1e3a8a; }
+
+    .info-section {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .info-section h3 {
+        font-size: 1.1rem;
+        color: #1e3a8a;
+        margin: 0 0 16px 0;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+    }
+
+    .info-item {
+        padding: 8px 0;
+    }
+
+    .info-item .label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .info-item .value {
+        font-size: 0.95rem;
+        color: #1f2937;
+        margin-top: 4px;
+    }
+
+    .errors-section {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .errors-section h3 {
+        color: #dc2626;
+        font-size: 1.1rem;
+        margin: 0 0 16px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .errors-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    .download-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #dc2626;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+    }
+
+    .download-btn:hover {
+        background: #b91c1c;
+        color: white;
+    }
+
+    .download-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .errors-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+
+    .errors-table th {
+        background: #fecaca;
+        color: #991b1b;
+        padding: 10px 12px;
+        text-align: left;
+        font-weight: 600;
+    }
+
+    .errors-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #fecaca;
+        color: #991b1b;
+    }
+
+    .errors-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .more-errors {
+        text-align: center;
+        padding: 16px;
+        color: #991b1b;
+        font-style: italic;
+    }
+
+    .mapping-section {
+        background: #f0f9ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .mapping-section h3 {
+        color: #1e40af;
+        font-size: 1.1rem;
+        margin: 0 0 16px 0;
+    }
+
+    .mapping-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 12px;
+    }
+
+    .mapping-item {
+        background: white;
+        padding: 10px 14px;
+        border-radius: 6px;
+        font-size: 0.9rem;
+    }
+
+    .mapping-item .csv-col {
+        color: #6b7280;
+    }
+
+    .mapping-item .arrow {
+        color: #1e40af;
+        margin: 0 8px;
+    }
+
+    .mapping-item .target-field {
+        color: #1e3a8a;
+        font-weight: 600;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+    }
+
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #f3f4f6;
+        color: #374151;
+        padding: 12px 24px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .btn-back:hover {
+        background: #e5e7eb;
+    }
+
+    .btn-back svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .progress-section {
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .progress-section h3 {
+        color: #b45309;
+        font-size: 1.1rem;
+        margin: 0 0 16px 0;
+    }
+
+    .progress-bar {
+        height: 20px;
+        background: #fef3c7;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #f59e0b 0%, #eab308 100%);
+        transition: width 0.5s ease;
+    }
+
+    .progress-text {
+        text-align: center;
+        margin-top: 8px;
+        color: #92400e;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="detail-container">
+    <div class="detail-header">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <h2>{{ upload.file_name }}</h2>
+                <div class="meta">
+                    <span>Uploaded by: {{ upload.uploaded_by.username }}</span>
+                    <span>Organization: {{ upload.organization.name }}</span>
+                    <span>{{ upload.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+            <span class="status-badge status-{{ upload.status }}">{{ upload.status }}</span>
+        </div>
+    </div>
+
+    {% if upload.status == 'processing' %}
+    <div class="progress-section">
+        <h3>Processing in Progress</h3>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ upload.progress_percent }}%"></div>
+        </div>
+        <div class="progress-text">
+            {{ upload.progress_percent }}% - {{ upload.progress_message|default:"Processing..." }}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="stats-grid">
+        <div class="stat-card stat-total">
+            <div class="number">{{ upload.total_rows }}</div>
+            <div class="label">Total Rows</div>
+        </div>
+        <div class="stat-card stat-success">
+            <div class="number">{{ upload.successful_rows }}</div>
+            <div class="label">Successful</div>
+        </div>
+        <div class="stat-card stat-failed">
+            <div class="number">{{ upload.failed_rows }}</div>
+            <div class="label">Failed</div>
+        </div>
+        <div class="stat-card stat-duplicate">
+            <div class="number">{{ upload.duplicate_rows }}</div>
+            <div class="label">Duplicates Skipped</div>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h3>Upload Information</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="label">Batch ID</div>
+                <div class="value" style="font-family: monospace; font-size: 0.85rem;">{{ upload.batch_id }}</div>
+            </div>
+            <div class="info-item">
+                <div class="label">File Size</div>
+                <div class="value">{{ upload.file_size|filesizeformat }}</div>
+            </div>
+            <div class="info-item">
+                <div class="label">Processing Mode</div>
+                <div class="value">{{ upload.processing_mode|default:"sync"|title }}</div>
+            </div>
+            <div class="info-item">
+                <div class="label">Started</div>
+                <div class="value">{{ upload.created_at|date:"M d, Y H:i:s" }}</div>
+            </div>
+            {% if upload.completed_at %}
+            <div class="info-item">
+                <div class="label">Completed</div>
+                <div class="value">{{ upload.completed_at|date:"M d, Y H:i:s" }}</div>
+            </div>
+            {% endif %}
+            {% if upload.celery_task_id %}
+            <div class="info-item">
+                <div class="label">Task ID</div>
+                <div class="value" style="font-family: monospace; font-size: 0.85rem;">{{ upload.celery_task_id }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if upload.column_mapping_snapshot %}
+    <div class="mapping-section">
+        <h3>Column Mapping Used</h3>
+        <div class="mapping-grid">
+            {% for csv_col, target_field in upload.column_mapping_snapshot.items %}
+            <div class="mapping-item">
+                <span class="csv-col">{{ csv_col }}</span>
+                <span class="arrow">&rarr;</span>
+                <span class="target-field">{{ target_field }}</span>
+            </div>
+            {% empty %}
+            <div class="mapping-item">No mapping recorded</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if error_entries %}
+    <div class="errors-section">
+        <div class="errors-header">
+            <h3>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Error Log ({{ total_errors }} total)
+            </h3>
+            <a href="{% url 'admin:procurement_dataupload_download_errors' upload.uuid %}" class="download-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Error Report
+            </a>
+        </div>
+        <table class="errors-table">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">Row</th>
+                    <th style="width: 100px;">Field</th>
+                    <th>Error Message</th>
+                    <th style="width: 150px;">Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for error in error_entries %}
+                <tr>
+                    <td>{{ error.row|default:"-" }}</td>
+                    <td>{{ error.field|default:"-" }}</td>
+                    <td>{{ error.message }}</td>
+                    <td style="font-family: monospace; word-break: break-all;">{{ error.value|default:"-"|truncatechars:30 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if total_errors > 100 %}
+        <div class="more-errors">
+            Showing first 100 errors. Download the full error report for complete details.
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="action-buttons">
+        <a href="{% url 'admin:procurement_dataupload_changelist' %}" class="btn-back">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to Upload History
+        </a>
+    </div>
+</div>
+
+{% if upload.status == 'processing' %}
+<script>
+// Auto-refresh for processing uploads
+setTimeout(function() {
+    location.reload();
+}, 3000);
+</script>
+{% endif %}
+{% endblock %}

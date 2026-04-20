@@ -1,0 +1,329 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content_title %}<h1>Upload Wizard</h1>{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='procurement' %}">Procurement</a>
+    &rsaquo; <a href="{% url 'admin:procurement_dataupload_changelist' %}">Data uploads</a>
+    &rsaquo; Upload Wizard
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/upload-wizard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="wizard-container">
+    {% csrf_token %}
+
+    <!-- Progress Bar -->
+    <div class="wizard-progress">
+        <div class="progress-steps">
+            <div class="progress-step active" data-step="1">
+                <div class="step-number">1</div>
+                <div class="step-label">Select File</div>
+            </div>
+            <div class="progress-line"></div>
+            <div class="progress-step" data-step="2">
+                <div class="step-number">2</div>
+                <div class="step-label">Preview</div>
+            </div>
+            <div class="progress-line"></div>
+            <div class="progress-step" data-step="3">
+                <div class="step-number">3</div>
+                <div class="step-label">Map Columns</div>
+            </div>
+            <div class="progress-line"></div>
+            <div class="progress-step" data-step="4">
+                <div class="step-number">4</div>
+                <div class="step-label">Validate</div>
+            </div>
+            <div class="progress-line"></div>
+            <div class="progress-step" data-step="5">
+                <div class="step-number">5</div>
+                <div class="step-label">Upload</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: File Selection -->
+    <div id="step-1" class="wizard-step active">
+        <div class="step-header">
+            <h2>Step 1: Select File</h2>
+            <p>Choose a CSV file to upload. Drag and drop or click to browse.</p>
+        </div>
+
+        <div class="step-content">
+            {% if is_superuser %}
+            <div class="form-group">
+                <label for="organization-select">Organization</label>
+                <select id="organization-select" class="form-select" style="background-color: #ffffff !important; color: #1f2937 !important; color-scheme: light !important; border: 1px solid #d1d5db !important;">
+                    <option value="" style="background-color: #ffffff; color: #6b7280;">Select organization...</option>
+                </select>
+                <div id="org-selection-display" class="selection-display"></div>
+                <p class="help-text">Select the target organization for this upload.</p>
+            </div>
+            {% endif %}
+
+            <div class="dropzone" id="file-dropzone">
+                <div class="dropzone-content">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="dropzone-text">Drag and drop your CSV file here</p>
+                    <p class="dropzone-subtext">or</p>
+                    <button type="button" class="btn-browse" id="browse-btn">Browse Files</button>
+                    <input type="file" id="file-input" accept=".csv" hidden>
+                </div>
+            </div>
+
+            <div id="file-info" class="file-info hidden">
+                <div class="file-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <div class="file-details">
+                    <p class="file-name" id="selected-file-name"></p>
+                    <p class="file-size" id="selected-file-size"></p>
+                </div>
+                <button type="button" class="btn-remove" id="remove-file-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="step-actions">
+            <a href="{% url 'admin:procurement_dataupload_changelist' %}" class="btn-cancel">Cancel</a>
+            <button type="button" class="btn-next" id="step1-next" disabled>Next: Preview</button>
+        </div>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div id="step-2" class="wizard-step">
+        <div class="step-header">
+            <h2>Step 2: Preview Data</h2>
+            <p>Review the first 100 rows of your file to ensure it looks correct.</p>
+        </div>
+
+        <div class="step-content">
+            <div class="preview-stats" id="preview-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="total-rows">-</span>
+                    <span class="stat-label">Total Rows</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="total-columns">-</span>
+                    <span class="stat-label">Columns</span>
+                </div>
+            </div>
+
+            <div class="preview-table-container" id="preview-table-container">
+                <div class="loading-indicator">
+                    <div class="spinner"></div>
+                    <p>Loading preview...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="step-actions">
+            <button type="button" class="btn-back" id="step2-back">Back</button>
+            <button type="button" class="btn-next" id="step2-next">Next: Map Columns</button>
+        </div>
+    </div>
+
+    <!-- Step 3: Column Mapping -->
+    <div id="step-3" class="wizard-step">
+        <div class="step-header">
+            <h2>Step 3: Map Columns</h2>
+            <p>Match your CSV columns to the required fields. Required fields are marked with *.</p>
+        </div>
+
+        <div class="step-content">
+            <div class="template-section">
+                <div class="template-load">
+                    <label>Load Template:</label>
+                    <select id="template-select" class="form-select">
+                        <option value="">Select a saved template...</option>
+                    </select>
+                    <button type="button" class="btn-secondary" id="load-template-btn">Load</button>
+                </div>
+                <div class="template-save">
+                    <input type="text" id="template-name" placeholder="New template name...">
+                    <button type="button" class="btn-secondary" id="save-template-btn">Save Template</button>
+                </div>
+            </div>
+
+            <div class="mapping-grid" id="mapping-grid">
+                <!-- Dynamically populated -->
+            </div>
+
+            <div class="mapping-help">
+                <h4>Required Fields</h4>
+                <ul>
+                    <li><strong>Supplier</strong> - Vendor or supplier name</li>
+                    <li><strong>Category</strong> - Spending category</li>
+                    <li><strong>Amount</strong> - Transaction amount (can include $ and commas)</li>
+                    <li><strong>Date</strong> - Transaction date (YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="step-actions">
+            <button type="button" class="btn-back" id="step3-back">Back</button>
+            <button type="button" class="btn-next" id="step3-next">Next: Validate</button>
+        </div>
+    </div>
+
+    <!-- Step 4: Validation -->
+    <div id="step-4" class="wizard-step">
+        <div class="step-header">
+            <h2>Step 4: Validate Data</h2>
+            <p>Review validation results before uploading.</p>
+        </div>
+
+        <div class="step-content">
+            <div id="validation-loading" class="validation-loading">
+                <div class="spinner"></div>
+                <p>Validating data...</p>
+            </div>
+
+            <div id="validation-results" class="validation-results hidden">
+                <div class="validation-summary">
+                    <div class="summary-item summary-valid">
+                        <span class="summary-value" id="valid-count">0</span>
+                        <span class="summary-label">Valid Rows</span>
+                    </div>
+                    <div class="summary-item summary-errors">
+                        <span class="summary-value" id="error-count">0</span>
+                        <span class="summary-label">Errors</span>
+                    </div>
+                    <div class="summary-item summary-duplicates">
+                        <span class="summary-value" id="duplicate-count">0</span>
+                        <span class="summary-label">Duplicates</span>
+                    </div>
+                </div>
+
+                <div id="errors-list" class="errors-list hidden">
+                    <h4>Validation Errors (first 100)</h4>
+                    <table class="errors-table">
+                        <thead>
+                            <tr>
+                                <th>Row</th>
+                                <th>Field</th>
+                                <th>Error</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="errors-tbody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="validation-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="skip-invalid" checked>
+                        <span>Skip invalid rows and continue with valid data</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="skip-duplicates">
+                        <span>Skip duplicate checking (allow all rows including duplicates)</span>
+                    </label>
+                    <label class="checkbox-label" id="strict-duplicates-label">
+                        <input type="checkbox" id="strict-duplicates">
+                        <span>Strict duplicate detection (use all mapped fields instead of core fields only)</span>
+                    </label>
+                    <p class="help-text" style="margin-top: 8px; color: #6b7280; font-size: 12px;">
+                        <strong>Core fields:</strong> Supplier, Category, Amount, Date, Invoice Number<br>
+                        <strong>Strict mode:</strong> Uses all fields you mapped (Description, Location, etc.)
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="step-actions">
+            <button type="button" class="btn-back" id="step4-back">Back</button>
+            <button type="button" class="btn-next" id="step4-next">Start Upload</button>
+        </div>
+    </div>
+
+    <!-- Step 5: Upload Progress -->
+    <div id="step-5" class="wizard-step">
+        <div class="step-header">
+            <h2>Step 5: Upload Progress</h2>
+            <p>Your data is being uploaded. Please wait...</p>
+        </div>
+
+        <div class="step-content">
+            <div id="upload-progress" class="upload-progress">
+                <div class="progress-circle" id="progress-circle">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="progress-bg" cx="50" cy="50" r="45"></circle>
+                        <circle class="progress-fill" cx="50" cy="50" r="45" id="progress-fill"></circle>
+                    </svg>
+                    <div class="progress-text" id="progress-percent">0%</div>
+                </div>
+                <p class="progress-message" id="progress-message">Preparing upload...</p>
+            </div>
+
+            <div id="upload-complete" class="upload-complete hidden">
+                <div class="complete-icon success">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <h3 id="complete-title">Upload Complete!</h3>
+                <div class="complete-stats">
+                    <div class="complete-stat">
+                        <span class="value" id="complete-successful">0</span>
+                        <span class="label">Successful</span>
+                    </div>
+                    <div class="complete-stat">
+                        <span class="value" id="complete-failed">0</span>
+                        <span class="label">Failed</span>
+                    </div>
+                    <div class="complete-stat">
+                        <span class="value" id="complete-duplicates">0</span>
+                        <span class="label">Duplicates</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="step-actions">
+            <a href="{% url 'admin:procurement_dataupload_changelist' %}" class="btn-primary" id="finish-btn" style="display: none;">
+                View Upload History
+            </a>
+            <button type="button" class="btn-secondary" id="new-upload-btn" style="display: none;">
+                Upload Another File
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Configuration
+const CONFIG = {
+    csrfToken: document.querySelector('[name=csrfmiddlewaretoken]').value,
+    isSuperuser: {{ is_superuser|yesno:"true,false" }},
+    organizations: {{ organizations|safe }},
+    userOrganization: {{ user_organization|safe }},
+    apiUrls: {
+        preview: '{% url "admin:procurement_dataupload_api_preview" %}',
+        validate: '{% url "admin:procurement_dataupload_api_validate" %}',
+        upload: '{% url "admin:procurement_dataupload_api_upload" %}',
+        templates: '{% url "admin:procurement_dataupload_api_templates" %}',
+        saveTemplate: '{% url "admin:procurement_dataupload_api_save_template" %}',
+        progress: '{% url "admin:procurement_dataupload_api_progress" task_id="TASK_ID" %}'
+    }
+};
+</script>
+<script src="{% static 'admin/js/upload-wizard.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,351 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content_title %}<h1>Reset Organization</h1>{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='procurement' %}">Procurement</a>
+    &rsaquo; <a href="{% url 'admin:procurement_dataupload_changelist' %}">Data uploads</a>
+    &rsaquo; Reset Organization
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .reset-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 30px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .reset-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .reset-header h2 {
+        color: #dc2626;
+        font-size: 1.5rem;
+        margin-bottom: 10px;
+        background: none;
+    }
+
+    .reset-header p {
+        color: #6b7280;
+        font-size: 0.95rem;
+    }
+
+    .warning-box {
+        background: #fef2f2;
+        border: 2px solid #fecaca;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+
+    .warning-box h4 {
+        color: #dc2626;
+        font-size: 1rem;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .warning-box ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #991b1b;
+        font-size: 0.9rem;
+    }
+
+    .warning-box li {
+        margin-bottom: 6px;
+    }
+
+    .form-group {
+        margin-bottom: 24px;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+    }
+
+    .form-group select,
+    .form-group input[type="text"],
+    .reset-container select,
+    .reset-container input[type="text"],
+    #id_organization,
+    #id_confirmation {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #d1d5db !important;
+        border-radius: 8px;
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+        font-size: 0.95rem;
+        color-scheme: light !important;
+        -webkit-appearance: menulist !important;
+        appearance: menulist !important;
+    }
+
+    .form-group select option,
+    .reset-container select option,
+    #id_organization option {
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+    }
+
+    .form-group select:focus,
+    .form-group input[type="text"]:focus {
+        outline: none;
+        border-color: #dc2626;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+    }
+
+    .form-group .help-text {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 6px;
+    }
+
+    .confirmation-input {
+        font-family: monospace;
+        font-size: 1rem !important;
+    }
+
+    .submit-row {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .btn-cancel {
+        background: #f3f4f6;
+        color: #374151;
+        padding: 12px 28px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        text-decoration: none;
+        display: inline-block;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-cancel:hover {
+        background: #e5e7eb;
+    }
+
+    .btn-danger {
+        background: #dc2626;
+        color: white;
+        padding: 12px 28px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-danger:hover {
+        background: #b91c1c;
+    }
+
+    .btn-danger:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+    }
+
+    .errorlist {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #dc2626;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        list-style: none;
+    }
+
+    .required-star {
+        color: #dc2626;
+    }
+
+    #selected-org-name {
+        font-weight: 600;
+        color: #dc2626;
+        padding: 8px 12px;
+        background: #fef2f2;
+        border-radius: 4px;
+        display: none;
+        margin-top: 8px;
+    }
+
+    /* Selection display label for organization */
+    .selection-display {
+        margin-top: 8px;
+        padding: 10px 14px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        font-size: 0.95rem;
+        color: #dc2626;
+        font-weight: 500;
+        display: none;
+    }
+
+    .selection-display.visible {
+        display: block;
+    }
+
+    .selection-display::before {
+        content: "Selected: ";
+        color: #6b7280;
+        font-weight: 400;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reset-container">
+    <div class="reset-header">
+        <h2>Reset Organization Data</h2>
+        <p>This action will permanently delete ALL data for the selected organization.</p>
+    </div>
+
+    <div class="warning-box">
+        <h4>&#9888; Warning: This action cannot be undone!</h4>
+        <p>The following data will be permanently deleted:</p>
+        <ul>
+            <li>All <strong>Transactions</strong></li>
+            <li>All <strong>Data Uploads</strong> and history</li>
+            <li>All <strong>Column Mapping Templates</strong></li>
+            <li>All <strong>Suppliers</strong></li>
+            <li>All <strong>Categories</strong></li>
+            <li>All <strong>Contracts</strong></li>
+            <li>All <strong>Spending Policies</strong></li>
+            <li>All <strong>Policy Violations</strong></li>
+        </ul>
+    </div>
+
+    <form method="post" id="reset-form" novalidate>
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <ul class="errorlist">
+            {% for field in form %}
+                {% for error in field.errors %}
+                <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <div class="form-group">
+            <label for="{{ form.organization.id_for_label }}">
+                Organization to Reset <span class="required-star">*</span>
+            </label>
+            {{ form.organization }}
+            <div id="org-selection-display" class="selection-display"></div>
+            <div id="selected-org-name"></div>
+            {% if form.organization.help_text %}
+            <p class="help-text">{{ form.organization.help_text }}</p>
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="{{ form.confirmation.id_for_label }}">
+                Confirm Organization Name <span class="required-star">*</span>
+            </label>
+            {{ form.confirmation }}
+            {% if form.confirmation.help_text %}
+            <p class="help-text">{{ form.confirmation.help_text }}</p>
+            {% endif %}
+        </div>
+
+        <div class="submit-row">
+            <a href="{% url 'admin:procurement_dataupload_changelist' %}" class="btn-cancel">Cancel</a>
+            <button type="submit" class="btn-danger" id="reset-btn" disabled>Reset Organization</button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const orgSelect = document.getElementById('id_organization');
+    const confirmInput = document.querySelector('.confirmation-input');
+    const resetBtn = document.getElementById('reset-btn');
+    const selectedOrgName = document.getElementById('selected-org-name');
+    const selectionDisplay = document.getElementById('org-selection-display');
+
+    // Force select text color to be visible
+    function forceSelectVisibility() {
+        if (orgSelect) {
+            orgSelect.style.setProperty('color', '#000000', 'important');
+            orgSelect.style.setProperty('background-color', '#ffffff', 'important');
+            orgSelect.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+            orgSelect.style.setProperty('opacity', '1', 'important');
+
+            // Also style all options
+            Array.from(orgSelect.options).forEach(function(opt) {
+                opt.style.setProperty('color', '#000000', 'important');
+                opt.style.setProperty('background-color', '#ffffff', 'important');
+                opt.style.setProperty('-webkit-text-fill-color', '#000000', 'important');
+            });
+        }
+    }
+
+    function updateState() {
+        const selectedOption = orgSelect.options[orgSelect.selectedIndex];
+        const orgName = selectedOption && selectedOption.value ? selectedOption.text : '';
+        const confirmation = confirmInput.value.trim();
+
+        // Update selection display label
+        if (selectionDisplay) {
+            if (orgName) {
+                selectionDisplay.textContent = orgName;
+                selectionDisplay.classList.add('visible');
+            } else {
+                selectionDisplay.textContent = '';
+                selectionDisplay.classList.remove('visible');
+            }
+        }
+
+        if (orgName) {
+            selectedOrgName.textContent = 'Type exactly: "' + orgName + '"';
+            selectedOrgName.style.display = 'block';
+        } else {
+            selectedOrgName.style.display = 'none';
+        }
+
+        resetBtn.disabled = !(orgName && confirmation === orgName);
+        forceSelectVisibility();
+    }
+
+    orgSelect.addEventListener('change', updateState);
+    confirmInput.addEventListener('input', updateState);
+
+    // Initial state
+    forceSelectVisibility();
+    updateState();
+});
+</script>
+{% endblock %}

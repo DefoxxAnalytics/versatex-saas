@@ -1,0 +1,38 @@
+[run]
+source = apps
+branch = False
+omit =
+    # Auto-generated code
+    */migrations/*
+    */__pycache__/*
+    # Test files shouldn't count toward app coverage
+    */tests/*
+    */test_*.py
+    */conftest.py
+    # Management commands: scripts, not app logic
+    */management/commands/*
+    # Django boilerplate
+    */apps.py
+    */admin.py
+    # Settings/config modules
+    config/*
+    manage.py
+
+[report]
+# Fail the run if overall line coverage is below this threshold.
+# Current baseline (April 2026): ~56% over ~10.8K source lines after
+# excluding tests, migrations, management commands, and Django boilerplate.
+# Raise this as the project adds tests.
+fail_under = 55
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    def __str__
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+
+[html]
+directory = htmlcov

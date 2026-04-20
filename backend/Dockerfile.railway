@@ -1,0 +1,49 @@
+# Railway-optimized Dockerfile for Django Backend
+# This version is optimized for Railway's environment with Railway-specific configurations
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Set work directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    gcc \
+    python3-dev \
+    musl-dev \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# Copy project
+COPY . .
+
+# Collect static files (Railway will use this)
+RUN python manage.py collectstatic --noinput || true
+
+# Create media directory
+RUN mkdir -p /app/media
+
+# Railway automatically sets PORT environment variable
+# We'll use it in the CMD
+EXPOSE ${PORT:-8000}
+
+# Health check for Railway
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/admin/ || exit 1
+
+# Railway will override this with custom start command if needed
+# Default to gunicorn with Railway's PORT
+CMD gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 4 --timeout 120 --access-logfile - --error-logfile -

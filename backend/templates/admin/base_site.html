@@ -1,0 +1,243 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | Analytics Dashboard Admin{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Custom branding colors */
+    :root {
+        --primary-color: #1e3a8a;
+        --primary-dark: #1e40af;
+        --accent-color: #1e3a8a;
+    }
+
+    /* Header styling */
+    #header {
+        background: #1e3a8a;
+        color: white;
+    }
+
+    #branding h1, #branding h1 a:link, #branding h1 a:visited {
+        color: white;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+
+    #header a:link, #header a:visited {
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    #header a:focus, #header a:hover {
+        color: white;
+    }
+
+    /* User tools styling */
+    #user-tools {
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    #user-tools a {
+        color: rgba(255, 255, 255, 0.95);
+        border-bottom-color: rgba(255, 255, 255, 0.3);
+    }
+
+    #user-tools a:focus, #user-tools a:hover {
+        color: white;
+        border-bottom-color: white;
+    }
+
+    /* Logo in header */
+    #branding::before {
+        content: '';
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        background-image: url('{% static "vtx_logo2.png" %}');
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        filter: brightness(0) invert(1);
+        margin-right: 12px;
+        vertical-align: middle;
+    }
+
+    /* Navigation styling */
+    .module h2, .module caption, .inline-group h2 {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    /* Button styling */
+    .button, input[type=submit], input[type=button], .submit-row input, a.button {
+        background: var(--primary-color);
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+    .button:hover, input[type=submit]:hover, input[type=button]:hover, .submit-row input:hover, a.button:hover {
+        background: var(--primary-dark);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
+    }
+
+    .button:active, input[type=submit]:active, input[type=button]:active {
+        background: var(--primary-dark);
+    }
+
+    /* Links */
+    a:link, a:visited {
+        color: var(--primary-color);
+    }
+
+    a:focus, a:hover {
+        color: var(--primary-dark);
+    }
+
+    /* Breadcrumbs */
+    div.breadcrumbs {
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    div.breadcrumbs a {
+        color: var(--primary-color);
+    }
+
+    div.breadcrumbs a:focus, div.breadcrumbs a:hover {
+        color: var(--primary-dark);
+    }
+
+    /* Dashboard modules */
+    .module h2 a {
+        color: white;
+    }
+
+    /* Selected rows */
+    tr.selected {
+        background-color: rgba(102, 126, 234, 0.1);
+    }
+
+    /* Action buttons */
+    .addlink, .changelink, .viewlink {
+        padding-left: 20px;
+    }
+
+    /* Calendar widget */
+    .calendarbox h2 {
+        background: var(--primary-color);
+    }
+
+    .calendar td a:active, .calendar td a:hover, .calendar td a:focus {
+        background: var(--primary-color);
+    }
+
+    /* Pagination */
+    .paginator a:link, .paginator a:visited {
+        background: white;
+        border: 1px solid #e5e7eb;
+        color: var(--primary-color);
+    }
+
+    .paginator a:focus, .paginator a:hover {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    /* Footer branding */
+    #footer {
+        color: #6b7280;
+        padding: 20px;
+        text-align: center;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    /* Form inputs - override Django's color-scheme for visibility */
+    select,
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="number"],
+    textarea {
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+        border: 1px solid #d1d5db !important;
+        color-scheme: light !important;
+    }
+
+    select option {
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+    }
+
+    /* Specific admin form fields */
+    #id_organization,
+    #id_confirmation,
+    #organization-select,
+    #template-select,
+    .vTextField,
+    .vIntegerField,
+    .vForeignKeyRawIdAdminField {
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+        border: 1px solid #d1d5db !important;
+        color-scheme: light !important;
+        -webkit-appearance: menulist !important;
+        appearance: menulist !important;
+    }
+
+    #id_organization option,
+    #id_confirmation option,
+    #organization-select option,
+    #template-select option {
+        background-color: #ffffff !important;
+        color: #1f2937 !important;
+    }
+
+    /* Placeholder text styling */
+    select option[value=""],
+    input::placeholder {
+        color: #6b7280 !important;
+    }
+</style>
+{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}">Analytics Dashboard Admin Panel</a>
+</h1>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+    // Override Django's color-scheme for form visibility
+    document.addEventListener('DOMContentLoaded', function() {
+        // Force all select and input elements to use light color-scheme
+        const formElements = document.querySelectorAll('select, input[type="text"], input[type="password"], textarea');
+        formElements.forEach(function(el) {
+            el.style.setProperty('color-scheme', 'light', 'important');
+            el.style.setProperty('background-color', '#ffffff', 'important');
+            el.style.setProperty('color', '#1f2937', 'important');
+            el.style.setProperty('border', '1px solid #d1d5db', 'important');
+        });
+
+        // Style all options
+        const options = document.querySelectorAll('option');
+        options.forEach(function(opt) {
+            opt.style.setProperty('background-color', '#ffffff', 'important');
+            opt.style.setProperty('color', '#1f2937', 'important');
+        });
+    });
+</script>
+{% endblock %}
+
+{% block footer %}
+<div id="footer">
+    <p>&copy; 2025 Versatex Analytics Dashboard | Powered by Django Admin</p>
+</div>
+{% endblock %}

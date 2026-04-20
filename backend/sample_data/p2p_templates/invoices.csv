@@ -1,0 +1,11 @@
+invoice_number,supplier_name,invoice_amount,invoice_date,due_date,currency,tax_amount,net_amount,payment_terms,payment_terms_days,status,match_status,po_number,gr_number,received_date,approved_date,paid_date,has_exception,exception_type,exception_amount,exception_notes
+INV-2024-001,TechCorp Solutions,16350.00,2024-01-30,2024-03-01,USD,1200.00,15150.00,Net 30,30,paid,3way_matched,PO-2024-001,GR-2024-001,2024-01-31,2024-02-05,2024-02-28,false,,,
+INV-2024-002,Creative Displays Inc,9530.00,2024-02-12,2024-03-14,USD,680.00,8850.00,Net 30,30,paid,3way_matched,PO-2024-002,GR-2024-002,2024-02-13,2024-02-18,2024-03-10,false,,,
+INV-2024-003,Industrial Storage Co,10460.00,2024-02-20,2024-03-22,USD,960.00,9500.00,Net 30,30,approved,3way_matched,PO-2024-003,GR-2024-003,2024-02-21,2024-02-25,,false,,,
+INV-2024-004,Software Solutions Ltd,5400.00,2024-01-20,2024-02-19,USD,400.00,5000.00,Net 30,30,paid,3way_matched,PO-2024-004,GR-2024-004,2024-01-21,2024-01-25,2024-02-15,false,,,
+INV-2024-005,TechCorp Solutions,38000.00,2024-02-07,2024-03-09,USD,2800.00,35200.00,Net 30,30,paid,3way_matched,PO-2024-005,GR-2024-005,2024-02-08,2024-02-12,2024-03-05,false,,,
+INV-2024-006,Industrial Parts Supply,3855.00,2024-02-03,2024-03-05,USD,280.00,3575.00,Net 30,30,matched,3way_matched,PO-2024-006,GR-2024-006,2024-02-04,,,true,price_variance,280.00,Invoice amount higher than PO - extra shipping charges
+INV-2024-007,Office Supplies Co,2750.00,2024-02-17,2024-03-19,USD,200.00,2550.00,Net 30,30,approved,3way_matched,PO-2024-009,GR-2024-007,2024-02-18,2024-02-22,,false,,,
+INV-2024-008,Cleaning Services Inc,4320.00,2024-02-27,2024-03-29,USD,320.00,4000.00,Net 30,30,received,2way_matched,PO-2024-010,GR-2024-008,2024-02-28,,,false,,,
+INV-2024-009,TechCorp Solutions,5500.00,2024-02-10,2024-03-12,USD,440.00,5060.00,Net 30,30,on_hold,unmatched,,,2024-02-11,,,true,no_po,5500.00,Invoice received without PO - pending review
+INV-2024-010,Industrial Storage Co,3460.00,2024-02-27,2024-03-29,USD,280.00,3180.00,Net 30,30,approved,3way_matched,PO-2024-003,GR-2024-009,2024-02-28,2024-03-02,,false,,,

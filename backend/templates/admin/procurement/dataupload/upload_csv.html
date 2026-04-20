@@ -1,0 +1,320 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content_title %}<h1>Upload CSV Data</h1>{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='procurement' %}">Procurement</a>
+    &rsaquo; <a href="{% url 'admin:procurement_dataupload_changelist' %}">Data uploads</a>
+    &rsaquo; Upload CSV
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .upload-container {
+        max-width: 700px;
+        margin: 0 auto;
+        padding: 30px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .upload-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .upload-header h2 {
+        color: #1e3a8a;
+        font-size: 1.5rem;
+        margin-bottom: 10px;
+        background: none;
+    }
+
+    .upload-header p {
+        color: #6b7280;
+        font-size: 0.95rem;
+    }
+
+    .form-group {
+        margin-bottom: 24px;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+    }
+
+    .form-group input[type="file"] {
+        display: block;
+        width: 100%;
+        padding: 12px;
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        background: #f9fafb;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .form-group input[type="file"]:hover {
+        border-color: #1e3a8a;
+        background: #eff6ff;
+    }
+
+    .form-group input[type="file"]:focus {
+        outline: none;
+        border-color: #1e3a8a;
+        box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+    }
+
+    .form-group select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        background: white;
+        font-size: 0.95rem;
+        cursor: pointer;
+    }
+
+    .form-group select:focus {
+        outline: none;
+        border-color: #1e3a8a;
+        box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+    }
+
+    .form-group .help-text {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 6px;
+    }
+
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    .checkbox-group label {
+        margin-bottom: 0;
+        cursor: pointer;
+    }
+
+    .submit-row {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .submit-row input[type="submit"] {
+        padding: 12px 28px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .submit-row .cancel-btn {
+        background: #f3f4f6;
+        color: #374151;
+        padding: 12px 28px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        text-decoration: none;
+        display: inline-block;
+        transition: all 0.3s ease;
+    }
+
+    .submit-row .cancel-btn:hover {
+        background: #e5e7eb;
+    }
+
+    .info-box {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+    }
+
+    .info-box h4 {
+        color: #1e40af;
+        font-size: 0.95rem;
+        margin-bottom: 8px;
+    }
+
+    .info-box ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #1e40af;
+        font-size: 0.9rem;
+    }
+
+    .info-box li {
+        margin-bottom: 4px;
+    }
+
+    .required-star {
+        color: #ef4444;
+    }
+
+    .errorlist {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #dc2626;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        list-style: none;
+    }
+
+    /* Selection display label */
+    .selection-display {
+        margin-top: 8px;
+        padding: 10px 14px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 6px;
+        font-size: 0.95rem;
+        color: #1e40af;
+        font-weight: 500;
+        display: none;
+    }
+
+    .selection-display.visible {
+        display: block;
+    }
+
+    .selection-display::before {
+        content: "Selected: ";
+        color: #6b7280;
+        font-weight: 400;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="upload-container">
+    <div class="upload-header">
+        <h2>Upload Procurement Data</h2>
+        <p>Upload a CSV file containing procurement transactions. Data will be imported into the database.</p>
+    </div>
+
+    <div class="info-box">
+        <h4>Required CSV Columns:</h4>
+        <ul>
+            <li><strong>supplier</strong> - Supplier name (will be created if new)</li>
+            <li><strong>category</strong> - Category name (will be created if new)</li>
+            <li><strong>amount</strong> - Transaction amount (numeric)</li>
+            <li><strong>date</strong> - Transaction date (YYYY-MM-DD or MM/DD/YYYY)</li>
+        </ul>
+        <h4 style="margin-top: 12px;">Optional Columns:</h4>
+        <ul>
+            <li>description, subcategory, location, fiscal_year, spend_band, payment_method, invoice_number</li>
+        </ul>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <ul class="errorlist">
+            {% for field in form %}
+                {% for error in field.errors %}
+                <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <div class="form-group">
+            <label for="{{ form.file.id_for_label }}">
+                CSV File <span class="required-star">*</span>
+            </label>
+            {{ form.file }}
+            {% if form.file.help_text %}
+            <p class="help-text">{{ form.file.help_text }}</p>
+            {% endif %}
+        </div>
+
+        {% if request.user.is_superuser %}
+        <div class="form-group">
+            <label for="{{ form.organization.id_for_label }}">
+                Target Organization
+            </label>
+            {{ form.organization }}
+            <div id="org-selection-display" class="selection-display"></div>
+            {% if form.organization.help_text %}
+            <p class="help-text">{{ form.organization.help_text }}</p>
+            {% endif %}
+        </div>
+        {% else %}
+        {{ form.organization }}
+        {% endif %}
+
+        <div class="form-group">
+            <div class="checkbox-group">
+                {{ form.skip_duplicates }}
+                <label for="{{ form.skip_duplicates.id_for_label }}">
+                    {{ form.skip_duplicates.label }}
+                </label>
+            </div>
+            {% if form.skip_duplicates.help_text %}
+            <p class="help-text">{{ form.skip_duplicates.help_text }}</p>
+            {% endif %}
+        </div>
+
+        <div class="submit-row">
+            <a href="{% url 'admin:procurement_dataupload_changelist' %}" class="cancel-btn">Cancel</a>
+            <input type="submit" value="Upload CSV" class="default">
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const orgSelect = document.getElementById('id_organization');
+    const selectionDisplay = document.getElementById('org-selection-display');
+
+    function updateSelectionDisplay() {
+        if (orgSelect && selectionDisplay) {
+            const selectedOption = orgSelect.options[orgSelect.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                selectionDisplay.textContent = selectedOption.text;
+                selectionDisplay.classList.add('visible');
+            } else {
+                selectionDisplay.textContent = '';
+                selectionDisplay.classList.remove('visible');
+            }
+        }
+    }
+
+    if (orgSelect) {
+        orgSelect.addEventListener('change', updateSelectionDisplay);
+        // Initial state
+        updateSelectionDisplay();
+    }
+});
+</script>
+{% endblock %}

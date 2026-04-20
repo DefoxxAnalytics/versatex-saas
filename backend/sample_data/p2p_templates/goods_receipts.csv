@@ -1,0 +1,11 @@
+gr_number,po_number,received_date,quantity_ordered,quantity_received,quantity_accepted,amount_received,status,inspection_notes
+GR-2024-001,PO-2024-001,2024-01-28,10,10,10,15000.00,accepted,All items received in good condition
+GR-2024-002,PO-2024-002,2024-02-10,5,5,5,8500.00,accepted,Trade show materials received
+GR-2024-003,PO-2024-003,2024-02-18,20,15,15,9000.00,partial_received,Remaining 5 units on backorder
+GR-2024-004,PO-2024-004,2024-01-18,1,1,1,5000.00,accepted,Software license keys delivered
+GR-2024-005,PO-2024-005,2024-02-05,3,3,3,35000.00,accepted,Server hardware installed successfully
+GR-2024-006,PO-2024-006,2024-02-01,50,48,45,3150.00,partial_accepted,3 items damaged in transit - rejected
+GR-2024-007,PO-2024-009,2024-02-15,100,100,100,2500.00,accepted,Office supplies received
+GR-2024-008,PO-2024-010,2024-02-25,1,1,1,4000.00,accepted,Monthly cleaning service completed
+GR-2024-009,PO-2024-003,2024-02-25,5,5,5,3000.00,accepted,Backorder items received - order complete
+GR-2024-010,PO-2024-006,2024-02-08,2,2,2,175.00,accepted,Replacement parts received

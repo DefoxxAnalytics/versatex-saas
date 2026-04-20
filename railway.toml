@@ -1,0 +1,19 @@
+# Railway Configuration for Analytics Dashboard
+# This file defines how Railway should deploy your application
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+
+[deploy]
+startCommand = "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120"
+healthcheckPath = "/admin/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Environment variables that Railway should use
+# Set these in Railway dashboard for security
+[env]
+DJANGO_SETTINGS_MODULE = "config.settings"
+PYTHONUNBUFFERED = "1"

@@ -1,0 +1,173 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .upload-csv-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+        color: white !important;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-decoration: none !important;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(30, 58, 138, 0.2);
+        margin-bottom: 20px;
+    }
+
+    .upload-csv-btn:hover {
+        background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(30, 58, 138, 0.3);
+    }
+
+    .upload-csv-btn:active {
+        transform: translateY(0);
+    }
+
+    .upload-csv-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .upload-section {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+
+    .upload-section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    .upload-section-text {
+        color: #1e40af;
+    }
+
+    .upload-section-text h3 {
+        font-size: 1.1rem;
+        margin-bottom: 4px;
+        color: #1e3a8a;
+    }
+
+    .upload-section-text p {
+        font-size: 0.9rem;
+        margin: 0;
+        color: #3b82f6;
+    }
+
+    /* Organization Management Buttons */
+    .org-management-section {
+        display: flex;
+        gap: 12px;
+        padding-top: 16px;
+        border-top: 1px solid #bfdbfe;
+        margin-top: 16px;
+    }
+
+    .btn-warning {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #f59e0b;
+        color: white !important;
+        padding: 10px 18px;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-decoration: none !important;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+    }
+
+    .btn-warning:hover {
+        background: #d97706;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-danger {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #dc2626;
+        color: white !important;
+        padding: 10px 18px;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-decoration: none !important;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);
+    }
+
+    .btn-danger:hover {
+        background: #b91c1c;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(220, 38, 38, 0.3);
+    }
+
+    .btn-warning svg,
+    .btn-danger svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .admin-only-badge {
+        font-size: 0.7rem;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="upload-section">
+    <div class="upload-section-header">
+        <div class="upload-section-text">
+            <h3>Data Upload Center</h3>
+            <p>Upload CSV files to import procurement transactions. View upload history below.</p>
+        </div>
+        <a href="upload-wizard/" class="upload-csv-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            Upload Wizard
+        </a>
+    </div>
+
+    <div class="org-management-section">
+        {% if request.user.profile.role == 'admin' or request.user.is_superuser %}
+        <a href="delete-all-data/" class="btn-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            Delete All Data
+        </a>
+        {% endif %}
+
+        {% if request.user.is_superuser %}
+        <a href="reset-organization/" class="btn-danger">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            Reset Organization
+            <span class="admin-only-badge">Super Admin</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+{{ block.super }}
+{% endblock %}

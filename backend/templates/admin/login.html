@@ -1,0 +1,308 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Reset and base styles */
+    body {
+        background: #1e3a8a;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    #container {
+        background: transparent;
+        padding: 0;
+        min-width: auto;
+        max-width: 100%;
+    }
+
+    #header, #content-related, .breadcrumbs, #content-sidebar {
+        display: none !important;
+    }
+
+    /* Hide Django admin sidebar toggle */
+    .toggle-nav-sidebar {
+        display: none !important;
+    }
+
+    /* Hide all sidebar elements */
+    nav[aria-label="Sidebar"],
+    #nav-sidebar,
+    .sticky {
+        display: none !important;
+    }
+
+    /* Ensure full width for login content */
+    #content-main {
+        width: 100% !important;
+        margin: 0 !important;
+    }
+
+    /* Remove any flex/grid layouts that expect sidebar */
+    .main {
+        display: block !important;
+    }
+
+    #content {
+        padding: 0;
+        margin: 0;
+    }
+
+    /* Login form container */
+    .login, .login-container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 0;
+        max-width: 450px;
+        width: 90%;
+        margin: 20px auto;
+        overflow: hidden;
+    }
+
+    /* Logo section */
+    .login-header {
+        background: #1e3a8a;
+        padding: 40px 20px 30px;
+        text-align: center;
+    }
+
+    .login-logo {
+        max-width: 180px;
+        height: auto;
+        margin-bottom: 20px;
+        filter: brightness(0) invert(1);
+    }
+
+    .login-header h1 {
+        color: white;
+        font-size: 28px;
+        font-weight: 700;
+        margin: 0 0 8px 0;
+        letter-spacing: -0.5px;
+    }
+
+    .login-header p {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 15px;
+        margin: 0;
+    }
+
+    /* Form section */
+    .login form, .login-form-wrapper {
+        padding: 40px 40px 30px;
+    }
+
+    .login-form-wrapper form {
+        padding: 0;
+    }
+
+    .form-row {
+        margin-bottom: 24px;
+    }
+
+    .form-row label {
+        display: block;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .form-row input[type="text"],
+    .form-row input[type="password"] {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 15px;
+        transition: all 0.3s ease;
+        box-sizing: border-box;
+    }
+
+    .form-row input[type="text"]:focus,
+    .form-row input[type="password"]:focus {
+        outline: none;
+        border-color: #1e3a8a;
+        box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+    }
+
+    /* Submit button */
+    .submit-row {
+        padding: 0;
+        margin: 30px 0 0 0;
+        border-top: none;
+    }
+
+    .submit-row input[type="submit"] {
+        width: 100%;
+        background: #1e3a8a;
+        color: white;
+        border: none;
+        padding: 14px;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(30, 58, 138, 0.4);
+    }
+
+    .submit-row input[type="submit"]:hover {
+        background: #1e40af;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(30, 58, 138, 0.5);
+    }
+
+    .submit-row input[type="submit"]:active {
+        transform: translateY(0);
+    }
+
+    /* Error messages */
+    .errornote {
+        background: #fee;
+        border: 2px solid #f87171;
+        color: #dc2626;
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        font-size: 14px;
+    }
+
+    /* Help text */
+    .help {
+        color: #6b7280;
+        font-size: 13px;
+        margin-top: 6px;
+        line-height: 1.5;
+    }
+
+    /* Footer */
+    .login-footer {
+        text-align: center;
+        padding: 20px;
+        color: #6b7280;
+        font-size: 13px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+        .login {
+            margin: 10px;
+            border-radius: 15px;
+        }
+
+        .login form {
+            padding: 30px 25px 20px;
+        }
+
+        .login-header h1 {
+            font-size: 24px;
+        }
+
+        .login-logo {
+            max-width: 150px;
+        }
+    }
+
+    /* Password toggle visibility (if needed) */
+    .password-toggle {
+        position: relative;
+    }
+
+    /* Animation */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .login {
+        animation: fadeIn 0.5s ease-out;
+    }
+</style>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} login{% endblock %}
+
+{% block usertools %}{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block content_title %}{% endblock %}
+
+{% block branding %}{% endblock %}
+
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-header">
+        <img src="{% static 'vtx_logo2.png' %}" alt="Versatex Logo" class="login-logo">
+        <h1>{% trans 'Analytics Dashboard' %}</h1>
+        <p>{% trans 'Admin Panel Login' %}</p>
+    </div>
+
+    <div class="login-form-wrapper">
+        {% if form.errors and not form.non_field_errors %}
+        <p class="errornote">
+            {% if form.errors.items|length == 1 %}
+                {% trans "Please correct the error below." %}
+            {% else %}
+                {% trans "Please correct the errors below." %}
+            {% endif %}
+        </p>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+        {% for error in form.non_field_errors %}
+        <p class="errornote">{{ error }}</p>
+        {% endfor %}
+        {% endif %}
+
+        <form action="{{ app_path }}" method="post" id="login-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}" />
+
+            <div class="form-row">
+                {{ form.username.errors }}
+                <label for="id_username">{{ form.username.label }}:</label>
+                {{ form.username }}
+            </div>
+
+            <div class="form-row">
+                {{ form.password.errors }}
+                <label for="id_password">{{ form.password.label }}:</label>
+                {{ form.password }}
+                <p class="help">{% trans 'Enter your admin credentials to continue' %}</p>
+            </div>
+
+            {% url 'admin_password_reset' as password_reset_url %}
+            {% if password_reset_url %}
+            <div class="password-reset-link">
+                <a href="{{ password_reset_url }}">{% trans 'Forgotten your password or username?' %}</a>
+            </div>
+            {% endif %}
+
+            <div class="submit-row">
+                <input type="submit" value="{% trans 'Sign In' %}" />
+            </div>
+        </form>
+
+        <div class="login-footer">
+            <p>Protected by Django Admin Authentication</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
