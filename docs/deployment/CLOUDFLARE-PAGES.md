@@ -45,13 +45,15 @@ The marketing site on the apex domain is unaffected — it's a separate DNS reco
 
 ## SPA fallback
 
-React Router / Wouter need unknown paths to serve `index.html`. Pages does this automatically when an `index.html` is at the build output root, so no extra config is needed.
+React Router / Wouter need unknown paths to serve `index.html`. **Cloudflare Pages does not do this automatically** — a `_redirects` file in the build output is required.
 
-If deep-link 404s appear, add `frontend/public/_redirects` as belt-and-suspenders:
+This repo ships [`frontend/public/_redirects`](../../frontend/public/_redirects):
 
 ```
 /*    /index.html   200
 ```
+
+Vite copies `public/` into `dist/` during `pnpm build`, so the file lands at the Pages output root automatically. If deep links start 404-ing, check that `frontend/dist/_redirects` exists after the build.
 
 ## Environment variable gotcha
 

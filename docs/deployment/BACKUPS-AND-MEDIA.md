@@ -65,7 +65,7 @@ Create `scripts/backup-postgres.sh` in the repo:
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /home/deploy/Versatex-Analytics
+cd /home/deploy/versatex-analytics
 
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DUMP_FILE="/tmp/postgres-${TIMESTAMP}.sql.gz"
@@ -102,7 +102,7 @@ Add:
 
 ```cron
 # Postgres backup to R2 daily at 03:00 UTC
-0 3 * * * cd /home/deploy/Versatex-Analytics && set -a && . ./.env && set +a && ./scripts/backup-postgres.sh >> /var/log/pg-backup.log 2>&1
+0 3 * * * cd /home/deploy/versatex-analytics && set -a && . ./.env && set +a && ./scripts/backup-postgres.sh >> /var/log/pg-backup.log 2>&1
 ```
 
 `set -a` / `. ./.env` / `set +a` exports variables from `.env` into the cron shell so the script can read `DB_USER` and `DB_NAME`.
@@ -110,7 +110,7 @@ Add:
 Run once manually to confirm:
 
 ```bash
-cd /home/deploy/Versatex-Analytics
+cd /home/deploy/versatex-analytics
 set -a; . ./.env; set +a
 ./scripts/backup-postgres.sh
 
@@ -139,7 +139,7 @@ rclone sync "${VOLUME_PATH}" r2:versatex-backups/media --progress
 Cron:
 
 ```cron
-30 3 * * * /home/deploy/Versatex-Analytics/scripts/backup-media.sh >> /var/log/media-backup.log 2>&1
+30 3 * * * /home/deploy/versatex-analytics/scripts/backup-media.sh >> /var/log/media-backup.log 2>&1
 ```
 
 Downside: if the VPS disk dies between syncs, up to 24 hours of media is lost.

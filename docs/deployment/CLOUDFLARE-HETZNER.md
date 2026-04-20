@@ -111,8 +111,8 @@ docker compose version
 
 ```bash
 cd ~
-git clone https://github.com/<your-org>/Versatex-Analytics.git
-cd Versatex-Analytics
+git clone https://github.com/DefoxxAnalytics/versatex-analytics.git
+cd versatex-analytics
 cp .env.example .env
 ```
 
@@ -130,6 +130,9 @@ docker run --rm python:3.12-slim python -c "import secrets; print(secrets.token_
 # FIELD_ENCRYPTION_KEY
 docker run --rm python:3.12-slim python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null \
   || docker run --rm python:3.12-slim sh -c "pip install -q cryptography && python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+
+# ADMIN_URL (stable obscured admin path — see the Admin panel section below; leaving this blank rotates the URL on every restart)
+docker run --rm python:3.12-slim python -c "import secrets; print(f'manage-{secrets.token_hex(8)}/')"
 ```
 
 Edit `.env` on the VPS with the generated values:
@@ -138,6 +141,7 @@ Edit `.env` on the VPS with the generated values:
 SECRET_KEY=<generated>
 DEBUG=False
 ALLOWED_HOSTS=api.versatexanalytics.com
+ADMIN_URL=<generated>
 
 DB_NAME=analytics_db
 DB_USER=analytics_user
@@ -179,11 +183,13 @@ Full walkthrough in [CLOUDFLARE-TUNNEL.md](CLOUDFLARE-TUNNEL.md). Short version:
 ### 7. Start the stack
 
 ```bash
+# Start only the backend stack — the React frontend lives on Cloudflare Pages,
+# so skip the frontend container and the optional nginx (profile: production).
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
   -f docker-compose.tunnel.yml \
-  up -d --build
+  up -d --build db redis backend celery flower cloudflared
 
 docker compose ps
 docker compose logs -f backend
@@ -205,7 +211,9 @@ from apps.authentication.models import Organization, UserProfile
 from django.contrib.auth import get_user_model
 User = get_user_model()
 org, _ = Organization.objects.get_or_create(slug="default", defaults={"name": "Default Organization"})
-admin = User.objects.get(username="admin")
+admin = User.objects.filter(is_superuser=True).order_by("id").first()
+if admin is None:
+    raise SystemExit("No superuser found; run createsuperuser first.")
 UserProfile.objects.get_or_create(
     user=admin,
     defaults={"organization": org, "role": "admin", "is_active": True},
@@ -267,8 +275,131 @@ Before sharing the URL with real users:
 - [ ] Cloudflare Tunnel shows **HEALTHY** in the Zero Trust dashboard.
 - [ ] Nightly `pg_dump` cron scheduled and a restore drill completed (see [BACKUPS-AND-MEDIA.md](BACKUPS-AND-MEDIA.md)).
 - [ ] Superuser created and linked to an `Organization` via `UserProfile`.
-- [ ] Django admin reachable at `https://api.versatexanalytics.com/admin/`.
-- [ ] Celery Beat + worker logs show scheduled tasks firing (v2.9 batch jobs run 2-4 AM).
+- [ ] Django admin reachable at `https://api.versatexanalytics.com/<ADMIN_URL>/` (gated by Cloudflare Access if configured).
+- [ ] Celery worker running — but note the Celery Beat gap below; scheduled tasks need extra setup.
+- [ ] `ADMIN_URL` set to a stable random path (see [Admin panel](#admin-panel)).
+- [ ] Cloudflare Access policy covers `<ADMIN_URL>*` (recommended).
+
+## Admin panel
+
+Django admin is served by the backend at `https://api.versatexanalytics.com/<ADMIN_URL>/` through the same Cloudflare Tunnel as the API. `whitenoise` serves admin's static assets inside gunicorn — no separate static-file server needed.
+
+### Stable admin URL
+
+Set `ADMIN_URL` to a fixed random string in `.env`. If left empty, [`backend/config/settings.py`](../../backend/config/settings.py) generates a new `manage-<hex>/` path **on every container restart** and only logs it — impractical once the site is live and impossible to bookmark.
+
+Generate a stable value once:
+
+```bash
+docker run --rm python:3.12-slim python -c "import secrets; print(f'manage-{secrets.token_hex(8)}/')"
+```
+
+Paste into `.env` as `ADMIN_URL=manage-<hex>/` (trailing slash required) and restart the backend.
+
+### Gate with Cloudflare Access (recommended)
+
+Admin is the primary data-ingestion surface — CSV uploads for transactions and P2P records flow through it. Put it behind Cloudflare Access for free email-OTP or SSO layered in front of Django's own login.
+
+1. Zero Trust dashboard → **Access** → **Applications** → **Add an application** → **Self-hosted**.
+2. Application settings:
+   - Application name: `Versatex Admin`
+   - Session duration: 24h
+   - Application domain: `api.versatexanalytics.com`
+   - Path: `<ADMIN_URL>*` (e.g. `manage-3f2b1a7c9d4e6f80/*`)
+3. Identity providers: enable at least one — email one-time PIN is enough to start; layer in Google Workspace, GitHub, or Okta later.
+4. Policies → **Add a policy**:
+   - Name: `Admins`
+   - Action: **Allow**
+   - Rule: **Emails** in list — add each team member's email.
+5. Save. Reaching admin now requires an OTP code sent to an allowed email **before** Cloudflare forwards the request to Django.
+
+Free tier covers 50 seats, ample for a single-org deployment.
+
+### CSV upload size limits
+
+Admin's CSV import buttons go through the tunnel, which caps request bodies. Cloudflare's defaults:
+
+| Plan | Max request body |
+|------|------------------|
+| Free / Pro / Business | 100 MB |
+| Enterprise | 500 MB |
+
+For files larger than 100 MB, bypass the tunnel and use the management command over SSH. Copy the CSV onto the VPS first:
+
+```bash
+scp big-transactions.csv deploy@<hetzner-ipv4>:/home/deploy/versatex-analytics/
+```
+
+Then import from inside the backend container:
+
+```bash
+ssh deploy@<hetzner-ipv4>
+cd versatex-analytics
+docker compose cp big-transactions.csv backend:/tmp/
+docker compose exec backend python manage.py import_p2p_data \
+  --org-slug <slug> --type <pr|po|gr|invoice> --file /tmp/big-transactions.csv
+```
+
+### Gunicorn timeout
+
+Gunicorn runs with `--timeout 120` (two minutes). Synchronous admin actions that exceed this are killed by the worker. If you add slow bulk admin actions, defer them to Celery rather than blocking the request.
+
+### Verify admin works end-to-end
+
+```bash
+# With Access: first request 302s to Cloudflare Access login, then 200 for Django
+# Without Access: first request 200 straight to Django login
+curl -IL https://api.versatexanalytics.com/<ADMIN_URL>/
+```
+
+In a browser: navigate to the URL, complete Cloudflare Access OTP (if configured), then sign in with the Django superuser from Step 7.
+
+## Known gaps
+
+### Celery Beat is not started
+
+[`backend/config/celery.py`](../../backend/config/celery.py) defines a `beat_schedule` for the v2.9 AI-insight batch jobs (generation at 02:00, enhancement at 02:30, semantic-cache cleanup at 03:00, log cleanup at 03:30, RAG refresh Sundays at 04:00). But [`docker-compose.yml`](../../docker-compose.yml) only runs `celery -A config worker -l info` — no `-B` flag, no separate beat service. Scheduled tasks **do not run** out of the box.
+
+Pick one fix:
+
+1. **Embed beat in the worker** (simplest, fine for a single-VPS deployment). Override the `celery` service command in `docker-compose.prod.yml`:
+
+   ```yaml
+   celery:
+     command: celery -A config worker -B -l info
+   ```
+
+   Trade-off: if the worker dies, beat dies with it. Celery docs recommend splitting them at scale — but for one-box deployments this is acceptable.
+
+2. **Add a dedicated beat service** (recommended if you run multiple workers). Append to `docker-compose.prod.yml`:
+
+   ```yaml
+   celery-beat:
+     build:
+       context: ./backend
+       dockerfile: Dockerfile
+     container_name: analytics-celery-beat
+     command: celery -A config beat -l info
+     env_file:
+       - .env
+     environment:
+       - DB_HOST=db
+       - DB_PORT=5432
+       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+     depends_on:
+       - db
+       - redis
+     networks:
+       - internal
+       - default
+   ```
+
+   Remember to include it in the `docker compose ... up -d` service list.
+
+### Backend healthcheck ties to `ADMIN_URL`
+
+[`docker-compose.prod.yml`](../../docker-compose.prod.yml) now overrides the backend healthcheck to hit `/${ADMIN_URL}login/` instead of `/admin/login/`, so it follows the obscured path. This means `ADMIN_URL` must be set in `.env` **before** `docker compose up -d`, or the healthcheck URL becomes `/login/` and returns 404.
 
 ## Troubleshooting
 

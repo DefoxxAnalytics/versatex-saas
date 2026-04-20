@@ -112,6 +112,7 @@ railway link
    ```
    DJANGO_SETTINGS_MODULE=config.settings
    SECRET_KEY=<generate-new-secret-key>
+   ADMIN_URL=<generate-stable-random-path>
    DEBUG=False
    ALLOWED_HOSTS=${{RAILWAY_PUBLIC_DOMAIN}},.railway.app
    DATABASE_URL=${{analytics-db.DATABASE_URL}}
@@ -134,13 +135,18 @@ railway link
    ```
    Or use: https://djecrety.ir/
 
+   **Generate ADMIN_URL** (stable obscured admin path — required; if blank, Django rotates the admin URL on every restart and only logs it):
+   ```bash
+   python -c "import secrets; print(f'manage-{secrets.token_hex(8)}/')"
+   ```
+
 3. **Set Custom Start Command** (in Settings → Deploy):
    ```bash
    gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120
    ```
 
 4. **Configure Health Check** (in Settings → Health Check):
-   - Path: `/admin/`
+   - Path: `/<ADMIN_URL>login/` — the actual `ADMIN_URL` value from Step 4.2 with `login/` appended (e.g. `/manage-3f2b1a7c/login/`). The default `/admin/` path 404s once `ADMIN_URL` is set.
    - Timeout: 100 seconds
 
 5. **Generate Public Domain**:
@@ -176,6 +182,11 @@ railway link
 4. **Disable Public URL** (in Settings → Networking):
    - Celery worker doesn't need public access
    - Remove/disable the public domain
+
+> **Known gap — Celery Beat not started**: [`backend/config/celery.py`](../../backend/config/celery.py) defines scheduled tasks (v2.9 AI batch jobs at 02:00–04:00 UTC daily), but the command in step 3 above (`celery -A config worker -l info --concurrency=2`) does not include `-B` and there is no separate `celery-beat` service. Scheduled tasks **will not run** as configured. Pick one fix:
+>
+> - **Embed beat in the worker** (simplest): change the start command to `celery -A config worker -B -l info --concurrency=2`. Acceptable for small deployments; Celery docs recommend separating beat from workers at scale.
+> - **Add a dedicated beat service**: repeat Step 5 with a new service named `celery-beat` and start command `celery -A config beat -l info`.
 
 ### Step 6: Configure Frontend Service
 
@@ -234,8 +245,10 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 org = Organization.objects.create(name="Default Organization", slug="default")
 
-# Link admin user to organization
-admin = User.objects.get(username="admin")  # or your superuser username
+# Link the superuser to the organization
+admin = User.objects.filter(is_superuser=True).order_by("id").first()
+if admin is None:
+    raise SystemExit("No superuser found; run createsuperuser first.")
 profile, created = UserProfile.objects.get_or_create(
     user=admin,
     defaults={
@@ -244,7 +257,7 @@ profile, created = UserProfile.objects.get_or_create(
         'is_active': True
     }
 )
-print(f"Profile created: {created}")
+print(f"Profile created for {admin.username}: {created}")
 ```
 
 ### Step 10: Update CORS Settings
@@ -265,10 +278,10 @@ Click "Redeploy" after updating.
 1. **Test Frontend**: Visit your frontend URL
    - Should see login page with Versatex logo
 
-2. **Test Backend API**: Visit `https://your-backend.railway.app/admin/`
+2. **Test Backend API**: Visit `https://your-backend.railway.app/<ADMIN_URL>/` (substitute the `ADMIN_URL` value from Step 4.2)
    - Should see Django admin login (API docs are disabled in production for security)
 
-3. **Test Django Admin**: Visit `https://your-backend.railway.app/admin/`
+3. **Test Django Admin**: Visit `https://your-backend.railway.app/<ADMIN_URL>/`
    - Should see custom branded admin panel
    - Login with superuser credentials
 

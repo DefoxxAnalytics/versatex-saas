@@ -69,6 +69,10 @@ backend/.coverage
 # OS
 Thumbs.db
 
+# Cloudflare Tunnel (config.yml mode — do not commit credentials)
+cloudflared/credentials.json
+cloudflared/*.json
+
 # Railway
 .railway/
 railway.json

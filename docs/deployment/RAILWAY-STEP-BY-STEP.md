@@ -204,6 +204,9 @@ PYTHONUNBUFFERED=1
 # Security - Generate a new SECRET_KEY
 SECRET_KEY=your-super-secret-key-here-generate-a-new-one-at-least-50-characters-long
 
+# Stable obscured admin path — required (blank rotates admin URL on every restart)
+ADMIN_URL=manage-replace-with-16-hex-chars/
+
 # Database Connection - Reference the PostgreSQL service
 DATABASE_URL=${{analytics-db.DATABASE_URL}}
 
@@ -255,6 +258,13 @@ X_FRAME_OPTIONS=DENY
 
   ⚠️ **NEVER commit this key to git!** Railway stores it securely as an environment variable.
 
+- **ADMIN_URL**: Generate a stable random path for the Django admin:
+  ```bash
+  python -c "import secrets; print(f'manage-{secrets.token_hex(8)}/')"
+  ```
+
+  If left blank, Django generates a new `manage-<hex>/` path on every container restart and only writes it to logs — impractical once the deployment is live. Set this once and keep it stable; it's referenced by the health-check path in Step 4.3.
+
 - **${{service.VARIABLE}}**: This syntax tells Railway to reference another service's variable
   - Railway will automatically substitute the correct values
   - This enables secure service-to-service communication
@@ -270,7 +280,7 @@ X_FRAME_OPTIONS=DENY
 5. **Configure Health Check**:
    - In Settings tab
    - Scroll to "Health Check"
-   - Check Path: `/admin/`
+   - Check Path: `/<ADMIN_URL>login/` — substitute the actual `ADMIN_URL` value from Step 4.2 with `login/` appended (e.g. `/manage-3f2b1a7c/login/`). The default `/admin/` path 404s because `ADMIN_URL` is set.
    - Timeout: 100 seconds
 
 ### Step 4.3: Deploy Backend
@@ -360,6 +370,23 @@ The Celery worker handles background tasks (CSV uploads, analytics calculations)
    - Should show: "Connected to redis://..."
 
 **✅ Checkpoint**: Celery worker should be running. Check logs for "ready" message.
+
+### Step 5.4: Known gap — Celery Beat not started
+
+[`backend/config/celery.py`](../../backend/config/celery.py) defines a `beat_schedule` for the v2.9 AI-insight batch jobs (02:00–04:00 UTC daily). But the start command from Step 5.2 (`celery -A config worker -l info --concurrency=2`) does not include `-B`, and there is no separate `celery-beat` service. **Scheduled tasks will not run** as configured.
+
+Pick one fix:
+
+- **Embed beat in the worker** (simplest, fine for small deployments). Go to the `celery-worker` service → Settings → Deploy → Custom Start Command, change to:
+  ```bash
+  celery -A config worker -B -l info --concurrency=2
+  ```
+  Trade-off: if the worker restarts, beat restarts too. Celery docs recommend separating beat from workers at scale.
+
+- **Add a dedicated beat service**. Repeat Part 5 with these differences:
+  - Service name: `celery-beat`
+  - Start command: `celery -A config beat -l info`
+  - Disable public networking (same as `celery-worker`)
 
 ---
 
@@ -541,8 +568,10 @@ org, created = Organization.objects.get_or_create(
 )
 print(f"Organization: {org.name} (created: {created})")
 
-# Get admin user (replace 'admin' with your username)
-admin = User.objects.get(username='admin')
+# Get the superuser (any superuser in the system)
+admin = User.objects.filter(is_superuser=True).order_by('id').first()
+if admin is None:
+    raise SystemExit("No superuser found; run createsuperuser first.")
 
 # Create or update profile
 profile, created = UserProfile.objects.get_or_create(
@@ -644,7 +673,7 @@ ALLOWED_HOSTS=${{RAILWAY_PUBLIC_DOMAIN}},.railway.app,your-frontend-domain.railw
 
 ### Step 9.4: Test Django Admin Panel
 
-1. **Open backend URL**: `https://your-backend-domain.railway.app/admin/`
+1. **Open backend URL**: `https://your-backend-domain.railway.app/<ADMIN_URL>/` (substitute the actual `ADMIN_URL` value from Step 4.2)
 
 2. **You should see**:
    - Custom branded login with navy blue theme
@@ -671,14 +700,14 @@ ALLOWED_HOSTS=${{RAILWAY_PUBLIC_DOMAIN}},.railway.app,your-frontend-domain.railw
 > **Note**: API documentation (`/api/docs`) is only available when `DEBUG=True`. In production, this endpoint returns 404 for security reasons. To test the API, use the Django admin or direct API calls.
 
 1. **Test via Django Admin**:
-   - Go to `https://your-backend-domain.railway.app/admin/`
+   - Go to `https://your-backend-domain.railway.app/<ADMIN_URL>/` (use the path set in Step 4.2)
    - Login with superuser credentials
    - You can browse data models and verify the database is working
 
 2. **Test an API endpoint directly**:
    - Use curl or your browser's dev tools
    - Example: `curl https://your-backend-domain.railway.app/api/v1/auth/user/` (requires auth token)
-   - Or test the public health check: `curl https://your-backend-domain.railway.app/admin/`
+   - Or test the health check: `curl -I https://your-backend-domain.railway.app/<ADMIN_URL>login/` (should return 200 or 302)
 
 **✅ Checkpoint**: All tests passing! Your application is live and working! 🎉
 
