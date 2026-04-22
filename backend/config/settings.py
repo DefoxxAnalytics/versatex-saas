@@ -450,6 +450,11 @@ FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default='')
 ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 
+# Daily LLM cost-digest webhook (ntfy.sh / Slack / Teams compatible).
+# When empty, send_llm_cost_digest task logs the daily rollup but skips the
+# outbound POST. Set to an ntfy.sh topic URL for zero-friction alerting.
+COST_ALERT_WEBHOOK_URL = config('COST_ALERT_WEBHOOK_URL', default='')
+
 # Logging configuration for security events
 # Build handlers dict - only include file handler in production
 _logging_handlers = {

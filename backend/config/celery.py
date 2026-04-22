@@ -32,4 +32,11 @@ app.conf.beat_schedule = {
         'task': 'refresh_rag_documents',
         'schedule': crontab(hour=4, minute=0, day_of_week='sunday'),
     },
+    # Daily LLM cost digest at 06:00 UTC -- runs AFTER the 02:00 / 02:30 batch
+    # jobs so it captures their cost in yesterday's window. Surfaces runaway
+    # spend the morning after, not days later.
+    'llm-cost-digest-daily': {
+        'task': 'send_llm_cost_digest',
+        'schedule': crontab(hour=6, minute=0),
+    },
 }
