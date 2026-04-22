@@ -595,7 +595,7 @@ Browser:
 3. `https://app.versatexanalytics.com/<ADMIN_URL>login/` → redirects to
    Cloudflare Access → email OTP → admin login page → login
 4. `https://monitor.versatexanalytics.com/` → Access OTP first, then
-   Uptime Kuma setup wizard (see [MONITORING.md](MONITORING.md) for
+   Uptime Kuma setup wizard (see [MONITORING.md](deployment/MONITORING.md) for
    probe setup).
 
 🛑 **Checkpoint 11.9:** All smoke tests pass. **Phase 11 complete.**
@@ -605,7 +605,7 @@ Browser:
 
 # PHASE 12 — Cloudflare edge rules (~45 min)
 
-Full detail in [CLOUDFLARE-EDGE.md](CLOUDFLARE-EDGE.md). Quick
+Full detail in [CLOUDFLARE-EDGE.md](deployment/CLOUDFLARE-EDGE.md). Quick
 walkthrough:
 
 ## 12.1 — SSL/TLS Full (strict)
@@ -708,13 +708,13 @@ done
 Round C complete. The app is live, gated, cached, and rate-limited.
 Round D (Phase 13 verification + Phase 14 48h watch) follows.
 
-- **[DEPLOY-PLAYBOOK.md](DEPLOY-PLAYBOOK.md)** — routine deploys,
+- **[DEPLOY-PLAYBOOK.md](deployment/DEPLOY-PLAYBOOK.md)** — routine deploys,
   rollbacks, migration safety, secret rotation, failure diagnoses.
-- **[MONITORING.md](MONITORING.md)** — probe setup inside Uptime Kuma,
+- **[MONITORING.md](deployment/MONITORING.md)** — probe setup inside Uptime Kuma,
   external probe, weekly metrics review.
-- **[CLOUDFLARE-EDGE.md](CLOUDFLARE-EDGE.md)** — full reference for the
+- **[CLOUDFLARE-EDGE.md](deployment/CLOUDFLARE-EDGE.md)** — full reference for the
   rules applied above, plus verification and rollback per change.
-- **[BACKUPS-AND-MEDIA.md](BACKUPS-AND-MEDIA.md)** — install the
+- **[BACKUPS-AND-MEDIA.md](deployment/BACKUPS-AND-MEDIA.md)** — install the
   nightly postgres + media backup cron jobs.
 
 ## Common first-deploy problems

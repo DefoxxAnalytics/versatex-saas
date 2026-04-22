@@ -32,7 +32,7 @@ The canonical, end-to-end production recipe is the single-subdomain plan
 origin via Cloudflare Tunnel). Read these in order:
 
 1. [PRODUCTION-DEPLOY-PLAN.md](PRODUCTION-DEPLOY-PLAN.md) — **Start here.** The strategic plan: architecture, apex-safety pre-flight, phases at a glance.
-2. [FIRST-DEPLOY-WALKTHROUGH.md](FIRST-DEPLOY-WALKTHROUGH.md) — **First-time setup.** Step-by-step VPS provision → tunnel → Access policies → `.env` assembly → first bring-up → edge rules. ~3 hours end-to-end, checkpointed for pauses.
+2. [FIRST-DEPLOY-WALKTHROUGH.md](../FIRST-DEPLOY-WALKTHROUGH.md) — **First-time setup.** Step-by-step VPS provision → tunnel → Access policies → `.env` assembly → first bring-up → edge rules. ~3 hours end-to-end, checkpointed for pauses. (Lives one level up in `docs/` for top-level discoverability.)
 3. [DEPLOY-PLAYBOOK.md](DEPLOY-PLAYBOOK.md) — Day-to-day runbooks: deploy, rollback, migration safety, secret classification, common-failure diagnoses.
 4. [MONITORING.md](MONITORING.md) — Uptime Kuma + external probe + Cloudflare signals. Probe definitions, alert routing, weekly metrics to watch.
 5. [CLOUDFLARE-EDGE.md](CLOUDFLARE-EDGE.md) — Cache Rules, WAF, Rate-Limiting, SSL/TLS mode. Copy-paste-ready expressions with host-scoping clauses.
