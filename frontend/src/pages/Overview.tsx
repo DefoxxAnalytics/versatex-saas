@@ -440,7 +440,7 @@ export default function Overview() {
   );
 
   const isLoading = statsLoading || categoryLoading || supplierLoading || trendLoading;
-  const adminUploadUrl = `${window.location.protocol}//${window.location.hostname}:8001/admin/procurement/dataupload/upload-csv/`;
+  const adminUploadUrl = "/admin/login/";
 
   const totalSpend = overviewStats?.total_spend ?? 0;
   const supplierCount = overviewStats?.supplier_count ?? 0;
