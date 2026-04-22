@@ -31,11 +31,12 @@ The canonical, end-to-end production recipe is the single-subdomain plan
 (`app.versatexanalytics.com` serving SPA + API + admin from the same
 origin via Cloudflare Tunnel). Read these in order:
 
-1. [PRODUCTION-DEPLOY-PLAN.md](PRODUCTION-DEPLOY-PLAN.md) — **Start here.** Full one-time setup: VPS provision, tunnel, Cloudflare Access policies, first bring-up.
-2. [DEPLOY-PLAYBOOK.md](DEPLOY-PLAYBOOK.md) — Day-to-day runbooks: deploy, rollback, migration safety, secret classification, common-failure diagnoses.
-3. [MONITORING.md](MONITORING.md) — Uptime Kuma + external probe + Cloudflare signals. Probe definitions, alert routing, weekly metrics to watch.
-4. [CLOUDFLARE-EDGE.md](CLOUDFLARE-EDGE.md) — Cache Rules, WAF, Rate-Limiting, SSL/TLS mode. Copy-paste-ready expressions with host-scoping clauses.
-5. [BACKUPS-AND-MEDIA.md](BACKUPS-AND-MEDIA.md) — Postgres backups to R2, media file persistence, restore procedure.
+1. [PRODUCTION-DEPLOY-PLAN.md](PRODUCTION-DEPLOY-PLAN.md) — **Start here.** The strategic plan: architecture, apex-safety pre-flight, phases at a glance.
+2. [FIRST-DEPLOY-WALKTHROUGH.md](FIRST-DEPLOY-WALKTHROUGH.md) — **First-time setup.** Step-by-step VPS provision → tunnel → Access policies → `.env` assembly → first bring-up → edge rules. ~3 hours end-to-end, checkpointed for pauses.
+3. [DEPLOY-PLAYBOOK.md](DEPLOY-PLAYBOOK.md) — Day-to-day runbooks: deploy, rollback, migration safety, secret classification, common-failure diagnoses.
+4. [MONITORING.md](MONITORING.md) — Uptime Kuma + external probe + Cloudflare signals. Probe definitions, alert routing, weekly metrics to watch.
+5. [CLOUDFLARE-EDGE.md](CLOUDFLARE-EDGE.md) — Cache Rules, WAF, Rate-Limiting, SSL/TLS mode. Copy-paste-ready expressions with host-scoping clauses.
+6. [BACKUPS-AND-MEDIA.md](BACKUPS-AND-MEDIA.md) — Postgres backups to R2, media file persistence, restore procedure.
 
 ### Supporting references (deep-dive / historical)
 
