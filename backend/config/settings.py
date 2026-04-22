@@ -146,11 +146,40 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Storage backends (Django 5 STORAGES API). Always defined — Django rejects
+# coexistence with the legacy STATICFILES_STORAGE setting ("mutually exclusive").
+# media ('default'): Cloudflare R2 when USE_R2_MEDIA=True, else local filesystem.
+# static ('staticfiles'): whitenoise CompressedManifest in prod (needs
+#   collectstatic); settings_test.py overrides to plain StaticFilesStorage for
+#   pytest, where collectstatic is skipped.
+if config('USE_R2_MEDIA', default=False, cast=bool):
+    _default_storage = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': config('R2_MEDIA_BUCKET', default='versatex-media'),
+            'endpoint_url': config('R2_ENDPOINT', default=''),
+            'access_key': config('R2_ACCESS_KEY_ID', default=''),
+            'secret_key': config('R2_SECRET_ACCESS_KEY', default=''),
+            'region_name': 'auto',       # R2 convention
+            'default_acl': 'private',
+            'querystring_auth': True,    # presigned URLs for reads
+            'querystring_expire': 3600,
+        },
+    }
+else:
+    _default_storage = {'BACKEND': 'django.core.files.storage.FileSystemStorage'}
+
+STORAGES = {
+    'default': _default_storage,
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # File upload limits
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB

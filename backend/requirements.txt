@@ -35,9 +35,7 @@ statsmodels==0.14.1
 anthropic>=0.40.0
 openai>=1.12.0
 
-# FastAPI Streaming Service
-fastapi>=0.110.0
-uvicorn>=0.27.0
+# JWT (used by djangorestframework-simplejwt under the hood)
 pyjwt>=2.8.0
 
 # API Documentation
@@ -46,6 +44,10 @@ drf-spectacular==0.27.0
 # Production Server
 gunicorn==21.2.0
 whitenoise==6.6.0
+
+# Cloud Storage (optional, opt-in via USE_R2_MEDIA=True)
+# S3-compatible backend for Cloudflare R2 media uploads.
+django-storages[s3]>=1.14,<2.0
 
 # Celery (Background Tasks)
 celery==5.3.4

@@ -32,12 +32,19 @@ CACHES = {
     }
 }
 
-# Override production's CompressedManifestStaticFilesStorage (WhiteNoise) with the
-# plain StaticFilesStorage. Manifest storage demands collectstatic has populated
-# staticfiles.json, which CI skips — admin views then crash with
-# "Missing staticfiles manifest entry for 'admin/css/base.css'" on any test that
-# renders admin HTML.
-STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+# Override production's WhiteNoise CompressedManifest staticfiles backend with
+# the plain StaticFilesStorage. Manifest storage demands collectstatic has
+# populated staticfiles.json, which CI skips — admin views then crash with
+# "Missing staticfiles manifest entry for 'admin/css/base.css'" on any test
+# that renders admin HTML.
+#
+# Django 5 uses STORAGES dict instead of STATICFILES_STORAGE. The base
+# settings.py defines STORAGES; we override both keys here to force the
+# filesystem / plain-staticfiles pair regardless of prod USE_R2_MEDIA config.
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
 
 # Simplify logging for tests
 LOGGING = {
