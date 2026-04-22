@@ -111,8 +111,8 @@ docker compose version
 
 ```bash
 cd ~
-git clone https://github.com/DefoxxAnalytics/versatex-analytics.git
-cd versatex-analytics
+git clone https://github.com/DefoxxAnalytics/versatex-saas.git
+cd versatex-saas
 cp .env.example .env
 ```
 
@@ -327,14 +327,14 @@ Admin's CSV import buttons go through the tunnel, which caps request bodies. Clo
 For files larger than 100 MB, bypass the tunnel and use the management command over SSH. Copy the CSV onto the VPS first:
 
 ```bash
-scp big-transactions.csv deploy@<hetzner-ipv4>:/home/deploy/versatex-analytics/
+scp big-transactions.csv deploy@<hetzner-ipv4>:/home/deploy/versatex-saas/
 ```
 
 Then import from inside the backend container:
 
 ```bash
 ssh deploy@<hetzner-ipv4>
-cd versatex-analytics
+cd versatex-saas
 docker compose cp big-transactions.csv backend:/tmp/
 docker compose exec backend python manage.py import_p2p_data \
   --org-slug <slug> --type <pr|po|gr|invoice> --file /tmp/big-transactions.csv

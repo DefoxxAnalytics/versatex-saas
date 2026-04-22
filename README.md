@@ -1,6 +1,6 @@
 # Versatex Analytics 2.10
 
-[![CI](https://github.com/DefoxxAnalytics/versatex-analytics/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DefoxxAnalytics/versatex-analytics/actions/workflows/ci.yml)
+[![CI](https://github.com/DefoxxAnalytics/versatex-saas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DefoxxAnalytics/versatex-saas/actions/workflows/ci.yml)
 [![Production Ready](https://img.shields.io/badge/Production-Ready-brightgreen.svg)](docs/SHIPPING_READINESS.md)
 [![Security](https://img.shields.io/badge/Security-8.5%2F10-green.svg)](docs/SHIPPING_READINESS.md)
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
@@ -132,8 +132,8 @@ Versatex Analytics is a full-stack procurement analytics dashboard designed for 
 ### 1. Clone and Setup
 
 ```bash
-git clone https://github.com/DefoxxAnalytics/versatex-analytics.git
-cd versatex-analytics
+git clone https://github.com/DefoxxAnalytics/versatex-saas.git
+cd versatex-saas
 
 # Copy environment variables
 cp .env.example .env

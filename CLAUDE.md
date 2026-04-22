@@ -187,7 +187,7 @@ Legacy endpoints (`/api/auth/`, `/api/procurement/`, `/api/analytics/`) are supp
 
 ## Port Configuration
 
-This project runs on shifted host ports so it can coexist with the sibling `versatex-analytics` project on the same host (which holds 3000/5432/6379/8001/5555). All host ports are parameterized in `docker-compose.yml` via env vars with the defaults below.
+This project uses non-default host ports to avoid collisions with other projects that may already occupy 3000/5432/6379/8001/5555 on the same host. All host ports are parameterized in `docker-compose.yml` via env vars with the defaults below.
 
 - Frontend: `http://localhost:3001` (`FRONTEND_PORT`)
 - Backend API: `http://localhost:8002/api` (`BACKEND_PORT`, maps to container port 8000)
@@ -324,7 +324,7 @@ GitHub Actions workflow runs on push/PR to master:
 - Security: Trivy vulnerability scanning
 
 Badges:
-- [![CI](https://github.com/DefoxxAnalytics/versatex-analytics/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DefoxxAnalytics/versatex-analytics/actions/workflows/ci.yml)
+- [![CI](https://github.com/DefoxxAnalytics/versatex-saas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DefoxxAnalytics/versatex-saas/actions/workflows/ci.yml)
 
 ## Test Coverage
 

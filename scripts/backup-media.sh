@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}/.."
 
-: "${COMPOSE_PROJECT_NAME:=versatex-analytics}"
+: "${COMPOSE_PROJECT_NAME:=versatex-saas}"
 : "${R2_MEDIA_REMOTE:=r2:versatex-backups/media}"
 
 VOLUME_NAME="${COMPOSE_PROJECT_NAME}_media_volume"
