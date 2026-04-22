@@ -4,10 +4,10 @@ Guides for deploying Versatex Analytics to production.
 
 ## Options at a glance
 
-| Option | Best for | Monthly cost | Setup time | Guide |
+| Option | Best for | Monthly cost | Setup time | Walkthrough |
 |--------|----------|--------------|------------|-------|
-| **Railway** | Managed PaaS, no sysadmin work | $30-65 | ~1 hour | [RAILWAY.md](RAILWAY.md) |
-| **Cloudflare + Hetzner** | Cheapest; reuse an existing Cloudflare-managed domain | ~$5 | 2-3 hours | [CLOUDFLARE-HETZNER.md](CLOUDFLARE-HETZNER.md) |
+| **Railway** | Managed PaaS, no sysadmin work | ~$25-45 | ~2.5 hours | [RAILWAY-DEPLOY-WALKTHROUGH.md](../RAILWAY-DEPLOY-WALKTHROUGH.md) |
+| **Cloudflare + Hetzner** | Cheapest; reuse an existing Cloudflare-managed domain | ~$7.50 | ~3 hours | [FIRST-DEPLOY-WALKTHROUGH.md](../FIRST-DEPLOY-WALKTHROUGH.md) |
 
 Both setups end up with the same Django + Celery + Postgres + Redis stack running behind HTTPS on a domain you control.
 
@@ -47,5 +47,8 @@ origin via Cloudflare Tunnel). Read these in order:
 
 ## Railway documents
 
-- [RAILWAY.md](RAILWAY.md) — Reference guide.
-- [RAILWAY-STEP-BY-STEP.md](RAILWAY-STEP-BY-STEP.md) — First-time walkthrough.
+Read the walkthrough first; the older RAILWAY docs pre-date the accuracy-audit deploy-prep work and are kept as historical reference only.
+
+1. [RAILWAY-DEPLOY-WALKTHROUGH.md](../RAILWAY-DEPLOY-WALKTHROUGH.md) — **Start here.** Current walkthrough aligned with the post-audit repo state: project creation, Postgres + Redis + pgvector, backend/celery/frontend services, custom domains, Cloudflare proxy layer.
+2. [RAILWAY.md](RAILWAY.md) — Pre-audit reference guide. Deprecated; superseded by the walkthrough above.
+3. [RAILWAY-STEP-BY-STEP.md](RAILWAY-STEP-BY-STEP.md) — Pre-audit first-time walkthrough. Deprecated; useful for Railway concepts but specific steps may drift from current state.
