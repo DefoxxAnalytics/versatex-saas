@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'apps.procurement',
     'apps.analytics',
     'apps.reports',
+    'apps.health',
 ]
 
 MIDDLEWARE = [
