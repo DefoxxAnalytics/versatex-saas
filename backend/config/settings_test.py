@@ -32,6 +32,13 @@ CACHES = {
     }
 }
 
+# Override production's CompressedManifestStaticFilesStorage (WhiteNoise) with the
+# plain StaticFilesStorage. Manifest storage demands collectstatic has populated
+# staticfiles.json, which CI skips — admin views then crash with
+# "Missing staticfiles manifest entry for 'admin/css/base.css'" on any test that
+# renders admin HTML.
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
 # Simplify logging for tests
 LOGGING = {
     'version': 1,
