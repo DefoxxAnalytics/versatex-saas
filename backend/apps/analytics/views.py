@@ -958,13 +958,18 @@ def _get_ai_service(request, organization=None, filters=None):
     """
     Helper to create AI Insights Service with user preferences.
 
+    AI settings are flat camelCase keys on `UserProfile.preferences`
+    (frontend contract). Prior versions tried to read a nonexistent
+    `profile.ai_settings` attribute and a nested `ai_settings` sub-dict
+    — both returned empty, leaving the External AI Enhancement feature
+    dark. See docs/ACCURACY_AUDIT.md > Cluster 8 for the consolidation.
+
     Args:
         request: HTTP request object
         organization: Optional organization override (for superuser org switching)
         filters: Optional dict of filter parameters from parse_filter_params()
     """
-    profile = request.user.profile
-    ai_settings = getattr(profile, 'ai_settings', {}) or {}
+    prefs = (request.user.profile.preferences or {})
 
     # Use provided organization or get from request
     target_org = organization or get_target_organization(request)
@@ -972,9 +977,9 @@ def _get_ai_service(request, organization=None, filters=None):
     return AIInsightsService(
         organization=target_org,
         filters=filters,
-        use_external_ai=ai_settings.get('use_external_ai', False),
-        ai_provider=ai_settings.get('ai_provider', 'anthropic'),
-        api_key=ai_settings.get('ai_api_key', None)
+        use_external_ai=prefs.get('useExternalAI', False),
+        ai_provider=prefs.get('aiProvider', 'anthropic'),
+        api_key=prefs.get('aiApiKey') or None,
     )
 
 

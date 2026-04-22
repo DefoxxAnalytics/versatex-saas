@@ -639,7 +639,7 @@ export default function Settings() {
                   </div>
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
-                    Your API key is stored encrypted and never displayed
+                    Stored in your user preferences. Treat as sensitive — visible to users with admin access to your account.
                   </p>
                 </div>
               </div>

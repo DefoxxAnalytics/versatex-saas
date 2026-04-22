@@ -187,12 +187,17 @@ Legacy endpoints (`/api/auth/`, `/api/procurement/`, `/api/analytics/`) are supp
 
 ## Port Configuration
 
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8001/api` (maps to container port 8000)
-- Django Admin: `http://localhost:8001/admin`
-- API Docs: `http://localhost:8001/api/docs` (interactive API documentation)
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
+This project runs on shifted host ports so it can coexist with the sibling `versatex-analytics` project on the same host (which holds 3000/5432/6379/8001/5555). All host ports are parameterized in `docker-compose.yml` via env vars with the defaults below.
+
+- Frontend: `http://localhost:3001` (`FRONTEND_PORT`)
+- Backend API: `http://localhost:8002/api` (`BACKEND_PORT`, maps to container port 8000)
+- Django Admin: `http://localhost:8002/admin`
+- API Docs: `http://localhost:8002/api/docs` (interactive API documentation)
+- PostgreSQL: `localhost:5433` (`DB_PORT`)
+- Redis: `localhost:6380` (`REDIS_PORT`)
+- Flower: `http://localhost:5556` (`FLOWER_PORT`)
+
+Container names are prefixed `vstx-saas-*` (e.g., `vstx-saas-backend`) rather than `analytics-*` for the same coexistence reason. `docker-compose exec <service> ...` commands use the service name (`backend`, `db`, `redis`), which is unchanged.
 
 ## Environment Variables
 
@@ -205,7 +210,7 @@ DEBUG=True  # Set to False in production
 DB_PASSWORD=your_password
 
 # Frontend
-VITE_API_URL=http://127.0.0.1:8001/api
+VITE_API_URL=http://127.0.0.1:8002/api
 ```
 
 See `.env.example` for the full list of configuration options and the production security checklist.
@@ -308,7 +313,7 @@ docker-compose exec backend python manage.py shell
 
 **Static files missing in admin:** Run `collectstatic` command.
 
-**Port 8001 in use:** Check for WSL relay processes; can change in docker-compose.yml.
+**Port 8002 in use:** Override `BACKEND_PORT` in `.env` (host-side only). Other port env vars: `FRONTEND_PORT`, `DB_PORT`, `REDIS_PORT`, `FLOWER_PORT`.
 
 ## CI/CD
 

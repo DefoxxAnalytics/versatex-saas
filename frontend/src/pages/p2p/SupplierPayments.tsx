@@ -57,12 +57,12 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
 // Custom tooltip type definitions
-interface SupplierDPOChartData {
+interface SupplierDaysToPayChartData {
   name: string;
   fullName: string;
   supplierId: number;
   apBalance: number;
-  dpo: number;
+  daysToPay: number;
   onTimeRate: number;
   exceptionRate: number;
   score: number;
@@ -75,20 +75,20 @@ interface PaymentHistoryChartData {
   onTime: boolean;
 }
 
-// Custom tooltip for DPO Comparison Chart
-const SupplierDPOTooltip = ({
+// Custom tooltip for Days-to-Pay Comparison Chart
+const SupplierDaysToPayTooltip = ({
   active,
   payload,
 }: TooltipProps<ValueType, NameType>) => {
   if (!active || !payload || !payload.length) return null;
-  const data = payload[0].payload as SupplierDPOChartData;
+  const data = payload[0].payload as SupplierDaysToPayChartData;
   return (
     <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
       <div className="font-semibold text-gray-900 dark:text-gray-100">
         {data.fullName}
       </div>
       <div className="text-sm text-gray-600 dark:text-gray-400">
-        DPO: {data.dpo?.toFixed(0)} days
+        Days to Pay: {data.daysToPay?.toFixed(0)} days
       </div>
       <div className="text-sm text-gray-600 dark:text-gray-400">
         AP Balance: {formatCurrency(data.apBalance)}
@@ -124,7 +124,7 @@ const PaymentHistoryTooltip = ({
 
 /**
  * Supplier Payment Performance - Supplier-centric view of payment and P2P metrics
- * Shows payment scorecards, DPO by supplier, exception rates, and payment history
+ * Shows payment scorecards, avg days-to-pay by supplier, exception rates, and payment history
  */
 export default function SupplierPayments() {
   const { data: overview, isLoading: overviewLoading } =
@@ -197,10 +197,11 @@ export default function SupplierPayments() {
       subtext: "Last 90 days",
     },
     {
-      label: "Avg Supplier DPO",
-      value: `${overview.avg_dpo?.toFixed(1) || 0} days`,
+      label: "Avg Days to Pay",
+      value: `${overview.avg_days_to_pay?.toFixed(1) || overview.avg_dpo?.toFixed(1) || 0} days`,
       icon: Clock,
       color: "purple",
+      subtext: "Invoice issuance to payment",
     },
     {
       label: "Exception Rate",
@@ -211,7 +212,7 @@ export default function SupplierPayments() {
     },
   ];
 
-  // Supplier scorecard data
+  // Supplier scorecard data. API exposes both `avg_days_to_pay` (canonical) and `avg_dpo` (deprecated).
   const scorecardData =
     scorecard?.suppliers?.map((sup: SupplierPaymentScore) => ({
       name:
@@ -221,7 +222,7 @@ export default function SupplierPayments() {
       fullName: sup.supplier,
       supplierId: sup.supplier_id,
       apBalance: sup.total_ap,
-      dpo: sup.avg_dpo,
+      daysToPay: sup.avg_days_to_pay ?? sup.avg_dpo,
       onTimeRate: sup.on_time_rate,
       exceptionRate: sup.exception_rate,
       score: sup.performance_score,
@@ -360,7 +361,7 @@ export default function SupplierPayments() {
                     AP Balance
                   </th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                    DPO
+                    Avg Days to Pay
                   </th>
                   <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
                     On-Time %
@@ -420,7 +421,7 @@ export default function SupplierPayments() {
                         {formatCurrency(supplier.apBalance ?? 0)}
                       </td>
                       <td className="text-right py-3 px-4 font-mono">
-                        {supplier.dpo?.toFixed(0) || "-"} days
+                        {supplier.daysToPay?.toFixed(0) || "-"} days
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-center gap-2">
@@ -478,12 +479,12 @@ export default function SupplierPayments() {
         </CardContent>
       </Card>
 
-      {/* DPO Comparison Chart */}
+      {/* Days-to-Pay Comparison Chart */}
       <Card className="border-0 shadow-lg">
         <CardHeader>
-          <CardTitle>DPO Comparison by Supplier</CardTitle>
+          <CardTitle>Avg Days to Pay — Top Suppliers</CardTitle>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Days Payable Outstanding for top suppliers
+            Invoice-issuance-to-payment cycle time, by supplier
           </p>
         </CardHeader>
         <CardContent>
@@ -503,15 +504,15 @@ export default function SupplierPayments() {
                   stroke="#6b7280"
                   width={140}
                 />
-                <Tooltip content={<SupplierDPOTooltip />} />
-                <Bar dataKey="dpo" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
+                <Tooltip content={<SupplierDaysToPayTooltip />} />
+                <Bar dataKey="daysToPay" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
                   {scorecardData.slice(0, 15).map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={
-                        (entry.dpo ?? 0) > 60
+                        (entry.daysToPay ?? 0) > 60
                           ? "#ef4444"
-                          : (entry.dpo ?? 0) > 45
+                          : (entry.daysToPay ?? 0) > 45
                             ? "#f59e0b"
                             : "#8b5cf6"
                       }
@@ -522,7 +523,7 @@ export default function SupplierPayments() {
             </ResponsiveContainer>
           ) : (
             <div className="h-[350px] flex items-center justify-center text-gray-500">
-              No DPO data available
+              No days-to-pay data available
             </div>
           )}
         </CardContent>
@@ -581,10 +582,10 @@ export default function SupplierPayments() {
                 <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
                   <Clock className="h-5 w-5 text-purple-600 mb-2" />
                   <div className="text-xl font-bold text-purple-900 dark:text-purple-100">
-                    {supplierDetail.avg_dpo?.toFixed(0) || "-"} days
+                    {supplierDetail.avg_days_to_pay?.toFixed(0) ?? supplierDetail.avg_dpo?.toFixed(0) ?? "-"} days
                   </div>
                   <div className="text-sm text-purple-700 dark:text-purple-300">
-                    Avg DPO
+                    Avg Days to Pay
                   </div>
                 </div>
                 <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">

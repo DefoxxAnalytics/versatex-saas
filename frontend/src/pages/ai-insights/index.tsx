@@ -1828,6 +1828,11 @@ export default function AIInsightsPage() {
 
   const { summary } = data;
 
+  // If the backend did not enhance the insights with an external LLM (no
+  // API key configured or enhancement failed), surface that clearly so users
+  // aren't under the impression they're seeing AI-enhanced recommendations.
+  const isDeterministicOnly = !data?.ai_enhancement;
+
   return (
     <div className="space-y-8 p-6">
       {/* Page Header */}
@@ -1836,9 +1841,16 @@ export default function AIInsightsPage() {
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
             <Sparkles className="h-8 w-8 text-yellow-500" />
             AI Insights
+            {isDeterministicOnly && (
+              <span className="text-sm font-normal text-gray-500 ml-1">
+                (Deterministic)
+              </span>
+            )}
           </h1>
           <p className="text-gray-600 mt-2">
-            Smart recommendations powered by machine learning
+            {isDeterministicOnly
+              ? "Rule-based recommendations — External AI Enhancement not active. Configure an API key in Settings to enable."
+              : "Smart recommendations powered by machine learning"}
           </p>
         </div>
         <div className="flex items-center gap-2">

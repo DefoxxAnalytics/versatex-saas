@@ -60,6 +60,29 @@ class P2PAnalyticsService:
             qs = qs.filter(**{f'{date_field}__lte': self._parse_date(date_to)})
         return qs
 
+    @staticmethod
+    def _avg_days_to_pay(paid_invoices):
+        """
+        Average days from invoice issuance to payment across a set of paid invoices.
+
+        This is "payment cycle days", also colloquially called DPO in earlier
+        versions of this codebase. It is NOT Days Payable Outstanding in the
+        accounting sense (`AP / COGS * 365`). API responses continue to expose
+        the legacy `dpo` / `avg_dpo` field names as aliases for one release so
+        stored report snapshots remain readable.
+
+        Rejects invoices where paid_date < invoice_date as data-quality noise.
+
+        Returns:
+            tuple: (avg_days, sample_size)
+        """
+        days = [
+            (inv.paid_date - inv.invoice_date).days
+            for inv in paid_invoices
+            if inv.paid_date and inv.paid_date >= inv.invoice_date
+        ]
+        return (sum(days) / len(days)) if days else 0, len(days)
+
     # =========================================================================
     # P2P CYCLE TIME ANALYSIS
     # =========================================================================
@@ -190,12 +213,14 @@ class P2PAnalyticsService:
         """Get monthly trend of cycle times."""
         cutoff_date = date.today() - timedelta(days=months * 30)
 
-        # Get monthly invoice to payment times
+        # Get monthly invoice to payment times. Exclude invoices with paid_date
+        # before invoice_date (data-quality noise) — same gate as _avg_days_to_pay.
         paid_invoices = Invoice.objects.filter(
             organization=self.organization,
             status='paid',
             paid_date__isnull=False,
-            invoice_date__gte=cutoff_date
+            invoice_date__gte=cutoff_date,
+            paid_date__gte=F('invoice_date'),
         ).annotate(
             month=TruncMonth('invoice_date')
         ).values('month').annotate(
@@ -557,29 +582,45 @@ class P2PAnalyticsService:
         three_way = match_breakdown.get('3way_matched', {'count': 0, 'amount': 0})
         two_way = match_breakdown.get('2way_matched', {'count': 0, 'amount': 0})
 
-        # Calculate percentages
+        # Calculate percentages by count AND by amount. Count-based rates
+        # can mask $ exposure (1 large exception vs 100 small ones), so the
+        # amount-based variant is added as a companion metric.
+        total_amount_float = float(total_amount)
         three_way_pct = round(three_way['count'] / total_count * 100, 1) if total_count > 0 else 0
         two_way_pct = round(two_way['count'] / total_count * 100, 1) if total_count > 0 else 0
         exception_pct = round(exception_count / total_count * 100, 1) if total_count > 0 else 0
 
+        three_way_pct_by_amount = round(
+            three_way['amount'] / total_amount_float * 100, 1
+        ) if total_amount_float > 0 else 0
+        two_way_pct_by_amount = round(
+            two_way['amount'] / total_amount_float * 100, 1
+        ) if total_amount_float > 0 else 0
+        exception_pct_by_amount = round(
+            float(exception_amount) / total_amount_float * 100, 1
+        ) if total_amount_float > 0 else 0
+
         # Return in nested structure expected by frontend
         return {
             'total_invoices': total_count,
-            'total_amount': float(total_amount),
+            'total_amount': total_amount_float,
             'three_way_matched': {
                 'count': three_way['count'],
                 'amount': three_way['amount'],
-                'percentage': three_way_pct
+                'percentage': three_way_pct,
+                'percentage_by_amount': three_way_pct_by_amount,
             },
             'two_way_matched': {
                 'count': two_way['count'],
                 'amount': two_way['amount'],
-                'percentage': two_way_pct
+                'percentage': two_way_pct,
+                'percentage_by_amount': two_way_pct_by_amount,
             },
             'exceptions': {
                 'count': open_exceptions,  # Open exceptions count
                 'amount': float(exception_amount),
                 'percentage': exception_pct,
+                'percentage_by_amount': exception_pct_by_amount,
                 'total_count': exception_count,  # All exceptions (open + resolved)
                 'resolved_count': resolved_exceptions
             },
@@ -588,6 +629,7 @@ class P2PAnalyticsService:
             'match_rate_3way': three_way_pct,
             'match_rate_2way': two_way_pct,
             'exception_rate': exception_pct,
+            'exception_rate_by_amount': exception_pct_by_amount,
             'exception_count': exception_count,
             'exception_amount': float(exception_amount),
             'open_exceptions': open_exceptions,
@@ -964,26 +1006,24 @@ class P2PAnalyticsService:
             if total_ap > 0:
                 bucket['percentage'] = round(bucket['amount'] / float(total_ap) * 100, 1)
 
-        # Calculate DPO
+        # Average days from invoice issuance to payment (legacy: DPO).
         paid_invoices = Invoice.objects.filter(
             organization=self.organization,
             status='paid',
             paid_date__isnull=False
         )
 
-        dpo_days = []
-        for inv in paid_invoices:
-            days = (inv.paid_date - inv.invoice_date).days
-            if days >= 0:
-                dpo_days.append(days)
+        avg_days_to_pay, sample_size = self._avg_days_to_pay(paid_invoices)
 
-        avg_dpo = sum(dpo_days) / len(dpo_days) if dpo_days else 0
+        # On-time payment rate — compares paid_date to due_date via Invoice.days_overdue.
+        # Denominator matches sample_size so data-quality rejects are consistent across numerator/denominator.
+        on_time = sum(
+            1 for inv in paid_invoices
+            if inv.paid_date and inv.paid_date >= inv.invoice_date and inv.days_overdue == 0
+        )
+        on_time_rate = on_time / sample_size * 100 if sample_size else 0
 
-        # On-time payment rate
-        on_time = sum(1 for inv in paid_invoices if inv.days_overdue == 0)
-        on_time_rate = on_time / len(dpo_days) * 100 if dpo_days else 0
-
-        # Get DPO trend for past 6 months
+        # Monthly days-to-pay trend for the past 6 months.
         trend = []
         for i in range(5, -1, -1):
             month_start = date.today().replace(day=1) - timedelta(days=i * 30)
@@ -997,27 +1037,26 @@ class P2PAnalyticsService:
                 paid_date__lte=month_end
             )
 
-            month_dpo_days = []
-            for inv in month_paid:
-                days = (inv.paid_date - inv.invoice_date).days
-                if days >= 0:
-                    month_dpo_days.append(days)
-
-            month_avg_dpo = sum(month_dpo_days) / len(month_dpo_days) if month_dpo_days else 0
+            month_avg, _ = self._avg_days_to_pay(month_paid)
             trend.append({
                 'month': month_start.strftime('%Y-%m'),
-                'dpo': round(month_avg_dpo, 1)
+                'days_to_pay': round(month_avg, 1),
+                'avg_days_to_pay': round(month_avg, 1),
+                'dpo': round(month_avg, 1),  # Deprecated alias
+                'avg_dpo': round(month_avg, 1),  # Deprecated alias
             })
 
         return {
             'total_ap': float(total_ap),
             'total_overdue': float(total_overdue),
-            'overdue_amount': float(total_overdue),  # Added for frontend compatibility
-            'avg_dpo': round(avg_dpo, 1),
-            'current_dpo': round(avg_dpo, 1),  # Added for frontend compatibility
+            'overdue_amount': float(total_overdue),  # Frontend compat
+            'avg_days_to_pay': round(avg_days_to_pay, 1),
+            'current_days_to_pay': round(avg_days_to_pay, 1),
+            'avg_dpo': round(avg_days_to_pay, 1),  # Deprecated alias
+            'current_dpo': round(avg_days_to_pay, 1),  # Deprecated alias
             'on_time_rate': round(on_time_rate, 1),
-            'buckets': buckets_list,  # Now an array with bucket, count, amount, percentage
-            'trend': trend  # Added for frontend compatibility
+            'buckets': buckets_list,
+            'trend': trend,
         }
 
     def get_aging_by_supplier(self, limit=20):
@@ -1190,8 +1229,14 @@ class P2PAnalyticsService:
 
         avg_approval = sum(approval_days) / len(approval_days) if approval_days else 0
 
-        # Total value
-        total_value = prs.aggregate(total=Sum('estimated_amount'))['total'] or Decimal('0')
+        # Aggregate requested value. PR `estimated_amount` is an estimate,
+        # not the actual PO-committed amount — the name `total_value` is
+        # retained for back-compat but a clearer `total_estimated_value` alias
+        # is also emitted so consumers can signal the "estimate" qualifier in
+        # the UI.
+        total_estimated_value = float(
+            prs.aggregate(total=Sum('estimated_amount'))['total'] or Decimal('0')
+        )
 
         # Status breakdown for frontend
         status_counts = prs.values('status').annotate(
@@ -1202,7 +1247,8 @@ class P2PAnalyticsService:
             {
                 'status': item['status'],
                 'count': item['count'],
-                'value': float(item['value'] or 0)
+                'estimated_value': float(item['value'] or 0),
+                'value': float(item['value'] or 0),  # Deprecated alias
             }
             for item in status_counts
         ]
@@ -1213,7 +1259,8 @@ class P2PAnalyticsService:
         return {
             'total_prs': total,
             'total_count': total,  # Added for frontend compatibility
-            'total_value': float(total_value),
+            'total_estimated_value': total_estimated_value,
+            'total_value': total_estimated_value,  # Deprecated alias — prefer total_estimated_value
             'conversion_rate': round(converted / total * 100, 1) if total > 0 else 0,
             'rejection_rate': round(rejected / total * 100, 1) if total > 0 else 0,
             'pending_count': pending,
@@ -1327,7 +1374,16 @@ class P2PAnalyticsService:
         }
 
     def get_po_leakage(self, limit=20):
-        """Off-contract PO identification by category."""
+        """
+        Identify off-contract POs by category.
+
+        Note: "leakage" here is off-contract PO count/amount (POs where
+        `is_contract_backed=False`), NOT actual $-overspend against a contract
+        cap. A PO that stays within a blanket authorization can still show up
+        here if its `is_contract_backed` flag is False. True contract-overspend
+        ($ invoiced > contract cap) is tracked separately via the Contracts
+        module; see docs/ACCURACY_AUDIT.md Deferred → Cluster 6.
+        """
         maverick_pos = PurchaseOrder.objects.filter(
             organization=self.organization,
             is_contract_backed=False
@@ -1425,18 +1481,15 @@ class P2PAnalyticsService:
             status__in=['received', 'pending_match', 'matched', 'approved', 'on_hold']
         ).values('supplier').distinct().count()
 
-        # Overall on-time rate
+        # Overall on-time rate + avg days to pay (legacy: DPO).
         paid_invoices = invoices.filter(status='paid', paid_date__isnull=False)
-        on_time = sum(1 for inv in paid_invoices if inv.days_overdue == 0)
-        on_time_rate = on_time / paid_invoices.count() * 100 if paid_invoices.count() > 0 else 0
+        avg_days_to_pay, sample_size = self._avg_days_to_pay(paid_invoices)
 
-        # Average DPO
-        dpo_days = [
-            (inv.paid_date - inv.invoice_date).days
-            for inv in paid_invoices
-            if (inv.paid_date - inv.invoice_date).days >= 0
-        ]
-        avg_dpo = sum(dpo_days) / len(dpo_days) if dpo_days else 0
+        on_time = sum(
+            1 for inv in paid_invoices
+            if inv.paid_date and inv.paid_date >= inv.invoice_date and inv.days_overdue == 0
+        )
+        on_time_rate = on_time / sample_size * 100 if sample_size else 0
 
         # Exception rate
         exception_count = invoices.filter(has_exception=True).count()
@@ -1449,13 +1502,17 @@ class P2PAnalyticsService:
         ).aggregate(total=Sum('invoice_amount'))['total'] or Decimal('0')
 
         return {
-            'total_suppliers_with_ap': suppliers_with_ap,  # Fixed field name
-            'suppliers_with_ap': suppliers_with_ap,  # Keep for backward compatibility
-            'overall_on_time_rate': round(on_time_rate, 1),  # Fixed field name
-            'on_time_rate': round(on_time_rate, 1),  # Keep for backward compatibility
-            'avg_dpo': round(avg_dpo, 1),
+            'total_suppliers_with_ap': suppliers_with_ap,
+            'suppliers_with_ap': suppliers_with_ap,
+            'total_suppliers': suppliers_with_ap,  # Frontend KPI alias
+            'overall_on_time_rate': round(on_time_rate, 1),
+            'on_time_rate': round(on_time_rate, 1),
+            'avg_on_time_rate': round(on_time_rate, 1),  # Frontend KPI alias
+            'avg_days_to_pay': round(avg_days_to_pay, 1),
+            'avg_dpo': round(avg_days_to_pay, 1),  # Deprecated alias
             'exception_rate': round(exception_rate, 1),
-            'total_ap_balance': float(total_ap_balance)  # Added missing field
+            'avg_exception_rate': round(exception_rate, 1),  # Frontend KPI alias
+            'total_ap_balance': float(total_ap_balance)
         }
 
     def get_supplier_payments_scorecard(self, limit=50):
@@ -1478,32 +1535,30 @@ class P2PAnalyticsService:
                 status__in=['received', 'pending_match', 'matched', 'approved', 'on_hold']
             ).aggregate(total=Sum('invoice_amount'))['total'] or Decimal('0')
 
-            # DPO
+            # Avg days to pay (legacy: DPO).
             paid = invoices.filter(status='paid', paid_date__isnull=False)
-            dpo_days = [
-                (inv.paid_date - inv.invoice_date).days
-                for inv in paid
-                if (inv.paid_date - inv.invoice_date).days >= 0
-            ]
-            avg_dpo = sum(dpo_days) / len(dpo_days) if dpo_days else 0
+            avg_days_to_pay, sample_size = self._avg_days_to_pay(paid)
 
-            # On-time rate
-            on_time = sum(1 for inv in paid if inv.days_overdue == 0)
-            on_time_rate = on_time / len(dpo_days) * 100 if dpo_days else 0
+            on_time = sum(
+                1 for inv in paid
+                if inv.paid_date and inv.paid_date >= inv.invoice_date and inv.days_overdue == 0
+            )
+            on_time_rate = on_time / sample_size * 100 if sample_size else 0
 
             # Exception rate
             exception_count = invoices.filter(has_exception=True).count()
             total_count = invoices.count()
             exception_rate = exception_count / total_count * 100 if total_count > 0 else 0
 
-            # Calculate score (weighted)
+            # Weighted score. The days-to-pay term treats 30 days as an aspirational
+            # default benchmark; per-supplier payment terms are not yet threaded in.
+            # See docs/ACCURACY_AUDIT.md S4 log entry for the follow-up.
             score = (
                 on_time_rate * 0.4 +
                 (100 - min(exception_rate * 2, 100)) * 0.3 +
-                min(100, max(0, 100 - abs(avg_dpo - 30) * 2)) * 0.3
+                min(100, max(0, 100 - abs(avg_days_to_pay - 30) * 2)) * 0.3
             )
 
-            # Determine risk level based on score
             if score >= 75:
                 risk_level = 'low'
             elif score >= 50:
@@ -1513,14 +1568,17 @@ class P2PAnalyticsService:
 
             scorecard.append({
                 'supplier_id': supplier.id,
-                'supplier': supplier.name,  # Changed from 'supplier_name'
+                'supplier': supplier.name,
                 'ap_balance': float(ap_balance),
-                'dpo': round(avg_dpo, 1),  # Changed from 'avg_dpo'
+                'days_to_pay': round(avg_days_to_pay, 1),
+                'avg_days_to_pay': round(avg_days_to_pay, 1),
+                'dpo': round(avg_days_to_pay, 1),  # Deprecated alias
+                'avg_dpo': round(avg_days_to_pay, 1),  # Deprecated alias
                 'on_time_rate': round(on_time_rate, 1),
                 'exception_rate': round(exception_rate, 1),
                 'invoice_count': total_count,
                 'score': round(score, 0),
-                'risk_level': risk_level  # Added for frontend compatibility
+                'risk_level': risk_level,
             })
 
         return sorted(scorecard, key=lambda x: x['score'], reverse=True)
@@ -1547,13 +1605,8 @@ class P2PAnalyticsService:
         paid = invoices.filter(status='paid', paid_date__isnull=False)
         avg_payment = paid.aggregate(avg=Avg('invoice_amount'))['avg'] or Decimal('0')
 
-        # DPO
-        dpo_days = [
-            (inv.paid_date - inv.invoice_date).days
-            for inv in paid
-            if (inv.paid_date - inv.invoice_date).days >= 0
-        ]
-        avg_dpo = sum(dpo_days) / len(dpo_days) if dpo_days else 0
+        # Avg days to pay (legacy: DPO).
+        avg_days_to_pay, sample_size = self._avg_days_to_pay(paid)
 
         # Exception breakdown
         exceptions = invoices.filter(has_exception=True).values('exception_type').annotate(
@@ -1574,9 +1627,11 @@ class P2PAnalyticsService:
             for inv in invoices[:20]
         ]
 
-        # Calculate additional metrics for frontend compatibility
-        on_time = sum(1 for inv in paid if inv.days_overdue == 0)
-        on_time_rate = on_time / len(dpo_days) * 100 if dpo_days else 0
+        on_time = sum(
+            1 for inv in paid
+            if inv.paid_date and inv.paid_date >= inv.invoice_date and inv.days_overdue == 0
+        )
+        on_time_rate = on_time / sample_size * 100 if sample_size else 0
 
         exception_count = invoices.filter(has_exception=True).count()
         exception_rate = exception_count / total_invoices * 100 if total_invoices > 0 else 0
@@ -1601,11 +1656,14 @@ class P2PAnalyticsService:
 
         return {
             'supplier_id': supplier.id,
-            'supplier': supplier.name,  # Changed from 'supplier_name'
+            'supplier': supplier.name,
             'total_invoices': total_invoices,
             'total_amount': float(total_amount),
             'avg_payment': float(avg_payment),
-            'dpo': round(avg_dpo, 1),  # Changed from 'avg_dpo'
+            'days_to_pay': round(avg_days_to_pay, 1),
+            'avg_days_to_pay': round(avg_days_to_pay, 1),
+            'dpo': round(avg_days_to_pay, 1),  # Deprecated alias
+            'avg_dpo': round(avg_days_to_pay, 1),  # Deprecated alias
             'on_time_rate': round(on_time_rate, 1),
             'exception_count': exception_count,
             'exception_rate': round(exception_rate, 1),
@@ -1698,7 +1756,13 @@ class P2PAnalyticsService:
         }
 
     def get_dpo_trends(self, months=12):
-        """Get Days Payable Outstanding trends over time."""
+        """
+        Monthly average days-from-invoice-to-payment trend.
+
+        The method name is kept for URL/route stability; the metric itself is
+        days-to-pay (payment cycle days), not accounting DPO. Response exposes
+        both `avg_days_to_pay` (canonical) and `avg_dpo` (deprecated alias).
+        """
         cutoff_date = date.today() - timedelta(days=months * 30)
 
         paid_invoices = Invoice.objects.filter(
@@ -1708,25 +1772,26 @@ class P2PAnalyticsService:
             invoice_date__gte=cutoff_date
         )
 
-        # Group by month
-        monthly_data = defaultdict(lambda: {'days': [], 'count': 0, 'amount': Decimal('0')})
-
+        # Bucket invoices per month, then call the shared helper per bucket so
+        # data-quality filtering (paid_date >= invoice_date) stays consistent with
+        # the other 4 consumers.
+        monthly_buckets = defaultdict(list)
         for inv in paid_invoices:
             month_key = inv.invoice_date.strftime('%Y-%m')
-            days = (inv.paid_date - inv.invoice_date).days
-            if days >= 0:
-                monthly_data[month_key]['days'].append(days)
-            monthly_data[month_key]['count'] += 1
-            monthly_data[month_key]['amount'] += inv.invoice_amount
+            monthly_buckets[month_key].append(inv)
 
         result = []
-        for month, data in sorted(monthly_data.items()):
-            avg_dpo = sum(data['days']) / len(data['days']) if data['days'] else 0
+        for month, bucket in sorted(monthly_buckets.items()):
+            avg, _ = self._avg_days_to_pay(bucket)
+            total_amount = sum(inv.invoice_amount for inv in bucket)
             result.append({
                 'month': month,
-                'avg_dpo': round(avg_dpo, 1),
-                'invoice_count': data['count'],
-                'total_amount': float(data['amount'])
+                'days_to_pay': round(avg, 1),
+                'avg_days_to_pay': round(avg, 1),
+                'dpo': round(avg, 1),  # Deprecated alias
+                'avg_dpo': round(avg, 1),  # Deprecated alias
+                'invoice_count': len(bucket),
+                'total_amount': float(total_amount),
             })
 
         return result
@@ -1826,7 +1891,15 @@ class P2PAnalyticsService:
         }
 
     def get_po_by_supplier(self, limit=20):
-        """Get PO metrics by supplier."""
+        """Get PO metrics by supplier.
+
+        On-time rate is computed only over POs with BOTH a `required_date` AND
+        at least one `goods_receipts__received_date` populated; POs missing
+        either field are excluded from the denominator (they cannot be
+        classified). An `on_time_eligible_count` field accompanies `on_time`
+        so consumers can see the denominator and avoid misreading the rate
+        as "% of all POs on time."
+        """
         pos = PurchaseOrder.objects.filter(organization=self.organization)
         pos = self._apply_date_filters(pos, 'created_date')
 
@@ -1843,9 +1916,20 @@ class P2PAnalyticsService:
                 When(amendment_count__gt=0, then=1),
                 output_field=IntegerField()
             )),
+            on_time_eligible=Count(Case(
+                When(
+                    status__in=['fully_received', 'closed'],
+                    required_date__isnull=False,
+                    goods_receipts__received_date__isnull=False,
+                    then=1
+                ),
+                output_field=IntegerField()
+            )),
             on_time=Count(Case(
                 When(
                     status__in=['fully_received', 'closed'],
+                    required_date__isnull=False,
+                    goods_receipts__received_date__isnull=False,
                     goods_receipts__received_date__lte=F('required_date'),
                     then=1
                 ),
@@ -1875,8 +1959,15 @@ class P2PAnalyticsService:
             else:
                 contract_status = 'maverick'
 
-            # Calculate on-time rate
-            on_time_rate = round(on_time / received_count * 100, 1) if received_count > 0 else 100.0
+            # On-time rate. Denominator is POs that CAN be classified
+            # (received status + required_date AND received_date populated).
+            # Prior implementation used total received_count — which silently
+            # counted POs with missing required_date as "on time," inflating
+            # the rate. Numeric fallback of 100 preserved for back-compat;
+            # `on_time_eligible_count` exposes the true denominator so
+            # consumers can render "n/a" when 0 instead of trusting 100%.
+            eligible = item.get('on_time_eligible', 0) or 0
+            on_time_rate = round(on_time / eligible * 100, 1) if eligible > 0 else 100.0
 
             result.append({
                 'supplier_id': item['supplier__id'],
@@ -1886,6 +1977,7 @@ class P2PAnalyticsService:
                 'contract_status': contract_status,
                 'on_contract_pct': round(contract_coverage, 1),  # Added for frontend compatibility
                 'on_time_rate': on_time_rate,
+                'on_time_eligible_count': eligible,
                 'amendment_rate': round(
                     item['amended'] / po_count * 100, 1
                 ) if po_count > 0 else 0

@@ -65,12 +65,23 @@ class ComplianceService:
             self.violations.values('severity').annotate(count=Count('id')).values_list('severity', 'count')
         )
 
-        # Calculate compliance rate (transactions without violations)
+        # Compliance rate by COUNT (legacy) and by AMOUNT. Count-based rate
+        # masks $ exposure (1 large $1M violation + 1000 compliant $1K txns
+        # shows as 99.9% compliant but 50% of spend is non-compliant).
         violating_transaction_ids = self.violations.values_list('transaction_id', flat=True).distinct()
         compliant_transactions = total_transactions - len(violating_transaction_ids)
         compliance_rate = (compliant_transactions / total_transactions * 100) if total_transactions > 0 else 100
 
-        # Calculate maverick spend (off-contract)
+        violating_spend = float(self.transactions.filter(
+            id__in=violating_transaction_ids
+        ).aggregate(Sum('amount'))['amount__sum'] or 0)
+        compliant_spend = total_spend - violating_spend
+        compliance_rate_by_amount = (compliant_spend / total_spend * 100) if total_spend > 0 else 100
+
+        # Calculate maverick spend (off-contract). "Off-contract" here is
+        # defined as supplier not in active Contract records; blanket POs and
+        # framework agreements outside the Contract table are not accounted
+        # for — see Cross-Module Open in docs/ACCURACY_AUDIT.md.
         contracted_suppliers = self.contracts.filter(
             status='active'
         ).values_list('supplier_id', flat=True)
@@ -86,6 +97,7 @@ class ComplianceService:
             'total_transactions': total_transactions,
             'total_spend': total_spend,
             'compliance_rate': round(compliance_rate, 1),
+            'compliance_rate_by_amount': round(compliance_rate_by_amount, 1),
             'total_violations': total_violations,
             'unresolved_violations': unresolved_violations,
             'resolved_today': resolved_today,

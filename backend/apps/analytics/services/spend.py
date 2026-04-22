@@ -113,7 +113,10 @@ class SpendAnalyticsService(BaseAnalyticsService):
             top_subcategory_name = top_subcategory['subcategory'] if top_subcategory else 'N/A'
             top_subcategory_spend = float(top_subcategory['spend']) if top_subcategory else 0
 
-            # Calculate concentration (top subcategory spend as % of category total)
+            # Top-subcategory share: largest subcategory's spend / category total.
+            # Exposed as `concentration` in the response for backward compatibility
+            # but represents a single-bucket share, not a distributional concentration
+            # measure (HHI, Gini). The UI labels it "Top Subcat %" to match.
             concentration = (top_subcategory_spend / total_spend * 100) if total_spend > 0 else 0
 
             # Calculate risk level based on concentration and supplier diversity

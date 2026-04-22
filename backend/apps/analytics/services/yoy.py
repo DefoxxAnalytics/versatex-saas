@@ -13,6 +13,35 @@ from apps.procurement.models import Category, Supplier
 from .base import BaseAnalyticsService
 
 
+CALENDAR_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+FISCAL_MONTH_NAMES = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+                      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+
+
+def _yoy_change(y1_spend, y2_spend):
+    """
+    Compute YoY change percentage with explicit new/discontinued flags.
+
+    Returns a tuple (change_pct, is_new, is_discontinued) where:
+    - is_new = category existed only in year2 (y1 was zero). change_pct
+      defaults to 100 for back-compat but callers should prefer the flag.
+    - is_discontinued = category existed only in year1 (y2 is zero).
+      change_pct is -100 (a real -100% drop is the same number but not
+      flagged, which is intentional — -100 always means "lost everything").
+    - Otherwise the standard (y2 - y1)/y1 * 100 formula.
+    """
+    is_new = y1_spend == 0 and y2_spend > 0
+    is_discontinued = y1_spend > 0 and y2_spend == 0
+    if y1_spend > 0:
+        change_pct = (y2_spend - y1_spend) / y1_spend * 100
+    elif y2_spend > 0:
+        change_pct = 100  # Placeholder; UI should render "New" via is_new flag
+    else:
+        change_pct = 0
+    return change_pct, is_new, is_discontinued
+
+
 class YearOverYearAnalyticsService(BaseAnalyticsService):
     """
     Service for year-over-year comparison analytics.
@@ -90,7 +119,8 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                     'year1_suppliers': 0,
                     'year2_suppliers': 0,
                     'year1_avg_transaction': 0,
-                    'year2_avg_transaction': 0
+                    'year2_avg_transaction': 0,
+                    'insufficient_data_for_yoy': True,
                 },
                 'monthly_comparison': [],
                 'category_comparison': [],
@@ -100,15 +130,20 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 'available_years': []
             }
 
-        # Calculate fiscal years for all transactions
+        # Calculate fiscal years for all transactions; honor the use_fiscal_year
+        # toggle on month too (earlier versions always returned fiscal months,
+        # which mislabeled the monthly axis when calendar year was selected).
         for t in all_transactions:
             t['fiscal_year'] = self._get_fiscal_year(t['date'], use_fiscal_year)
-            t['fiscal_month'] = self._get_fiscal_month(t['date'])
+            t['fiscal_month'] = self._get_fiscal_month(t['date'], use_fiscal_year)
 
         # Find available fiscal years
         available_years = sorted(set(t['fiscal_year'] for t in all_transactions))
 
-        # Default years if not specified
+        # Default years if not specified. If only one year's data exists, the
+        # insufficient_data_for_yoy flag tells the frontend to render a clear
+        # "need more data" state rather than showing a misleading 0% change.
+        insufficient_data_for_yoy = False
         if year1 is None or year2 is None:
             if len(available_years) >= 2:
                 year1 = year1 or available_years[-2]
@@ -116,10 +151,13 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             elif len(available_years) == 1:
                 year1 = year1 or available_years[0]
                 year2 = year2 or available_years[0]
+                insufficient_data_for_yoy = True
             else:
                 year1, year2 = 2024, 2025
+                insufficient_data_for_yoy = True
 
         year_prefix = 'FY' if use_fiscal_year else ''
+        month_names = FISCAL_MONTH_NAMES if use_fiscal_year else CALENDAR_MONTH_NAMES
 
         # Filter transactions by year
         year1_txns = [t for t in all_transactions if t['fiscal_year'] == year1]
@@ -137,8 +175,6 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         spend_change_pct = ((year2_total - year1_total) / year1_total * 100) if year1_total > 0 else 0
 
         # Monthly comparison
-        fiscal_month_names = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-
         monthly_year1 = defaultdict(float)
         monthly_year2 = defaultdict(float)
         for t in year1_txns:
@@ -150,13 +186,15 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         for i in range(1, 13):
             y1_spend = monthly_year1.get(i, 0)
             y2_spend = monthly_year2.get(i, 0)
-            change_pct = ((y2_spend - y1_spend) / y1_spend * 100) if y1_spend > 0 else (100 if y2_spend > 0 else 0)
+            change_pct, is_new, is_discontinued = _yoy_change(y1_spend, y2_spend)
             monthly_comparison.append({
-                'month': fiscal_month_names[i - 1],
+                'month': month_names[i - 1],
                 'fiscal_month': i,
                 'year1_spend': round(y1_spend, 2),
                 'year2_spend': round(y2_spend, 2),
-                'change_pct': round(change_pct, 2)
+                'change_pct': round(change_pct, 2),
+                'is_new': is_new,
+                'is_discontinued': is_discontinued,
             })
 
         # Category comparison
@@ -181,7 +219,7 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             y1_spend = y1_data['spend']
             y2_spend = y2_data['spend']
             change = y2_spend - y1_spend
-            change_pct = ((y2_spend - y1_spend) / y1_spend * 100) if y1_spend > 0 else (100 if y2_spend > 0 else 0)
+            change_pct, is_new, is_discontinued = _yoy_change(y1_spend, y2_spend)
             category_comparison.append({
                 'category': cat_name,
                 'category_id': y1_data['id'] or y2_data['id'],
@@ -189,6 +227,8 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 'year2_spend': round(y2_spend, 2),
                 'change': round(change, 2),
                 'change_pct': round(change_pct, 2),
+                'is_new': is_new,
+                'is_discontinued': is_discontinued,
                 'year1_pct_of_total': round((y1_spend / year1_total * 100) if year1_total > 0 else 0, 2),
                 'year2_pct_of_total': round((y2_spend / year2_total * 100) if year2_total > 0 else 0, 2)
             })
@@ -225,7 +265,7 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             y1_spend = y1_data['spend']
             y2_spend = y2_data['spend']
             change = y2_spend - y1_spend
-            change_pct = ((y2_spend - y1_spend) / y1_spend * 100) if y1_spend > 0 else (100 if y2_spend > 0 else 0)
+            change_pct, is_new, is_discontinued = _yoy_change(y1_spend, y2_spend)
             supplier_comparison.append({
                 'supplier': sup_name,
                 'supplier_id': y1_data['id'] or y2_data['id'],
@@ -233,6 +273,8 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 'year2_spend': round(y2_spend, 2),
                 'change': round(change, 2),
                 'change_pct': round(change_pct, 2),
+                'is_new': is_new,
+                'is_discontinued': is_discontinued,
                 'year1_transactions': y1_data['count'],
                 'year2_transactions': y2_data['count']
             })
@@ -255,7 +297,8 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 'year1_suppliers': year1_suppliers,
                 'year2_suppliers': year2_suppliers,
                 'year1_avg_transaction': round(year1_total / year1_count, 2) if year1_count > 0 else 0,
-                'year2_avg_transaction': round(year2_total / year2_count, 2) if year2_count > 0 else 0
+                'year2_avg_transaction': round(year2_total / year2_count, 2) if year2_count > 0 else 0,
+                'insufficient_data_for_yoy': insufficient_data_for_yoy,
             },
             'monthly_comparison': monthly_comparison,
             'category_comparison': category_comparison,
@@ -305,12 +348,13 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 'monthly_breakdown': []
             }
 
-        # Calculate fiscal years
+        # Calculate fiscal years (month honors the calendar toggle post-Cluster 2)
         for t in cat_transactions:
             t['fiscal_year'] = self._get_fiscal_year(t['date'], use_fiscal_year)
-            t['fiscal_month'] = self._get_fiscal_month(t['date'])
+            t['fiscal_month'] = self._get_fiscal_month(t['date'], use_fiscal_year)
 
         # Determine years
+        insufficient_data_for_yoy = False
         available_years = sorted(set(t['fiscal_year'] for t in cat_transactions))
         if year1 is None or year2 is None:
             if len(available_years) >= 2:
@@ -319,15 +363,17 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             else:
                 year1 = year1 or (available_years[0] if available_years else 2024)
                 year2 = year2 or (available_years[0] if available_years else 2025)
+                insufficient_data_for_yoy = True
 
         year_prefix = 'FY' if use_fiscal_year else ''
+        month_names = FISCAL_MONTH_NAMES if use_fiscal_year else CALENDAR_MONTH_NAMES
 
         year1_txns = [t for t in cat_transactions if t['fiscal_year'] == year1]
         year2_txns = [t for t in cat_transactions if t['fiscal_year'] == year2]
 
         year1_total = sum(float(t['amount'] or 0) for t in year1_txns)
         year2_total = sum(float(t['amount'] or 0) for t in year2_txns)
-        change_pct = ((year2_total - year1_total) / year1_total * 100) if year1_total > 0 else (100 if year2_total > 0 else 0)
+        change_pct, _is_new, _is_discontinued = _yoy_change(year1_total, year2_total)
 
         # Supplier breakdown
         sup_year1 = defaultdict(lambda: {'spend': 0, 'id': None, 'name': ''})
@@ -351,20 +397,21 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             y1_spend = y1_data['spend']
             y2_spend = y2_data['spend']
             change = y2_spend - y1_spend
-            sup_change_pct = ((y2_spend - y1_spend) / y1_spend * 100) if y1_spend > 0 else (100 if y2_spend > 0 else 0)
+            sup_change_pct, sup_is_new, sup_is_discontinued = _yoy_change(y1_spend, y2_spend)
             suppliers.append({
                 'name': sup_name,
                 'supplier_id': y1_data['id'] or y2_data['id'],
                 'year1_spend': round(y1_spend, 2),
                 'year2_spend': round(y2_spend, 2),
                 'change': round(change, 2),
-                'change_pct': round(sup_change_pct, 2)
+                'change_pct': round(sup_change_pct, 2),
+                'is_new': sup_is_new,
+                'is_discontinued': sup_is_discontinued,
             })
 
         suppliers.sort(key=lambda x: x['year1_spend'] + x['year2_spend'], reverse=True)
 
-        # Monthly breakdown
-        fiscal_month_names = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+        # Monthly breakdown (month_names already honors use_fiscal_year)
         monthly_year1 = defaultdict(float)
         monthly_year2 = defaultdict(float)
         for t in year1_txns:
@@ -375,7 +422,7 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         monthly_breakdown = []
         for i in range(1, 13):
             monthly_breakdown.append({
-                'month': fiscal_month_names[i - 1],
+                'month': month_names[i - 1],
                 'year1_spend': round(monthly_year1.get(i, 0), 2),
                 'year2_spend': round(monthly_year2.get(i, 0), 2)
             })
@@ -388,6 +435,7 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             'year1_total': round(year1_total, 2),
             'year2_total': round(year2_total, 2),
             'change_pct': round(change_pct, 2),
+            'insufficient_data_for_yoy': insufficient_data_for_yoy,
             'suppliers': suppliers,
             'monthly_breakdown': monthly_breakdown
         }
@@ -432,12 +480,13 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 'monthly_breakdown': []
             }
 
-        # Calculate fiscal years
+        # Calculate fiscal years (month honors the calendar toggle post-Cluster 2)
         for t in sup_transactions:
             t['fiscal_year'] = self._get_fiscal_year(t['date'], use_fiscal_year)
-            t['fiscal_month'] = self._get_fiscal_month(t['date'])
+            t['fiscal_month'] = self._get_fiscal_month(t['date'], use_fiscal_year)
 
         # Determine years
+        insufficient_data_for_yoy = False
         available_years = sorted(set(t['fiscal_year'] for t in sup_transactions))
         if year1 is None or year2 is None:
             if len(available_years) >= 2:
@@ -446,15 +495,17 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             else:
                 year1 = year1 or (available_years[0] if available_years else 2024)
                 year2 = year2 or (available_years[0] if available_years else 2025)
+                insufficient_data_for_yoy = True
 
         year_prefix = 'FY' if use_fiscal_year else ''
+        month_names = FISCAL_MONTH_NAMES if use_fiscal_year else CALENDAR_MONTH_NAMES
 
         year1_txns = [t for t in sup_transactions if t['fiscal_year'] == year1]
         year2_txns = [t for t in sup_transactions if t['fiscal_year'] == year2]
 
         year1_total = sum(float(t['amount'] or 0) for t in year1_txns)
         year2_total = sum(float(t['amount'] or 0) for t in year2_txns)
-        change_pct = ((year2_total - year1_total) / year1_total * 100) if year1_total > 0 else (100 if year2_total > 0 else 0)
+        change_pct, _is_new, _is_discontinued = _yoy_change(year1_total, year2_total)
 
         # Category breakdown
         cat_year1 = defaultdict(lambda: {'spend': 0, 'id': None, 'name': ''})
@@ -478,20 +529,21 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             y1_spend = y1_data['spend']
             y2_spend = y2_data['spend']
             change = y2_spend - y1_spend
-            cat_change_pct = ((y2_spend - y1_spend) / y1_spend * 100) if y1_spend > 0 else (100 if y2_spend > 0 else 0)
+            cat_change_pct, cat_is_new, cat_is_discontinued = _yoy_change(y1_spend, y2_spend)
             categories.append({
                 'name': cat_name,
                 'category_id': y1_data['id'] or y2_data['id'],
                 'year1_spend': round(y1_spend, 2),
                 'year2_spend': round(y2_spend, 2),
                 'change': round(change, 2),
-                'change_pct': round(cat_change_pct, 2)
+                'change_pct': round(cat_change_pct, 2),
+                'is_new': cat_is_new,
+                'is_discontinued': cat_is_discontinued,
             })
 
         categories.sort(key=lambda x: x['year1_spend'] + x['year2_spend'], reverse=True)
 
-        # Monthly breakdown
-        fiscal_month_names = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+        # Monthly breakdown (month_names already honors use_fiscal_year)
         monthly_year1 = defaultdict(float)
         monthly_year2 = defaultdict(float)
         for t in year1_txns:
@@ -502,7 +554,7 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         monthly_breakdown = []
         for i in range(1, 13):
             monthly_breakdown.append({
-                'month': fiscal_month_names[i - 1],
+                'month': month_names[i - 1],
                 'year1_spend': round(monthly_year1.get(i, 0), 2),
                 'year2_spend': round(monthly_year2.get(i, 0), 2)
             })
@@ -515,6 +567,7 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
             'year1_total': round(year1_total, 2),
             'year2_total': round(year2_total, 2),
             'change_pct': round(change_pct, 2),
+            'insufficient_data_for_yoy': insufficient_data_for_yoy,
             'categories': categories,
             'monthly_breakdown': monthly_breakdown
         }

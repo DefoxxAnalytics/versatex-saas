@@ -8,7 +8,7 @@ from apps.analytics.p2p_services import P2PAnalyticsService
 
 class APAgingReportGenerator(BaseReportGenerator):
     """
-    Generates AP Aging reports showing aging buckets, DPO trends,
+    Generates AP Aging reports showing aging buckets, Avg Days-to-Pay trends,
     supplier aging analysis, and cash flow forecasts.
     """
 
@@ -39,17 +39,24 @@ class APAgingReportGenerator(BaseReportGenerator):
         # Get cash flow forecast
         cash_flow = self.p2p_analytics.get_cash_flow_forecast(weeks=8)
 
-        # Get DPO trends
+        # Get avg days-to-pay trends (service method name kept for stability)
         dpo_trends = self.p2p_analytics.get_dpo_trends(months=12)
 
         # Get supplier payment overview
         payment_overview = self.p2p_analytics.get_supplier_payments_overview()
 
-        # Build summary KPIs
+        # Build summary KPIs. `current_dpo` kept as a stored-JSON alias so
+        # pre-fix Report.summary_data snapshots still parse; canonical key is
+        # `current_days_to_pay`.
+        avg_days_to_pay = aging_overview.get(
+            'avg_days_to_pay',
+            aging_overview.get('avg_dpo', 0),
+        )
         summary = {
             'total_ap': aging_overview.get('total_ap', 0),
             'overdue_amount': aging_overview.get('total_overdue', 0),
-            'current_dpo': aging_overview.get('avg_dpo', 0),
+            'current_days_to_pay': avg_days_to_pay,
+            'current_dpo': avg_days_to_pay,  # Deprecated alias
             'on_time_rate': aging_overview.get('on_time_rate', 0),
             'suppliers_with_ap': payment_overview.get('suppliers_with_ap', 0),
             'exception_rate': payment_overview.get('exception_rate', 0),
@@ -63,7 +70,7 @@ class APAgingReportGenerator(BaseReportGenerator):
         # Get aging buckets
         aging_buckets = aging_overview.get('buckets', [])
 
-        # Get DPO trend from aging overview
+        # Get avg days-to-pay trend from aging overview
         dpo_trend = aging_overview.get('trend', [])
 
         # Generate risk assessment
@@ -79,11 +86,14 @@ class APAgingReportGenerator(BaseReportGenerator):
             summary, aging_buckets, aging_by_supplier, cash_flow
         )
 
+        # `dpo_trend` retained as a stored-JSON alias for pre-fix snapshots.
+        days_to_pay_trend = dpo_trend if dpo_trend else dpo_trends[:6]
         return {
             'metadata': self.get_metadata(),
             'summary': summary,
             'aging_buckets': aging_buckets,
-            'dpo_trend': dpo_trend if dpo_trend else dpo_trends[:6],
+            'days_to_pay_trend': days_to_pay_trend,
+            'dpo_trend': days_to_pay_trend,  # Deprecated alias
             'supplier_aging': aging_by_supplier[:20],
             'terms_compliance': terms_compliance,
             'cash_flow_forecast': cash_flow,
@@ -120,20 +130,20 @@ class APAgingReportGenerator(BaseReportGenerator):
                 'impact': 'Within acceptable range'
             })
 
-        # DPO risk
-        current_dpo = summary.get('current_dpo', 0)
-        if current_dpo > 45:
+        # Payment cycle risk
+        current_days_to_pay = summary.get('current_days_to_pay', summary.get('current_dpo', 0))
+        if current_days_to_pay > 45:
             risk_factors.append({
-                'factor': 'Extended Payment Terms',
+                'factor': 'Extended Payment Cycle',
                 'level': 'Medium',
-                'description': f'DPO of {current_dpo:.1f} days may strain supplier relationships',
+                'description': f'Avg {current_days_to_pay:.1f} days to pay may strain supplier relationships',
                 'impact': 'Potential supply chain risk'
             })
-        elif current_dpo < 15:
+        elif current_days_to_pay < 15:
             risk_factors.append({
                 'factor': 'Early Payment',
                 'level': 'Low',
-                'description': f'DPO of {current_dpo:.1f} days indicates fast payments',
+                'description': f'Avg {current_days_to_pay:.1f} days to pay indicates fast payments',
                 'impact': 'Strong supplier relationships'
             })
 
@@ -190,21 +200,21 @@ class APAgingReportGenerator(BaseReportGenerator):
         """Generate key insights from AP data."""
         insights = []
 
-        # DPO insight
-        current_dpo = summary.get('current_dpo', 0)
-        if current_dpo > 45:
+        # Payment cycle insight
+        current_days_to_pay = summary.get('current_days_to_pay', summary.get('current_dpo', 0))
+        if current_days_to_pay > 45:
             insights.append({
                 'type': 'warning',
-                'title': 'Extended DPO',
-                'description': f'Current DPO is {current_dpo:.1f} days. '
+                'title': 'Extended Payment Cycle',
+                'description': f'Avg days to pay is {current_days_to_pay:.1f} days. '
                                f'May impact supplier relationships.',
                 'impact': 'negative'
             })
-        elif current_dpo <= 30:
+        elif current_days_to_pay <= 30:
             insights.append({
                 'type': 'success',
                 'title': 'Healthy Payment Cycle',
-                'description': f'DPO of {current_dpo:.1f} days indicates timely payments.',
+                'description': f'Avg {current_days_to_pay:.1f} days to pay indicates timely payments.',
                 'impact': 'positive'
             })
 
@@ -335,22 +345,22 @@ class APAgingReportGenerator(BaseReportGenerator):
                     'action': 'Ensure adequate cash reserves for upcoming payments'
                 })
 
-        # DPO optimization
-        current_dpo = summary.get('current_dpo', 0)
-        if current_dpo < 25:
+        # Payment timing optimization
+        current_days_to_pay = summary.get('current_days_to_pay', summary.get('current_dpo', 0))
+        if current_days_to_pay < 25:
             recommendations.append({
                 'type': 'opportunity',
                 'priority': 'Low',
                 'title': 'Optimize Payment Timing',
-                'description': f'DPO of {current_dpo:.1f} days may be too aggressive.',
+                'description': f'Avg {current_days_to_pay:.1f} days to pay may be too aggressive.',
                 'action': 'Consider extending payment terms to improve cash flow'
             })
-        elif current_dpo > 50:
+        elif current_days_to_pay > 50:
             recommendations.append({
                 'type': 'warning',
                 'priority': 'Medium',
-                'title': 'High DPO Risk',
-                'description': f'DPO of {current_dpo:.1f} days may strain supplier relationships.',
+                'title': 'Extended Payment Cycle Risk',
+                'description': f'Avg {current_days_to_pay:.1f} days to pay may strain supplier relationships.',
                 'action': 'Accelerate payments to strategic suppliers'
             })
 

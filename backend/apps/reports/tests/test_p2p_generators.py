@@ -621,7 +621,9 @@ class TestAPAgingReportGenerator:
         summary = result['summary']
         assert 'total_ap' in summary
         assert 'overdue_amount' in summary
-        assert 'current_dpo' in summary
+        assert 'current_days_to_pay' in summary
+        assert 'current_dpo' in summary  # deprecated alias for pre-fix snapshots
+        assert summary['current_days_to_pay'] == summary['current_dpo']
         assert 'on_time_rate' in summary
 
     def test_overdue_calculation(self, organization, overdue_invoice):
@@ -761,7 +763,9 @@ class TestAPAgingReportGenerator:
         generator = APAgingReportGenerator(organization)
         result = generator.generate()
 
-        assert 'dpo_trend' in result
+        assert 'days_to_pay_trend' in result
+        assert 'dpo_trend' in result  # deprecated alias for pre-fix snapshots
+        assert result['days_to_pay_trend'] == result['dpo_trend']
 
     def test_cash_flow_forecast(self, organization, supplier):
         """Test cash flow forecast data."""

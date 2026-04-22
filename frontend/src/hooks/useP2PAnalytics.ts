@@ -372,7 +372,10 @@ export function usePaymentTermsCompliance() {
 }
 
 /**
- * Get DPO trends over time
+ * Get avg-days-to-pay trends over time.
+ *
+ * Hook name and URL path are preserved for caller stability; the underlying
+ * metric is invoice-to-payment cycle days, not accounting DPO.
  */
 export function useDPOTrends(months: number = 12) {
   const orgId = getOrgKeyPart();

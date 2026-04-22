@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 # Set admin site URL to frontend
@@ -16,6 +17,16 @@ admin.site.site_title = 'Analytics Admin'
 admin.site.index_title = 'Administration'
 
 urlpatterns = [
+    # Root → API docs in DEBUG, admin otherwise. Backend is headless; no SPA served here.
+    path(
+        '',
+        RedirectView.as_view(
+            url='/api/docs/' if settings.DEBUG else '/admin/',
+            permanent=False,
+        ),
+        name='root',
+    ),
+
     # Admin - uses configurable URL path from settings
     path(settings.ADMIN_URL, admin.site.urls),
 

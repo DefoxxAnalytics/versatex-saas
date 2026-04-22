@@ -135,7 +135,7 @@ REPORT_TEMPLATES = [
     {
         'id': 'p2p_ap_aging',
         'name': 'AP Aging Report',
-        'description': 'Accounts payable aging buckets, DPO trends, and payment performance',
+        'description': 'Accounts payable aging buckets, avg days-to-pay trends, and payment performance',
         'report_type': 'p2p_ap_aging',
         'icon': 'clock',
         'default_parameters': {},

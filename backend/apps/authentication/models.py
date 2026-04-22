@@ -163,11 +163,39 @@ class UserProfile(models.Model):
         ('viewer', 'Viewer'),
     ]
 
-    # Allowed keys for the preferences JSONField
+    # Allowed keys for the preferences JSONField.
+    # Any new key added here must ALSO be declared explicitly on
+    # UserPreferencesSerializer so DRF accepts it on PATCH/PUT.
+    # The aiApiKey value is masked on read (see UserProfileSerializer
+    # .to_representation and UserPreferencesView.get).
     ALLOWED_PREFERENCE_KEYS = {
         'theme', 'colorScheme', 'notifications', 'exportFormat',
-        'currency', 'dateFormat', 'dashboardLayout', 'sidebarCollapsed'
+        'currency', 'dateFormat', 'dashboardLayout', 'sidebarCollapsed',
+        # AI / Predictive settings
+        'useExternalAI', 'aiProvider', 'aiApiKey',
+        'forecastingModel', 'forecastHorizonMonths', 'anomalySensitivity',
     }
+
+    # Preference keys that contain secrets and MUST be masked in all outbound
+    # responses. Mask format: None if absent, '****' + value[-4:] otherwise.
+    MASKED_PREFERENCE_KEYS = frozenset({'aiApiKey'})
+
+    @staticmethod
+    def mask_preferences(prefs):
+        """
+        Return a copy of ``prefs`` with secret-marked keys replaced by a
+        masked preview. Used by every outbound serialization path.
+        """
+        if not isinstance(prefs, dict):
+            return prefs
+        masked = dict(prefs)
+        for key in UserProfile.MASKED_PREFERENCE_KEYS:
+            value = masked.get(key)
+            if not value:
+                masked[key] = None
+            else:
+                masked[key] = '****' + str(value)[-4:]
+        return masked
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     organization = models.ForeignKey(

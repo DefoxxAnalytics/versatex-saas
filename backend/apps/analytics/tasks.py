@@ -178,15 +178,15 @@ def enhance_insights_async(self, org_id: int, user_id: int, insights_data: list)
             cache.set(status_key, {"status": "failed", "error": "User profile not found"}, ENHANCEMENT_CACHE_TTL)
             return {"status": "failed", "error": "User profile not found"}
 
-        ai_settings = getattr(profile, 'ai_settings', None) or profile.preferences.get('ai_settings', {})
+        prefs = profile.preferences or {}
 
         cache.set(status_key, {"status": "processing", "progress": 30}, ENHANCEMENT_CACHE_TTL)
 
         service = AIInsightsService(
             organization=org,
             use_external_ai=True,
-            ai_provider=ai_settings.get('ai_provider', 'anthropic'),
-            api_key=ai_settings.get('ai_api_key')
+            ai_provider=prefs.get('aiProvider', 'anthropic'),
+            api_key=prefs.get('aiApiKey'),
         )
 
         cache.set(status_key, {"status": "processing", "progress": 50}, ENHANCEMENT_CACHE_TTL)
@@ -258,15 +258,15 @@ def perform_deep_analysis_async(self, org_id: int, user_id: int, insight_data: d
             cache.set(status_key, {"status": "failed", "error": "User profile not found"}, ENHANCEMENT_CACHE_TTL)
             return {"status": "failed", "error": "User profile not found"}
 
-        ai_settings = getattr(profile, 'ai_settings', None) or profile.preferences.get('ai_settings', {})
+        prefs = profile.preferences or {}
 
         cache.set(status_key, {"status": "processing", "progress": 30}, ENHANCEMENT_CACHE_TTL)
 
         service = AIInsightsService(
             organization=org,
             use_external_ai=True,
-            ai_provider=ai_settings.get('ai_provider', 'anthropic'),
-            api_key=ai_settings.get('ai_api_key')
+            ai_provider=prefs.get('aiProvider', 'anthropic'),
+            api_key=prefs.get('aiApiKey'),
         )
 
         cache.set(status_key, {"status": "processing", "progress": 50}, ENHANCEMENT_CACHE_TTL)
@@ -454,17 +454,17 @@ def batch_enhance_insights(self):
                 results['organizations_skipped'] += 1
                 continue
 
-            ai_settings = admin_profile.preferences.get('ai_settings', {})
+            prefs = admin_profile.preferences or {}
 
-            if not ai_settings.get('use_external_ai') or not ai_settings.get('ai_api_key'):
+            if not prefs.get('useExternalAI') or not prefs.get('aiApiKey'):
                 results['organizations_skipped'] += 1
                 continue
 
             service = AIInsightsService(
                 organization=org,
                 use_external_ai=True,
-                ai_provider=ai_settings.get('ai_provider', 'anthropic'),
-                api_key=ai_settings.get('ai_api_key')
+                ai_provider=prefs.get('aiProvider', 'anthropic'),
+                api_key=prefs.get('aiApiKey'),
             )
 
             insights = service.get_all_insights()

@@ -5,10 +5,81 @@ import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 from apps.analytics.services import AnalyticsService
+from apps.analytics.services.base import BaseAnalyticsService
 from apps.procurement.models import Transaction, Supplier, Category
 from apps.procurement.tests.factories import (
     TransactionFactory, SupplierFactory, CategoryFactory
 )
+
+
+@pytest.mark.django_db
+class TestBaseFilterValidation:
+    """Filter values that would otherwise fail silently or crash mid-query."""
+
+    def test_inverted_date_range_raises(self, organization):
+        with pytest.raises(ValueError, match='date_from'):
+            AnalyticsService(organization, filters={
+                'date_from': '2024-12-31',
+                'date_to': '2024-01-01',
+            })
+
+    def test_equal_date_range_is_allowed(self, organization):
+        AnalyticsService(organization, filters={
+            'date_from': '2024-06-15',
+            'date_to': '2024-06-15',
+        })
+
+    def test_non_numeric_min_amount_raises(self, organization):
+        with pytest.raises(ValueError, match='min_amount'):
+            AnalyticsService(organization, filters={'min_amount': 'abc'})
+
+    def test_non_numeric_max_amount_raises(self, organization):
+        with pytest.raises(ValueError, match='max_amount'):
+            AnalyticsService(organization, filters={'max_amount': 'xyz'})
+
+    def test_string_numeric_amounts_are_accepted(self, organization):
+        AnalyticsService(organization, filters={
+            'min_amount': '100.50',
+            'max_amount': '1000',
+        })
+
+    def test_empty_string_amount_is_ignored(self, organization):
+        AnalyticsService(organization, filters={'min_amount': '', 'max_amount': ''})
+
+
+class TestFiscalYearMonthHelpers:
+    """Boundary-case tests for the Jul-Jun fiscal calendar helpers."""
+
+    @pytest.fixture
+    def svc(self):
+        return BaseAnalyticsService.__new__(BaseAnalyticsService)
+
+    @pytest.mark.parametrize('input_date,expected_fy', [
+        (date(2024, 6, 30), 2024),   # last day of FY2024
+        (date(2024, 7, 1), 2025),    # first day of FY2025
+        (date(2024, 12, 31), 2025),  # mid-FY2025
+        (date(2025, 1, 1), 2025),    # calendar-year boundary within FY2025
+        (date(2025, 6, 30), 2025),   # last day of FY2025
+    ])
+    def test_fiscal_year_boundaries(self, svc, input_date, expected_fy):
+        assert svc._get_fiscal_year(input_date) == expected_fy
+
+    def test_fiscal_year_calendar_mode(self, svc):
+        assert svc._get_fiscal_year(date(2024, 12, 15), use_fiscal_year=False) == 2024
+        assert svc._get_fiscal_year(date(2024, 7, 1), use_fiscal_year=False) == 2024
+
+    @pytest.mark.parametrize('input_date,expected_fm', [
+        (date(2024, 7, 1), 1),    # Jul = FM1
+        (date(2024, 12, 1), 6),   # Dec = FM6
+        (date(2025, 1, 1), 7),    # Jan = FM7
+        (date(2025, 6, 30), 12),  # Jun = FM12
+    ])
+    def test_fiscal_month_boundaries(self, svc, input_date, expected_fm):
+        assert svc._get_fiscal_month(input_date) == expected_fm
+
+    def test_fiscal_month_calendar_mode(self, svc):
+        for m in range(1, 13):
+            assert svc._get_fiscal_month(date(2024, m, 15), use_fiscal_year=False) == m
 
 
 @pytest.mark.django_db
@@ -348,6 +419,78 @@ class TestSeasonalityAnalysis:
             assert item['month'] == month_names[i]
             assert 'average_spend' in item
             assert 'occurrences' in item
+
+
+@pytest.mark.django_db
+class TestSeasonalityOrdering:
+    """Regression tests for category_seasonality sort order.
+
+    Frontend reads category_seasonality[0] and [-1] to render the
+    "Highest Seasonality" and "Lowest Seasonality" cards. The backend
+    must sort by seasonality_strength descending. Sorting by any other
+    key (e.g., savings_potential) reintroduces the bug.
+    """
+
+    FISCAL_MONTH_DATES = [
+        (2023, 7), (2023, 8), (2023, 9), (2023, 10), (2023, 11), (2023, 12),
+        (2024, 1), (2024, 2), (2024, 3), (2024, 4), (2024, 5), (2024, 6),
+    ]
+
+    def _seed_monthly(self, organization, category, supplier, admin_user, fiscal_monthly_amounts):
+        for idx, amount in enumerate(fiscal_monthly_amounts):
+            if amount <= 0:
+                continue
+            year, month = self.FISCAL_MONTH_DATES[idx]
+            TransactionFactory(
+                organization=organization,
+                supplier=supplier,
+                category=category,
+                uploaded_by=admin_user,
+                amount=Decimal(str(amount)),
+                date=date(year, month, 15),
+                invoice_number=f'{category.name}-M{idx:02d}',
+            )
+
+    def test_sort_by_seasonality_strength_not_savings(self, organization, supplier, admin_user):
+        # BigMild: $4.8M total, strength ~= 20.4% (> 15 filter, but lowest of the three)
+        cat_big_mild = CategoryFactory(organization=organization, name='BigMild')
+        self._seed_monthly(
+            organization, cat_big_mild, supplier, admin_user,
+            [300000, 300000, 300000, 300000, 500000, 500000,
+             500000, 500000, 400000, 400000, 400000, 400000],
+        )
+
+        # SmallExtreme: ~$100K total, one-month spike, strength ~= 292%
+        cat_small_extreme = CategoryFactory(organization=organization, name='SmallExtreme')
+        self._seed_monthly(
+            organization, cat_small_extreme, supplier, admin_user,
+            [90000, 1000, 1000, 1000, 1000, 1000,
+             1000, 1000, 1000, 1000, 1000, 0],
+        )
+
+        # MidModerate: $570K total, arithmetic ramp, strength ~= 36%
+        cat_mid_moderate = CategoryFactory(organization=organization, name='MidModerate')
+        self._seed_monthly(
+            organization, cat_mid_moderate, supplier, admin_user,
+            [20000, 25000, 30000, 35000, 40000, 45000,
+             50000, 55000, 60000, 65000, 70000, 75000],
+        )
+
+        result = AnalyticsService(organization).get_detailed_seasonality_analysis(use_fiscal_year=True)
+        category_seasonality = result['category_seasonality']
+
+        names = [c['category'] for c in category_seasonality]
+        assert set(names) == {'BigMild', 'SmallExtreme', 'MidModerate'}
+
+        assert category_seasonality[0]['category'] == 'SmallExtreme'
+        assert category_seasonality[-1]['category'] == 'BigMild'
+
+        by_savings = sorted(category_seasonality, key=lambda c: c['savings_potential'], reverse=True)
+        assert by_savings[0]['category'] == 'BigMild'
+        assert category_seasonality[0]['category'] != by_savings[0]['category']
+
+        strengths = [c['seasonality_strength'] for c in category_seasonality]
+        assert strengths == sorted(strengths, reverse=True)
 
 
 @pytest.mark.django_db

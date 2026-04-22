@@ -80,18 +80,6 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
 
         month_names = FISCAL_MONTH_NAMES if use_fiscal_year else CALENDAR_MONTH_NAMES
 
-        def get_fiscal_year(date):
-            """Get fiscal year (Jul-Jun) from date"""
-            if use_fiscal_year:
-                return date.year + 1 if date.month >= 7 else date.year
-            return date.year
-
-        def calendar_to_fiscal_month(calendar_month):
-            """Convert calendar month (1-12) to fiscal month (1-12)"""
-            if not use_fiscal_year:
-                return calendar_month
-            return calendar_month - 6 if calendar_month >= 7 else calendar_month + 6
-
         # Get all transactions with date info
         transactions = list(self.transactions.values(
             'id', 'date', 'amount', 'category__name', 'category_id'
@@ -112,16 +100,17 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
             }
 
         # Extract unique fiscal years
-        available_years = sorted(set(get_fiscal_year(t['date']) for t in transactions))
+        available_years = sorted(
+            set(self._get_fiscal_year(t['date'], use_fiscal_year) for t in transactions)
+        )
 
         # Build monthly data by fiscal year
         # Structure: {fiscal_month: {fiscal_year: total_spend}}
         monthly_by_year = defaultdict(lambda: defaultdict(float))
 
         for t in transactions:
-            fiscal_year = get_fiscal_year(t['date'])
-            calendar_month = t['date'].month
-            fiscal_month = calendar_to_fiscal_month(calendar_month)
+            fiscal_year = self._get_fiscal_year(t['date'], use_fiscal_year)
+            fiscal_month = self._get_fiscal_month(t['date'], use_fiscal_year)
             monthly_by_year[fiscal_month][fiscal_year] += float(t['amount'])
 
         # Build monthly_data response
@@ -155,9 +144,8 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
             cat_yearly_totals = defaultdict(float)
 
             for t in cat_transactions:
-                fiscal_year = get_fiscal_year(t['date'])
-                calendar_month = t['date'].month
-                fiscal_month = calendar_to_fiscal_month(calendar_month)
+                fiscal_year = self._get_fiscal_year(t['date'], use_fiscal_year)
+                fiscal_month = self._get_fiscal_month(t['date'], use_fiscal_year)
                 cat_monthly_spend[fiscal_month - 1] += float(t['amount'])
                 cat_yearly_totals[fiscal_year] += float(t['amount'])
 
@@ -240,8 +228,9 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
                 'seasonal_indices': seasonal_indices
             })
 
-        # Sort by savings potential descending
-        category_seasonality.sort(key=lambda x: x['savings_potential'], reverse=True)
+        # Ordering contract: [0] is the most seasonal category, [-1] is the least.
+        # Savings-potential ordering is applied separately inside report generators.
+        category_seasonality.sort(key=lambda x: x['seasonality_strength'], reverse=True)
 
         # Calculate summary metrics
         categories_analyzed = len(category_seasonality)
@@ -287,12 +276,6 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
 
         month_names = FISCAL_MONTH_NAMES if use_fiscal_year else CALENDAR_MONTH_NAMES
 
-        def calendar_to_fiscal_month(calendar_month):
-            """Convert calendar month (1-12) to fiscal month (1-12)"""
-            if not use_fiscal_year:
-                return calendar_month
-            return calendar_month - 6 if calendar_month >= 7 else calendar_month + 6
-
         # Get category info
         try:
             category = Category.objects.get(id=category_id, organization=self.organization)
@@ -318,8 +301,7 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
         # Calculate monthly totals for category
         monthly_totals = [0.0] * 12
         for t in cat_transactions:
-            calendar_month = t['date'].month
-            fiscal_month = calendar_to_fiscal_month(calendar_month)
+            fiscal_month = self._get_fiscal_month(t['date'], use_fiscal_year)
             monthly_totals[fiscal_month - 1] += float(t['amount'])
 
         total_spend = sum(monthly_totals)
@@ -335,8 +317,7 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
             sup_monthly_spend = [0.0] * 12
 
             for t in transactions:
-                calendar_month = t['date'].month
-                fiscal_month = calendar_to_fiscal_month(calendar_month)
+                fiscal_month = self._get_fiscal_month(t['date'], use_fiscal_year)
                 sup_monthly_spend[fiscal_month - 1] += float(t['amount'])
 
             sup_total = sum(sup_monthly_spend)

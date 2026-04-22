@@ -52,7 +52,8 @@ export interface UserSettings {
   forecastingModel: ForecastingModel;
   useExternalAI: boolean;
   aiProvider: AIProvider;
-  aiApiKey?: string; // Stored encrypted, never displayed
+  // API key is sent to backend on save; read-back is masked ('****' + last4).
+  aiApiKey?: string;
   forecastHorizonMonths: number;
   anomalySensitivity: number;
 }
@@ -206,7 +207,8 @@ function toApiFormat(
     prefs.forecastHorizonMonths = settings.forecastHorizonMonths;
   if (settings.anomalySensitivity !== undefined)
     prefs.anomalySensitivity = settings.anomalySensitivity;
-  // Note: aiApiKey is handled separately for security (encrypted on backend)
+  // aiApiKey is sent when present; backend masks it on read.
+  if (settings.aiApiKey !== undefined) prefs.aiApiKey = settings.aiApiKey;
 
   return prefs;
 }

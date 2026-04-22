@@ -255,7 +255,7 @@ export default function Categories() {
             </div>
             <p className="text-xs text-red-600 mt-1 font-semibold">
               {getRiskLabel(highestRiskCategory?.risk_level || "low")} Risk •{" "}
-              {highestRiskCategory?.concentration.toFixed(0)}% concentration
+              {highestRiskCategory?.concentration.toFixed(0)}% top-subcategory share
             </p>
           </CardContent>
         </Card>
@@ -439,8 +439,11 @@ export default function Categories() {
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">
                     Top Subcategory
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">
-                    Concentration
+                  <th
+                    className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase"
+                    title="Top subcategory share — largest subcategory's spend as a percentage of the category total"
+                  >
+                    Top Subcat %
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">
                     Suppliers
@@ -632,7 +635,7 @@ export default function Categories() {
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
                       {selectedCategoryData.concentration.toFixed(0)}%
-                      concentration
+                      top-subcategory share
                     </p>
                   </CardContent>
                 </Card>

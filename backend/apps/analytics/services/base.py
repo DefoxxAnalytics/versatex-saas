@@ -6,8 +6,16 @@ analytics services inherit from. It contains:
 - Organization and filter initialization
 - Filtered queryset building
 - Fiscal year/month utilities
+
+Fiscal year convention: project-wide default is July–June (Jul = FY month 1,
+Jun = FY month 12). Per-organization overrides are not implemented; a future
+`Organization.fiscal_year_start_month` field would thread through the helpers
+below and the filter queryset. Any service that needs fiscal math MUST call
+`_get_fiscal_year` / `_get_fiscal_month` rather than reimplementing the logic.
 """
-from datetime import datetime
+from datetime import date as _date, datetime
+from decimal import Decimal, InvalidOperation
+
 from apps.procurement.models import Transaction
 
 
@@ -39,10 +47,45 @@ class BaseAnalyticsService:
                 - years: List of fiscal years to include
                 - min_amount: Minimum transaction amount
                 - max_amount: Maximum transaction amount
+
+        Raises:
+            ValueError: if date_from > date_to, or if min/max amounts are
+                non-numeric.
         """
         self.organization = organization
         self.filters = filters or {}
+        self._validate_filters()
         self.transactions = self._build_filtered_queryset()
+
+    def _validate_filters(self):
+        """Validate filter values that would otherwise fail silently or crash later."""
+        date_from = self._coerce_date(self.filters.get('date_from'))
+        date_to = self._coerce_date(self.filters.get('date_to'))
+        if date_from and date_to and date_from > date_to:
+            raise ValueError(
+                f"date_from ({date_from.isoformat()}) must be <= date_to ({date_to.isoformat()})"
+            )
+
+        for key in ('min_amount', 'max_amount'):
+            value = self.filters.get(key)
+            if value is None or value == '':
+                continue
+            try:
+                Decimal(str(value))
+            except (InvalidOperation, TypeError) as exc:
+                raise ValueError(f"{key!r} must be numeric; got {value!r}") from exc
+
+    @staticmethod
+    def _coerce_date(value):
+        if value is None or value == '':
+            return None
+        if isinstance(value, _date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, str):
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        raise ValueError(f"Unsupported date value: {value!r}")
 
     def _build_filtered_queryset(self):
         """Build transaction queryset with applied filters."""
@@ -112,17 +155,20 @@ class BaseAnalyticsService:
             return date.year + 1
         return date.year
 
-    def _get_fiscal_month(self, date):
+    def _get_fiscal_month(self, date, use_fiscal_year=True):
         """
         Get fiscal month number (1-12, where 1 = July, 12 = June).
 
         Args:
             date: The date to get fiscal month for
+            use_fiscal_year: If False, returns the calendar month instead
 
         Returns:
-            int: Fiscal month (1-12)
+            int: Fiscal month (1-12) or calendar month when use_fiscal_year is False
         """
         month = date.month
+        if not use_fiscal_year:
+            return month
         if month >= 7:
             return month - 6  # Jul=1, Aug=2, ..., Dec=6
         return month + 6  # Jan=7, Feb=8, ..., Jun=12

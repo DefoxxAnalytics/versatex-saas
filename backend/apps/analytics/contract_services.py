@@ -68,13 +68,21 @@ class ContractAnalyticsService:
             status__in=['active', 'expiring']
         ).count()
 
-        # Calculate contract coverage (% of spend covered by contracts)
+        # Contract coverage (% of recent spend from contracted suppliers).
+        # Scoped to the trailing 12 months so pre-contract history doesn't
+        # inflate coverage: previously, ALL-TIME spend from a supplier who
+        # recently became contracted counted as "covered", which made long-
+        # tenured orgs appear ~100% covered the moment they signed any
+        # contract.
+        coverage_window_start = today - timedelta(days=365)
+        recent_txns = self.transactions.filter(date__gte=coverage_window_start)
+
         contract_supplier_ids = self.contracts.filter(
             status='active'
         ).values_list('supplier_id', flat=True)
 
-        total_spend = self.transactions.aggregate(total=Sum('amount'))['total'] or Decimal('0')
-        contracted_spend = self.transactions.filter(
+        total_spend = recent_txns.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        contracted_spend = recent_txns.filter(
             supplier_id__in=contract_supplier_ids
         ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
@@ -91,6 +99,7 @@ class ContractAnalyticsService:
             'total_annual_value': float(value_stats['sum_annual_value'] or 0),
             'avg_contract_value': float(value_stats['avg_contract_value'] or 0),
             'contract_coverage_percentage': round(coverage_percentage, 1),
+            'contract_coverage_window_days': 365,
             'contracted_spend': float(contracted_spend),
             'total_spend': float(total_spend)
         }
@@ -101,19 +110,43 @@ class ContractAnalyticsService:
 
         Returns:
             List of contract dictionaries
+
+        Note: `utilization_percentage` is computed using only transactions that
+        fell inside each contract's own [start_date, min(end_date, today)]
+        window. Earlier versions summed the supplier's ALL-TIME transaction
+        spend (via a single precomputed supplier→total dict) and divided by
+        the contract's total_value — which meant a supplier with years of
+        pre-contract history appeared as "1200% utilized" the week they
+        signed a new contract. The per-contract date filter below is the
+        correct scoping.
         """
         contracts = self.contracts.select_related('supplier').order_by('end_date')
 
-        result = []
         today = date.today()
+        if not contracts.exists():
+            return []
 
-        supplier_spend = dict(
-            self.transactions.values_list('supplier_id').annotate(total=Sum('amount')).values_list('supplier_id', 'total')
+        # Build per-contract spend in a single query: group transactions that
+        # fall within ANY of the contracts we care about, keyed on both
+        # supplier and date so each contract can be resolved to its own slice.
+        supplier_ids = [c.supplier_id for c in contracts]
+        relevant_txns = list(
+            self.transactions.filter(supplier_id__in=supplier_ids)
+            .values('supplier_id', 'date', 'amount')
         )
 
+        result = []
         for contract in contracts:
             days_to_expiry = (contract.end_date - today).days if contract.end_date else None
-            actual_spend = supplier_spend.get(contract.supplier_id, Decimal('0')) or Decimal('0')
+            window_end = min(contract.end_date, today)
+            actual_spend = Decimal('0')
+            for t in relevant_txns:
+                if (
+                    t['supplier_id'] == contract.supplier_id
+                    and contract.start_date <= t['date'] <= window_end
+                ):
+                    actual_spend += t['amount']
+
             utilization = (
                 float(actual_spend / contract.total_value * 100)
                 if contract.total_value and contract.total_value > 0 else 0
@@ -321,14 +354,20 @@ class ContractAnalyticsService:
             count=Count('id')
         ).order_by('month')
 
-        # Calculate contract duration in months
+        # Calculate contract duration in months (elapsed-to-date, minimum 1).
+        window_end = min(contract.end_date, today)
         duration_months = (
-            (min(contract.end_date, today).year - contract.start_date.year) * 12 +
-            (min(contract.end_date, today).month - contract.start_date.month) + 1
+            (window_end.year - contract.start_date.year) * 12 +
+            (window_end.month - contract.start_date.month) + 1
         )
 
         expected_monthly = float(contract.total_value / duration_months) if duration_months > 0 else 0
-        actual_monthly = float(total_spend / len(monthly_data)) if monthly_data else 0
+        # Use the full elapsed contract duration as the denominator, not the
+        # count of months with at least one transaction. Previously this
+        # excluded gap-months, inflating the per-month average and producing
+        # a misleading over-spend variance for contracts with sporadic usage.
+        monthly_data_list = list(monthly_data)
+        actual_monthly = float(total_spend / duration_months) if duration_months > 0 else 0
 
         # Variance analysis
         variance = actual_monthly - expected_monthly
@@ -343,13 +382,15 @@ class ContractAnalyticsService:
             'actual_monthly_spend': round(actual_monthly, 2),
             'variance': round(variance, 2),
             'variance_percentage': round(variance_percentage, 1),
+            'active_spend_months': len(monthly_data_list),
+            'duration_months': duration_months,
             'monthly_breakdown': [
                 {
                     'month': m['month'].strftime('%Y-%m'),
                     'amount': float(m['total']),
                     'transaction_count': m['count']
                 }
-                for m in monthly_data
+                for m in monthly_data_list
             ]
         }
 
@@ -379,7 +420,8 @@ class ContractAnalyticsService:
 
             # Calculate expected spend to date
             total_days = (contract.end_date - contract.start_date).days
-            elapsed_days = (today - contract.start_date).days
+            # Clamp to 0 so future-dated contracts don't emit negative expected spend.
+            elapsed_days = max(0, (today - contract.start_date).days)
             expected_spend = contract.total_value * Decimal(str(elapsed_days / total_days)) if total_days > 0 else Decimal('0')
 
             utilization = float(actual_spend / expected_spend * 100) if expected_spend > 0 else 0
@@ -589,9 +631,11 @@ class ContractAnalyticsService:
                 date__lte=min(contract.end_date, today)
             ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
-            # Calculate expected spend to date (prorated)
+            # Calculate expected spend to date (prorated). Clamp elapsed_days
+            # to 0 so future-dated contracts don't produce negative expected
+            # spend (which flipped the variance sign in consumers).
             total_days = (contract.end_date - contract.start_date).days
-            elapsed_days = (min(today, contract.end_date) - contract.start_date).days
+            elapsed_days = max(0, (min(today, contract.end_date) - contract.start_date).days)
 
             if total_days > 0:
                 expected_spend = contract.total_value * Decimal(str(elapsed_days / total_days))

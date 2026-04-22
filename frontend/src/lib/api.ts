@@ -3022,10 +3022,15 @@ export interface AgingBucket {
 export interface AgingOverview {
   total_ap: number;
   overdue_amount: number;
-  current_dpo: number;
+  current_days_to_pay?: number;
+  avg_days_to_pay?: number;
+  /** @deprecated use current_days_to_pay */
+  current_dpo?: number;
+  /** @deprecated use avg_days_to_pay */
+  avg_dpo?: number;
   on_time_rate: number;
   buckets: AgingBucket[];
-  trend: { month: string; dpo: number }[];
+  trend: { month: string; days_to_pay?: number; dpo?: number }[];
 }
 
 export interface AgingBySupplier {
@@ -3060,9 +3065,16 @@ export interface PaymentTermsCompliance {
 
 export interface DPOTrend {
   month: string;
-  dpo: number;
-  invoices_paid: number;
-  amount_paid: number;
+  days_to_pay?: number;
+  avg_days_to_pay?: number;
+  /** @deprecated use days_to_pay / avg_days_to_pay */
+  dpo?: number;
+  /** @deprecated use avg_days_to_pay */
+  avg_dpo?: number;
+  invoices_paid?: number;
+  invoice_count?: number;
+  amount_paid?: number;
+  total_amount?: number;
 }
 
 export interface CashFlowForecastWeek {
@@ -3257,7 +3269,9 @@ export interface SupplierPaymentsOverview {
   total_suppliers?: number;
   overall_on_time_rate: number;
   avg_on_time_rate?: number;
-  avg_dpo: number;
+  avg_days_to_pay?: number;
+  /** @deprecated use avg_days_to_pay */
+  avg_dpo?: number;
   exception_rate: number;
   avg_exception_rate?: number;
   total_ap_balance: number;
@@ -3268,7 +3282,11 @@ export interface SupplierPaymentScore {
   supplier_id: number;
   ap_balance: number;
   total_ap?: number;
-  dpo: number;
+  days_to_pay?: number;
+  avg_days_to_pay?: number;
+  /** @deprecated use days_to_pay / avg_days_to_pay */
+  dpo?: number;
+  /** @deprecated use avg_days_to_pay */
   avg_dpo?: number;
   on_time_rate: number;
   exception_rate: number;
@@ -3285,7 +3303,11 @@ export interface SupplierPaymentDetail {
   total_amount: number;
   ap_balance: number;
   total_ap?: number;
-  dpo: number;
+  days_to_pay?: number;
+  avg_days_to_pay?: number;
+  /** @deprecated use days_to_pay / avg_days_to_pay */
+  dpo?: number;
+  /** @deprecated use avg_days_to_pay */
   avg_dpo?: number;
   on_time_rate: number;
   exception_count: number;

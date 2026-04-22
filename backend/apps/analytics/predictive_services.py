@@ -489,26 +489,26 @@ class PredictiveAnalyticsService:
                     'change_rate': round(sup_slope / np.mean(sup_values) if np.mean(sup_values) > 0 else 0, 4)
                 })
 
-        # Growth metrics
+        # Growth metrics. Each window is emitted only when a FULL prior window
+        # exists so current/prev are equal-length sums. Earlier versions summed
+        # `values[:-N]` as a fallback, which on e.g. 13 months would compare a
+        # 12-month sum to a 1-month sum and display growth as a ~1100% anomaly.
         growth_metrics = {}
-        if len(values) >= 12:
-            # Year-over-year growth
+        if len(values) >= 24:
             current_year = sum(values[-12:])
-            prev_year = sum(values[-24:-12]) if len(values) >= 24 else sum(values[:-12])
+            prev_year = sum(values[-24:-12])
             yoy_growth = ((current_year - prev_year) / prev_year * 100) if prev_year > 0 else 0
             growth_metrics['yoy_growth'] = round(yoy_growth, 2)
 
-        if len(values) >= 6:
-            # 6-month trend
+        if len(values) >= 12:
             recent = sum(values[-6:])
-            previous = sum(values[-12:-6]) if len(values) >= 12 else sum(values[:-6])
+            previous = sum(values[-12:-6])
             six_month_growth = ((recent - previous) / previous * 100) if previous > 0 else 0
             growth_metrics['six_month_growth'] = round(six_month_growth, 2)
 
-        if len(values) >= 3:
-            # 3-month trend
+        if len(values) >= 6:
             recent_3 = sum(values[-3:])
-            previous_3 = sum(values[-6:-3]) if len(values) >= 6 else sum(values[:-3])
+            previous_3 = sum(values[-6:-3])
             three_month_growth = ((recent_3 - previous_3) / previous_3 * 100) if previous_3 > 0 else 0
             growth_metrics['three_month_growth'] = round(three_month_growth, 2)
 

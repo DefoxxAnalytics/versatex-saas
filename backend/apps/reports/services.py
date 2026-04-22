@@ -318,6 +318,6 @@ class ReportingService:
             # P2P Report descriptions
             'p2p_pr_status': 'Purchase requisition workflow analysis with approval metrics and department breakdown',
             'p2p_po_compliance': 'Contract coverage, maverick spend analysis, and PO compliance metrics',
-            'p2p_ap_aging': 'Accounts payable aging buckets, DPO trends, and payment performance',
+            'p2p_ap_aging': 'Accounts payable aging buckets, avg days-to-pay trends, and payment performance',
         }
         return descriptions.get(report_type, '')

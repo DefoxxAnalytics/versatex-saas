@@ -849,7 +849,7 @@ Aging buckets:
 - **61-90 days**: Overdue
 - **90+ days**: Significantly overdue
 
-Plus total AP, overdue amount, and DPO.
+Plus total AP, overdue amount, and avg days to pay.
     ''',
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
@@ -867,7 +867,7 @@ def aging_overview(request):
     - 61-90 days
     - 90+ days
 
-    Plus total AP, overdue amount, and DPO.
+    Plus total AP, overdue amount, and avg days to pay.
 
     Query params (superusers only):
     - organization_id: View data for a specific organization
@@ -963,8 +963,8 @@ def payment_terms_compliance(request):
 
 @extend_schema(
     tags=['P2P Analytics - Invoice Aging'],
-    summary='Get DPO trends',
-    description='Returns Days Payable Outstanding trends over time.',
+    summary='Get avg days-to-pay trends (legacy: DPO)',
+    description='Returns monthly average days-from-invoice-to-payment (formerly labeled DPO). URL path preserved for caller stability.',
     parameters=[MONTHS_PARAM, ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
@@ -973,7 +973,7 @@ def payment_terms_compliance(request):
 @throttle_classes([P2PAnalyticsThrottle])
 def dpo_trends(request):
     """
-    Get Days Payable Outstanding trends.
+    Get avg days-to-pay trends (legacy: DPO). URL path preserved for stability.
 
     Query params:
     - months: Number of months to analyze (default: 12, range: 1-36)
@@ -1463,7 +1463,7 @@ Get supplier payment performance overview. **Admin access required.**
 Returns:
 - Total suppliers with AP
 - Overall on-time payment rate
-- Average DPO by supplier
+- Average days to pay by supplier
 - Exception rate overview
     ''',
     parameters=[ORGANIZATION_ID_PARAM],
@@ -1481,7 +1481,7 @@ def supplier_payments_overview(request):
     Returns:
     - Total suppliers with AP
     - Overall on-time payment rate
-    - Average DPO by supplier
+    - Average days to pay by supplier
     - Exception rate overview
 
     Query params (superusers only):
@@ -1533,7 +1533,7 @@ def supplier_payments_scorecard(request):
 
     Returns suppliers ranked by payment performance score including:
     - AP balance
-    - DPO
+    - Avg Days to Pay
     - On-time payment percentage
     - Exception rate
     - Overall score (0-100)
@@ -1584,7 +1584,7 @@ def supplier_payment_detail(request, supplier_id):
 
     Returns:
     - Basic supplier info
-    - Payment metrics (DPO, on-time rate)
+    - Payment metrics (avg days to pay, on-time rate)
     - Exception breakdown
     - Aging buckets
 

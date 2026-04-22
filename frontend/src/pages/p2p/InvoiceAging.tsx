@@ -155,7 +155,7 @@ const PaymentTermsTooltip = ({
 
 /**
  * Invoice Aging & AP Dashboard - Accounts Payable aging and payment analysis
- * Shows aging buckets, DPO, payment terms compliance, and cash flow forecasts
+ * Shows aging buckets, avg days-to-pay, payment terms compliance, and cash flow forecasts
  */
 export default function InvoiceAging() {
   const { data: agingOverview, isLoading: overviewLoading } =
@@ -241,10 +241,11 @@ export default function InvoiceAging() {
       subtext: `${overduePercent?.toFixed(1) || 0}% of total`,
     },
     {
-      label: "Days Payable Outstanding",
-      value: `${agingOverview.current_dpo?.toFixed(1) || 0} days`,
+      label: "Avg Days to Pay",
+      value: `${agingOverview.current_days_to_pay?.toFixed(1) || agingOverview.current_dpo?.toFixed(1) || 0} days`,
       icon: Calendar,
       color: "purple",
+      subtext: "Invoice issuance to payment",
     },
     {
       label: "On-Time Payment Rate",
@@ -288,12 +289,14 @@ export default function InvoiceAging() {
       daysOverdue: sup.avg_days_outstanding,
     })) || [];
 
-  // Prepare DPO trend data
-  const dpoTrendData =
+  // Prepare days-to-pay trend data. API response exposes four aliases
+  // (avg_days_to_pay | days_to_pay | avg_dpo | dpo) to cover both post-fix
+  // and pre-fix server versions.
+  const daysToPayTrendData =
     dpoTrends?.map((trend) => ({
       month: trend.month,
-      dpo: trend.dpo,
-      target: 45, // Target DPO
+      days: trend.avg_days_to_pay ?? trend.days_to_pay ?? trend.avg_dpo ?? trend.dpo ?? 0,
+      target: 45, // Aspirational benchmark; not payment-terms-aware
     })) || [];
 
   // Prepare cash flow forecast data
@@ -324,7 +327,7 @@ export default function InvoiceAging() {
             Invoice Aging & Accounts Payable
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            AP aging analysis, DPO tracking, and cash flow management
+            AP aging, days-to-pay tracking, and cash flow management
           </p>
         </div>
       </div>
@@ -395,7 +398,7 @@ export default function InvoiceAging() {
         <CardHeader>
           <CardTitle>Aging Bucket Analysis</CardTitle>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Outstanding AP by aging period
+            Outstanding AP by days since invoice issuance
           </p>
         </CardHeader>
         <CardContent>
@@ -429,20 +432,19 @@ export default function InvoiceAging() {
         </CardContent>
       </Card>
 
-      {/* DPO Trends & Cash Flow Row */}
+      {/* Days-to-Pay Trend & Cash Flow Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* DPO Trends */}
         <Card className="border-0 shadow-lg">
           <CardHeader>
-            <CardTitle>DPO Trend (12 Months)</CardTitle>
+            <CardTitle>Avg Days to Pay — Trend (12 Months)</CardTitle>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Days Payable Outstanding vs target
+              Invoice issuance to payment, vs aspirational 45-day benchmark
             </p>
           </CardHeader>
           <CardContent>
-            {dpoTrendData.length > 0 ? (
+            {daysToPayTrendData.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={dpoTrendData}>
+                <LineChart data={daysToPayTrendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
                     dataKey="month"
@@ -462,14 +464,14 @@ export default function InvoiceAging() {
                     }}
                     formatter={(value: number, name: string) => [
                       `${value.toFixed(1)} days`,
-                      name === "dpo" ? "Actual DPO" : "Target",
+                      name === "days" ? "Avg Days to Pay" : "Target",
                     ]}
                   />
                   <Legend />
                   <Line
                     type="monotone"
-                    dataKey="dpo"
-                    name="Actual DPO"
+                    dataKey="days"
+                    name="Avg Days to Pay"
                     stroke="#3b82f6"
                     strokeWidth={3}
                     dot={{ fill: "#3b82f6", r: 4 }}
@@ -487,7 +489,7 @@ export default function InvoiceAging() {
               </ResponsiveContainer>
             ) : (
               <div className="h-[300px] flex items-center justify-center text-gray-500">
-                No DPO trend data available
+                No days-to-pay trend data available
               </div>
             )}
           </CardContent>

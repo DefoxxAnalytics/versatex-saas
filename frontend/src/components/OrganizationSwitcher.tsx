@@ -93,15 +93,15 @@ export function OrganizationSwitcher({
             demoTriggerStyles,
           )}
         >
-          <Building2 className="h-4 w-4" />
-          <span className="max-w-[120px] truncate hidden sm:inline">
+          <Building2 className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline whitespace-nowrap">
             {activeOrganization?.name || "Select Org"}
           </span>
-          <ChevronDown className="h-4 w-4" />
+          <ChevronDown className="h-4 w-4 flex-shrink-0" />
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center gap-2">
           <Building2 className="h-4 w-4 text-muted-foreground" />
           Switch Organization

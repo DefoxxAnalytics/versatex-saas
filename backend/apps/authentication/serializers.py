@@ -32,6 +32,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'organization_is_demo', 'created_at', 'is_super_admin', 'organizations']
 
+    def to_representation(self, instance):
+        """Mask secret preference keys (e.g. aiApiKey) before serialization."""
+        data = super().to_representation(instance)
+        data['preferences'] = UserProfile.mask_preferences(data.get('preferences') or {})
+        return data
+
     def get_is_super_admin(self, obj):
         """Return whether the user is a super admin (Django superuser)."""
         return obj.is_super_admin()
@@ -58,7 +64,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class UserPreferencesSerializer(serializers.Serializer):
-    """Serializer for user preferences update"""
+    """Serializer for user preferences update."""
     theme = serializers.ChoiceField(choices=['light', 'dark', 'system'], required=False)
     colorScheme = serializers.ChoiceField(choices=['navy', 'classic', 'versatex'], required=False)
     notifications = serializers.BooleanField(required=False)
@@ -70,6 +76,17 @@ class UserPreferencesSerializer(serializers.Serializer):
     )
     dashboardLayout = serializers.CharField(max_length=50, required=False)
     sidebarCollapsed = serializers.BooleanField(required=False)
+
+    # AI / Predictive settings — must match UserProfile.ALLOWED_PREFERENCE_KEYS.
+    useExternalAI = serializers.BooleanField(required=False)
+    aiProvider = serializers.ChoiceField(choices=['anthropic', 'openai'], required=False)
+    aiApiKey = serializers.CharField(required=False, allow_blank=True, max_length=300, trim_whitespace=True)
+    forecastingModel = serializers.ChoiceField(
+        choices=['simple_average', 'linear', 'advanced'],
+        required=False,
+    )
+    forecastHorizonMonths = serializers.IntegerField(required=False, min_value=1, max_value=36)
+    anomalySensitivity = serializers.FloatField(required=False, min_value=0.5, max_value=5.0)
 
     def validate(self, attrs):
         """Filter out keys not in ALLOWED_PREFERENCE_KEYS."""

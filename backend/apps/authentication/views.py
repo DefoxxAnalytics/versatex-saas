@@ -508,17 +508,33 @@ class UserPreferencesView(generics.GenericAPIView):
     serializer_class = UserPreferencesSerializer
 
     def get(self, request):
-        """Get current user preferences."""
+        """Get current user preferences (secret keys masked)."""
         if not hasattr(request.user, 'profile'):
             return Response(
                 {'error': 'User profile not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        return Response(request.user.profile.preferences or {})
+        # This endpoint returns preferences directly (no serializer), so apply
+        # the same mask that UserProfileSerializer.to_representation applies.
+        return Response(UserProfile.mask_preferences(request.user.profile.preferences or {}))
+
+    def _invalidate_ai_cache_if_needed(self, profile, submitted_keys):
+        """Bust the AI insight cache if any AI-related preference changed."""
+        ai_keys = UserProfile.ALLOWED_PREFERENCE_KEYS & {
+            'useExternalAI', 'aiProvider', 'aiApiKey',
+            'forecastingModel', 'forecastHorizonMonths', 'anomalySensitivity',
+        }
+        if not (submitted_keys & ai_keys):
+            return
+        try:
+            from apps.analytics.ai_cache import AIInsightsCache
+        except ImportError:  # Analytics app not installed in this environment
+            return
+        AIInsightsCache.invalidate_org_cache(profile.organization_id)
 
     def patch(self, request):
-        """Update user preferences (merge with existing)."""
+        """Update user preferences (merge with existing). Response masked."""
         if not hasattr(request.user, 'profile'):
             return Response(
                 {'error': 'User profile not found'},
@@ -535,6 +551,8 @@ class UserPreferencesView(generics.GenericAPIView):
         profile.preferences = current_prefs
         profile.save(update_fields=['preferences', 'updated_at'])
 
+        self._invalidate_ai_cache_if_needed(profile, set(serializer.validated_data.keys()))
+
         # Log action
         log_action(
             user=request.user,
@@ -544,10 +562,10 @@ class UserPreferencesView(generics.GenericAPIView):
             request=request
         )
 
-        return Response(profile.preferences)
+        return Response(UserProfile.mask_preferences(profile.preferences))
 
     def put(self, request):
-        """Replace all user preferences."""
+        """Replace all user preferences. Response masked."""
         if not hasattr(request.user, 'profile'):
             return Response(
                 {'error': 'User profile not found'},
@@ -562,6 +580,8 @@ class UserPreferencesView(generics.GenericAPIView):
         profile.preferences = serializer.validated_data
         profile.save(update_fields=['preferences', 'updated_at'])
 
+        self._invalidate_ai_cache_if_needed(profile, set(serializer.validated_data.keys()))
+
         # Log action
         log_action(
             user=request.user,
@@ -571,7 +591,7 @@ class UserPreferencesView(generics.GenericAPIView):
             request=request
         )
 
-        return Response(profile.preferences)
+        return Response(UserProfile.mask_preferences(profile.preferences))
 
 
 # =============================================================================

@@ -313,6 +313,11 @@ class UserProfileAdmin(admin.ModelAdmin):
     """
     User profile admin with optimized membership count.
 
+    The raw `preferences` JSONField is excluded from the change-form and
+    replaced with a masked, read-only display so `aiApiKey` (and any
+    future secret keys listed in UserProfile.MASKED_PREFERENCE_KEYS) are
+    never shown in plaintext to staff users.
+
     Optimizations:
     - select_related for user and organization
     - Annotated membership_count to avoid N+1 query per row
@@ -320,7 +325,8 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ['user', 'organization', 'role', 'membership_count', 'is_active', 'created_at']
     list_filter = ['role', 'is_active', 'organization', 'created_at']
     search_fields = ['user__username', 'user__email', 'organization__name']
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'preferences_masked']
+    exclude = ['preferences']
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -346,6 +352,16 @@ class UserProfileAdmin(admin.ModelAdmin):
         return getattr(obj, '_membership_count', 0)
     membership_count.short_description = 'Orgs'
     membership_count.admin_order_field = '_membership_count'
+
+    def preferences_masked(self, obj):
+        """Masked, read-only view of preferences (hides aiApiKey / other secrets)."""
+        import json
+        masked = UserProfile.mask_preferences(obj.preferences or {})
+        return format_html(
+            '<pre style="margin:0;white-space:pre-wrap;font-family:monospace;">{}</pre>',
+            json.dumps(masked, indent=2, sort_keys=True, default=str),
+        )
+    preferences_masked.short_description = 'Preferences (masked)'
 
 
 # =============================================================================
