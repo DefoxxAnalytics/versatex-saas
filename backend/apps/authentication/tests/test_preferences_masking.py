@@ -186,7 +186,10 @@ class TestAdminMaskedDisplay:
 
         client = APIClient()
         client.force_login(admin_user)
-        url = f'/admin/authentication/userprofile/{admin_user.profile.id}/change/'
+        url = reverse(
+            'admin:authentication_userprofile_change',
+            args=[admin_user.profile.id],
+        )
         response = client.get(url)
         body = response.content.decode()
         assert TEST_KEY not in body, "plaintext aiApiKey must not appear in admin HTML"

@@ -105,6 +105,8 @@ export interface UserPreferences {
   aiProvider?: "anthropic" | "openai";
   forecastHorizonMonths?: number;
   anomalySensitivity?: number;
+  // Sent plaintext on write; backend returns masked ('****' + last4) on read.
+  aiApiKey?: string;
 }
 
 // Savings Configuration Types (Industry Benchmark Rates)
