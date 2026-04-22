@@ -312,12 +312,32 @@ describe("Query Keys Factory", () => {
       });
 
       it("should generate seasonalityDetailed key", () => {
+        // #given: default call without year — factory emits year ?? null at position 3
+        // and { orgId, filters } at position 4. year param was added for the View Mode
+        // fiscal-year filter (fix 4e80851); cache key must differ per viewed year.
         const key = queryKeys.analytics.seasonalityDetailed(true, 1);
         expect(key).toEqual([
           "analytics",
           "seasonality-detailed",
           true,
-          { orgId: 1 },
+          null,
+          { orgId: 1, filters: undefined },
+        ]);
+      });
+
+      it("should generate seasonalityDetailed key with year", () => {
+        const key = queryKeys.analytics.seasonalityDetailed(
+          true,
+          1,
+          undefined,
+          2024,
+        );
+        expect(key).toEqual([
+          "analytics",
+          "seasonality-detailed",
+          true,
+          2024,
+          { orgId: 1, filters: undefined },
         ]);
       });
 
