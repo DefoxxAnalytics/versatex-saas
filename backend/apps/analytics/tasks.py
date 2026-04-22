@@ -695,3 +695,119 @@ def refresh_rag_documents(self):
     )
 
     return results
+
+
+@shared_task(
+    name='send_llm_cost_digest',
+    bind=True,
+    max_retries=2,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+)
+def send_llm_cost_digest(self):
+    """
+    Daily LLM cost digest.
+
+    Aggregates the previous UTC day's LLMRequestLog entries and POSTs a
+    plain-text summary to COST_ALERT_WEBHOOK_URL (ntfy.sh / Slack-compatible
+    endpoints). Guards against silent runaway spend on nightly batch jobs —
+    if batch_generate_insights + batch_enhance_insights blow costs, the next
+    morning's digest is the primary detection signal.
+
+    Webhook failures are logged but never raised so we don't lose the log
+    signal for the spike the digest is trying to surface. The returned dict
+    always reflects the aggregation result regardless of webhook outcome.
+    """
+    import requests
+    from django.conf import settings
+    from django.db.models import Sum, Count
+
+    from apps.analytics.models import LLMRequestLog
+
+    now = timezone.now()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    day_end = day_start + timedelta(days=1)
+
+    qs = LLMRequestLog.objects.filter(
+        created_at__gte=day_start,
+        created_at__lt=day_end,
+    )
+
+    totals = qs.aggregate(
+        total_cost=Sum('cost_usd'),
+        request_count=Count('id'),
+    )
+    by_provider = list(
+        qs.values('provider').annotate(
+            cost=Sum('cost_usd'),
+            count=Count('id'),
+        ).order_by('-cost')
+    )
+    by_type = list(
+        qs.values('request_type').annotate(
+            cost=Sum('cost_usd'),
+            count=Count('id'),
+        ).order_by('-cost')
+    )
+
+    summary = {
+        'date': day_start.date().isoformat(),
+        'total_cost_usd': round(float(totals['total_cost'] or 0), 4),
+        'request_count': totals['request_count'] or 0,
+        'by_provider': [
+            {
+                'provider': row['provider'],
+                'cost': round(float(row['cost'] or 0), 4),
+                'count': row['count'],
+            }
+            for row in by_provider
+        ],
+        'by_request_type': [
+            {
+                'type': row['request_type'],
+                'cost': round(float(row['cost'] or 0), 4),
+                'count': row['count'],
+            }
+            for row in by_type
+        ],
+    }
+
+    logger.info(
+        f"LLM cost digest {summary['date']}: ${summary['total_cost_usd']} "
+        f"across {summary['request_count']} requests"
+    )
+
+    webhook_url = getattr(settings, 'COST_ALERT_WEBHOOK_URL', '') or ''
+    if not webhook_url:
+        summary['webhook_posted'] = False
+        summary['webhook_skip_reason'] = 'COST_ALERT_WEBHOOK_URL not set'
+        return summary
+
+    provider_line = ', '.join(
+        f"{row['provider']} ${row['cost']} ({row['count']})"
+        for row in summary['by_provider']
+    ) or '(none)'
+    message = (
+        f"LLM cost digest for {summary['date']}: "
+        f"${summary['total_cost_usd']} across {summary['request_count']} requests\n"
+        f"By provider: {provider_line}"
+    )
+
+    try:
+        response = requests.post(
+            webhook_url,
+            data=message.encode('utf-8'),
+            headers={
+                'Title': 'Versatex Analytics — LLM cost digest',
+                'Tags': 'money_with_wings',
+            },
+            timeout=10,
+        )
+        summary['webhook_posted'] = True
+        summary['webhook_status_code'] = response.status_code
+    except Exception as e:
+        logger.exception("Cost digest webhook POST failed")
+        summary['webhook_posted'] = False
+        summary['webhook_error'] = type(e).__name__
+
+    return summary

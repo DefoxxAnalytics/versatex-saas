@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'apps.procurement',
     'apps.analytics',
     'apps.reports',
+    'apps.health',
 ]
 
 MIDDLEWARE = [
@@ -109,6 +110,11 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD', default='analytics_pass'),
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
+        # Persistent connections cut the per-request handshake; health checks
+        # keep zombie connections from being served after Postgres restarts.
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,
+        'OPTIONS': {'connect_timeout': 10},
     }
 }
 
@@ -140,11 +146,40 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Storage backends (Django 5 STORAGES API). Always defined — Django rejects
+# coexistence with the legacy STATICFILES_STORAGE setting ("mutually exclusive").
+# media ('default'): Cloudflare R2 when USE_R2_MEDIA=True, else local filesystem.
+# static ('staticfiles'): whitenoise CompressedManifest in prod (needs
+#   collectstatic); settings_test.py overrides to plain StaticFilesStorage for
+#   pytest, where collectstatic is skipped.
+if config('USE_R2_MEDIA', default=False, cast=bool):
+    _default_storage = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': config('R2_MEDIA_BUCKET', default='versatex-media'),
+            'endpoint_url': config('R2_ENDPOINT', default=''),
+            'access_key': config('R2_ACCESS_KEY_ID', default=''),
+            'secret_key': config('R2_SECRET_ACCESS_KEY', default=''),
+            'region_name': 'auto',       # R2 convention
+            'default_acl': 'private',
+            'querystring_auth': True,    # presigned URLs for reads
+            'querystring_expire': 3600,
+        },
+    }
+else:
+    _default_storage = {'BACKEND': 'django.core.files.storage.FileSystemStorage'}
+
+STORAGES = {
+    'default': _default_storage,
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # File upload limits
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
@@ -364,10 +399,24 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+    # Trust X-Forwarded-Proto from the reverse proxy. Request path in prod is
+    # browser(https) -> Cloudflare edge(https) -> cloudflared tunnel(https) ->
+    # nginx(http) -> Django. Without this header trust, SECURE_SSL_REDIRECT
+    # sees http from nginx and issues a 301 -> https that Django already
+    # received -> infinite loop. Paired with the X-Forwarded-Proto pass-through
+    # map in frontend/nginx/nginx.conf so Cloudflare's header survives the
+    # plaintext tunnel->nginx hop.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
     # HSTS - enforce HTTPS for 1 year
     SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    # includeSubDomains is irreversible for max-age's duration and pins every
+    # *.versatexanalytics.com subdomain to HTTPS. Env-gated so staging/sandbox
+    # subdomains can opt in deliberately after 1 week of prod validation.
+    # Default False -> header emitted without the includeSubDomains / preload
+    # directives -> safe rollback path.
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = config('HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
+    SECURE_HSTS_PRELOAD = config('HSTS_PRELOAD', default=False, cast=bool)
 
     # Referrer policy
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
@@ -392,6 +441,19 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 # Field Encryption (optional - for django-encrypted-model-fields)
 # Generate key with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default='')
+
+# LLM provider keys. Read via getattr(settings, 'ANTHROPIC_API_KEY', None) in
+# apps/analytics/{views.py, rag_service.py, semantic_cache.py, document_ingestion.py}.
+# Before this declaration they silently resolved to None and AI enhancement
+# degraded to deterministic-only output without any log signal.
+# Empty default is intentional — deployment may run without external AI.
+ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+
+# Daily LLM cost-digest webhook (ntfy.sh / Slack / Teams compatible).
+# When empty, send_llm_cost_digest task logs the daily rollup but skips the
+# outbound POST. Set to an ntfy.sh topic URL for zero-friction alerting.
+COST_ALERT_WEBHOOK_URL = config('COST_ALERT_WEBHOOK_URL', default='')
 
 # Logging configuration for security events
 # Build handlers dict - only include file handler in production

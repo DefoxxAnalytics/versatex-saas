@@ -37,9 +37,15 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vstx-saas-backend
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+    # Gunicorn gthread gives ~2-3x I/O-bound concurrency over 4 sync workers at
+    # identical memory. Zero code risk since views are thread-safe (no module-
+    # level mutable state beyond what Django itself guards).
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --worker-class gthread --timeout 120
     volumes:
-      - ./backend:/app
+      # Dev-only source bind mount lives in docker-compose.override.yml so it's
+      # auto-loaded by `docker compose up` but not by explicit -f prod commands
+      # -- otherwise the image-pinning pattern (prod.yml sets image:) would be
+      # silently defeated by the bind mount overriding /app.
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     ports:
@@ -71,8 +77,7 @@ services:
       dockerfile: Dockerfile
     container_name: vstx-saas-celery
     command: celery -A config worker -l info
-    volumes:
-      - ./backend:/app
+    # Dev source bind mount is in docker-compose.override.yml (see backend).
     env_file:
       - .env
     environment:
@@ -82,8 +87,10 @@ services:
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-dev_redis_password_change_me}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-dev_redis_password_change_me}@redis:6379/0
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # Celery Flower Monitoring (TD-013)
   flower:

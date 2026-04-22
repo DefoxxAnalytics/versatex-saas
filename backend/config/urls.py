@@ -30,6 +30,9 @@ urlpatterns = [
     # Admin - uses configurable URL path from settings
     path(settings.ADMIN_URL, admin.site.urls),
 
+    # Readiness probe — hits DB + cache; consumed by compose healthcheck + Uptime Kuma
+    path('api/health/', include('apps.health.urls')),
+
     # API v1 Endpoints (versioned)
     path('api/v1/auth/', include('apps.authentication.urls')),
     path('api/v1/procurement/', include('apps.procurement.urls')),

@@ -25,15 +25,24 @@ Both setups end up with the same Django + Celery + Postgres + Redis stack runnin
 - You're comfortable running `docker-compose` on Linux.
 - You want to stay under $10/mo.
 
-## Cloudflare + Hetzner documents
+## Cloudflare + Hetzner — production deploy (current canonical path)
 
-Read these in order:
+The canonical, end-to-end production recipe is the single-subdomain plan
+(`app.versatexanalytics.com` serving SPA + API + admin from the same
+origin via Cloudflare Tunnel). Read these in order:
 
-1. [CLOUDFLARE-HETZNER.md](CLOUDFLARE-HETZNER.md) — End-to-end walkthrough. Start here.
-2. [CLOUDFLARE-DNS.md](CLOUDFLARE-DNS.md) — Adding `app.*` and `api.*` subdomains alongside an existing site on the apex.
-3. [CLOUDFLARE-TUNNEL.md](CLOUDFLARE-TUNNEL.md) — Zero-trust tunnel reference (no open ports on the VPS).
-4. [CLOUDFLARE-PAGES.md](CLOUDFLARE-PAGES.md) — Deploying the React frontend on Pages (free tier).
-5. [BACKUPS-AND-MEDIA.md](BACKUPS-AND-MEDIA.md) — Postgres backups to R2, media file persistence.
+1. [PRODUCTION-DEPLOY-PLAN.md](PRODUCTION-DEPLOY-PLAN.md) — **Start here.** Full one-time setup: VPS provision, tunnel, Cloudflare Access policies, first bring-up.
+2. [DEPLOY-PLAYBOOK.md](DEPLOY-PLAYBOOK.md) — Day-to-day runbooks: deploy, rollback, migration safety, secret classification, common-failure diagnoses.
+3. [MONITORING.md](MONITORING.md) — Uptime Kuma + external probe + Cloudflare signals. Probe definitions, alert routing, weekly metrics to watch.
+4. [CLOUDFLARE-EDGE.md](CLOUDFLARE-EDGE.md) — Cache Rules, WAF, Rate-Limiting, SSL/TLS mode. Copy-paste-ready expressions with host-scoping clauses.
+5. [BACKUPS-AND-MEDIA.md](BACKUPS-AND-MEDIA.md) — Postgres backups to R2, media file persistence, restore procedure.
+
+### Supporting references (deep-dive / historical)
+
+- [CLOUDFLARE-HETZNER.md](CLOUDFLARE-HETZNER.md) — Older two-subdomain recipe (`app.*` + `api.*`). Superseded by PRODUCTION-DEPLOY-PLAN.md for new deployments; some sections (VPS hardening §1–§4, secret generation §5) are still referenced by the current plan.
+- [CLOUDFLARE-DNS.md](CLOUDFLARE-DNS.md) — DNS record patterns alongside an existing apex site.
+- [CLOUDFLARE-TUNNEL.md](CLOUDFLARE-TUNNEL.md) — Zero-trust tunnel reference.
+- [CLOUDFLARE-PAGES.md](CLOUDFLARE-PAGES.md) — Frontend-on-Pages alternative. Not used by the current plan (frontend ships as a container on the VPS for same-origin simplicity); documented for the future case where edge-caching the SPA outweighs architectural simplicity.
 
 ## Railway documents
 

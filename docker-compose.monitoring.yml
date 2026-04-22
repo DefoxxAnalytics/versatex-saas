@@ -1,0 +1,35 @@
+# Monitoring overlay — Uptime Kuma for self-hosted uptime/health probes.
+# See docs/deployment/MONITORING.md (Phase 7) for probe setup + ntfy push
+# alerting configuration.
+#
+# Usage:
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.prod.yml \
+#     -f docker-compose.tunnel.yml \
+#     -f docker-compose.monitoring.yml \
+#     up -d
+#
+# Kuma reaches public internet for external DNS + the ntfy push target, so
+# it joins the default bridge network (NOT the internal-only network that
+# isolates db/redis).
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: vstx-saas-uptime
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+    # No ports: block on purpose. Uptime Kuma is reached in-cluster only —
+    # the cloudflared sidecar routes monitor.versatexanalytics.com to
+    # http://uptime-kuma:3001 via Docker DNS. Binding a host port would add
+    # attack surface and a potential port collision with dev services.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  uptime_kuma_data:

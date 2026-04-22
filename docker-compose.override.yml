@@ -1,0 +1,18 @@
+# Development-only overrides. Auto-loaded by `docker compose up` when no
+# explicit -f flags are given. NOT loaded by production commands:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# because -f disables auto-merge of override.yml.
+#
+# Purpose: source code bind mount for iterative dev (code changes reflected
+# without rebuilding the image). In prod, the GHCR-pinned image in
+# docker-compose.prod.yml (via `image:`) ships the canonical /app contents;
+# mounting ./backend on top in prod would silently revert the pinned image
+# and defeat APP_VERSION rollback.
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+
+  celery:
+    volumes:
+      - ./backend:/app

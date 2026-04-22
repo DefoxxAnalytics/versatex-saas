@@ -735,7 +735,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
                     {/* Admin Panel Link */}
                     <a
-                      href={`${window.location.protocol}//${window.location.hostname}:8001/admin/`}
+                      href="/admin/login/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className={cn(
@@ -874,7 +874,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <>
                     Please upload procurement data via the{" "}
                     <a
-                      href={`${window.location.protocol}//${window.location.hostname}:8001/admin/procurement/dataupload/upload-csv/`}
+                      href="/admin/procurement/dataupload/upload-csv/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline font-medium hover:text-blue-900"
