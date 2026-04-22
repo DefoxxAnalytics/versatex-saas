@@ -393,6 +393,14 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 # Generate key with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default='')
 
+# LLM provider keys. Read via getattr(settings, 'ANTHROPIC_API_KEY', None) in
+# apps/analytics/{views.py, rag_service.py, semantic_cache.py, document_ingestion.py}.
+# Before this declaration they silently resolved to None and AI enhancement
+# degraded to deterministic-only output without any log signal.
+# Empty default is intentional — deployment may run without external AI.
+ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+
 # Logging configuration for security events
 # Build handlers dict - only include file handler in production
 _logging_handlers = {
