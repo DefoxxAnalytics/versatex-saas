@@ -1,5 +1,5 @@
 # Cloudflare Tunnel sidecar.
-# See docs/deployment/CLOUDFLARE-TUNNEL.md
+# See docs/deployment/CLOUDFLARE-TUNNEL.md + docs/deployment/PRODUCTION-DEPLOY-PLAN.md.
 #
 # Usage:
 #   docker compose \
@@ -10,11 +10,27 @@
 
 services:
   cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: analytics-cloudflared
+    # Pin cloudflared. :latest drift = silently missing security patches OR
+    # breaking changes slipping in unannounced. Latest stable at time of
+    # deploy-plan-ship was 2026.3.0 (published 2026-03-09). Quarterly renewal
+    # trigger: check https://github.com/cloudflare/cloudflared/releases every
+    # quarter, bump to latest stable, redeploy.
+    image: cloudflare/cloudflared:2026.3.0
+    container_name: vstx-saas-cloudflared
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=${CLOUDFLARED_TOKEN}
+      # Fail-fast when token is missing -- the :? syntax causes docker compose
+      # to exit with a clear error instead of starting an unauthenticated
+      # tunnel that silently never connects.
+      - TUNNEL_TOKEN=${CLOUDFLARED_TOKEN:?CLOUDFLARED_TOKEN must be set in .env}
+    # The tunnel routes traffic to frontend (nginx), which then proxies /api/,
+    # /admin/, /static/, /media/ to backend. Depending on frontend (was: backend)
+    # reflects this post-Phase-1 same-origin topology.
     depends_on:
-      - backend
+      - frontend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
