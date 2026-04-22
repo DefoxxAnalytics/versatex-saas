@@ -202,6 +202,7 @@ Class-B / Class-C items the user has chosen not to address in the current pass. 
 
 - **[Seasonality] [B/S3]** `backend/apps/analytics/services/seasonality.py:194-202` — Hardcoded savings-rate tiers (25% / 20% / 10%). Candidate for `Organization.savings_config` override at `backend/apps/authentication/models.py:65-74`. (deferred — queued for post-Phase-0a revisit on the `audit/accuracy-review` branch)
 - **[Seasonality] [B/S3]** `backend/apps/analytics/services/seasonality.py:83-93` — Fiscal-year start hardcoded to July. Blast radius includes every `BaseAnalyticsService` consumer. (deferred — see Cross-module open below; decision blocks on Cluster 2)
+- **[Seasonality] [B/S3]** `backend/apps/analytics/services/seasonality.py:248` — `opportunities_found` equals `categories_analyzed` because the list is already filtered to `strength > 15` at `:205`. Field name implies a stricter subset than it actually delivers — latent label mismatch. Options: raise one threshold (e.g., `> 30` for stricter opportunities), drop the redundant metric, or document intentional equality. (promoted from S4 on 2026-04-22. Owner: first Seasonality touchup pass.)
 
 ### DPO cluster
 
@@ -212,6 +213,16 @@ Class-B / Class-C items the user has chosen not to address in the current pass. 
 - **[SupplierPayments] [B/S3]** `p2p_services.py:1525` — Reliability score uses `abs(avg_days_to_pay - 30) * 2` as the days-to-pay term, treating 30-day cycles as ideal. Not payment-terms-aware (ignores per-supplier `payment_terms_days`). (deferred)
 - **[Naming] [B/S4]** Python method `get_dpo_trends`, Django URL name `'dpo-trends'`, React hook `useDPOTrends`, TypeScript interface `DPOTrend`, API client `getDPOTrends`. URL *path* is preserved for caller stability; the Python + TS symbols are also kept to avoid a wide-ripple rename. Consider aliasing (`get_avg_days_to_pay_trends = get_dpo_trends`) in a follow-up if the symbol names become a friction point. (deferred, naming ripple)
 - **[Deprecation] [B/S4]** The "deprecated for one release" language on the alias keys is vague because this project has no defined release cadence. Before an alias is actually removed, add concrete trigger criteria (version number or date) and grep-anchor comments (`# TODO(deprecation): ...`). (deferred)
+- **[InvoiceAging] [B/S3]** `p2p_services.py:952` — Aging queryset `status__in=['received', 'pending_match', 'matched', 'approved', 'on_hold']` silently excludes `'disputed'` status. Disputed invoices are still AP exposure; excluding without a UI flag understates the AP total. Options: include with a "disputed" visual flag, add a separate "disputed" bucket, or document the exclusion in the page footer. (promoted from S4 on 2026-04-22. Owner: future AP-aging methodology pass.)
+- **[P2PCycle] [B/S3]** `p2p_services.py:455-456` — `variance / target * 100 if target > 0 else 0` — the guard prevents div-by-zero, but the `else 0` fallback itself is wrong semantics: if target is 0 and variance is non-zero, "0% variance" is misleading (should emit None or surface raw variance). Currently latent (targets hardcoded 3/7/3/30). Activates when the `[P2PCycle] [B/S3]` per-org stage-targets Deferred item above lands — the two must be re-examined together. (promoted from S4 on 2026-04-22. Owner: Cluster-3 stage-targets-per-org pass.)
+
+### S4 → Follow-up
+
+Small concrete cleanups surfaced by the 2026-04-22 S4 batch review. No design call required; bundle into future touchup passes.
+
+- **[Seasonality] [B/S4]** `backend/apps/analytics/services/seasonality.py:205` — Expose `if seasonality_strength <= 15: continue` inclusion floor as a kwarg (e.g., `min_strength=15`) and document in the function signature. Trigger: bundle with any future Seasonality touchup that also addresses the `opportunities_found` design call above.
+- **[Seasonality] [B/S4]** `frontend/src/pages/Seasonality.tsx:465` — When `category_seasonality.length === 1`, "Highest Seasonality" and "Lowest Seasonality" cards render the same category. Hide the second card, or render a single "Seasonality Profile" card. Mechanical conditional-render fix. Trigger: next Seasonality UX pass.
+- **[Scorecard] [D/S4]** `p2p_services.py:get_supplier_payments_scorecard` + `frontend/src/lib/api.ts SupplierPaymentScore` — Align TS interface with backend emit: either drop the `total_ap` / `performance_score` optional aliases from TS, or add the fields to the backend payload (verify direction by reading scorecard consumers before flipping). Trigger: next frontend type-consistency pass, or whenever someone touches scorecard rendering.
 
 ## Cross-Module Open
 
@@ -224,21 +235,16 @@ Shared-primitive findings that span modules and should be resolved once at the c
 
 ## S4 Deferred Log
 
-Auto-deferred per S4 rule. Review as a single batch at end of audit; individually low-signal.
+Auto-deferred per S4 rule during the audit; **post-audit batch review completed 2026-04-22**. Outcomes:
 
-### Seasonality
+- **3 items promoted to Class-B Deferred** (visible in their cluster sections above) — required a design call or warranted owner-tracked follow-up.
+- **3 items moved to `### S4 → Follow-up` subsection under `## Deferred`** — concrete small cleanups with obvious mechanical fix.
+- **2 items remain below as `wont-fix`** — cosmetic/unreachable code with no observable user impact; removing adds churn without user benefit.
 
-- **[Seasonality] [B/S4]** `backend/apps/analytics/services/seasonality.py:248` — `opportunities_found = len([c for c in category_seasonality if c['seasonality_strength'] > 15])` always equals `categories_analyzed` because the list is already filtered to `strength > 15` at `:205`. Either raise one threshold (e.g., `> 30` for stricter opportunities), drop the redundant metric, or document intentional equality.
-- **[Seasonality] [B/S4]** `backend/apps/analytics/services/seasonality.py:205` — `if seasonality_strength <= 15: continue` hard-codes the inclusion floor. Keep but expose as kwarg and document.
-- **[Seasonality] [D/S4]** `backend/apps/analytics/services/seasonality.py:146-148, :230` — Categories grouped by `category__name` (string); `category_id` back-filled from `cat_transactions[0]`. Safe under org-scoped querysets, fragile if grouping is ever broadened. Consider keying on `(category_id, name)` as the drilldown function already does at `:330`.
-- **[Seasonality] [D/S4]** `backend/apps/analytics/services/seasonality.py:176` — `low_month_index = cat_monthly_spend.index(min_spend) if min_spend > 0 else 0`. The `else 0` fallback is unreachable: `non_zero_spends` at `:172` is already filtered to strictly-positive values and the `total_spend == 0` guard at `:165` skips all-zero categories entirely. No observable wrong output; cosmetic cleanup only.
-- **[Seasonality] [B/S4]** `frontend/src/pages/Seasonality.tsx:465` — When `category_seasonality.length === 1`, both the "Highest Seasonality" and "Lowest Seasonality" cards render the same category. Consider collapsing to a single "Seasonality Profile" card when `length === 1`.
+### Seasonality — wont-fix
 
-### DPO cluster
-
-- **[InvoiceAging] [B/S4]** `p2p_services.py:952` — Aging queryset `status__in=['received', 'pending_match', 'matched', 'approved', 'on_hold']` excludes `'disputed'` status. Disputed invoices still represent financial exposure; consider including with a visual flag.
-- **[P2PCycle] [D/S4]** `p2p_services.py:455-456` — `variance / target * 100 if target > 0 else 0` short-circuits when target is zero. Safe today (all stage targets are > 0); latent if a future stage target is zero.
-- **[Scorecard] [D/S4]** `p2p_services.py:get_supplier_payments_scorecard` — Per-row dict emits `supplier` (name) and `ap_balance`, but the TypeScript `SupplierPaymentScore` interface also declares `total_ap` and `performance_score` as optional-aliases that frontend code reads. Pre-existing inconsistency not addressed in this cluster because scorecard is stable and the score/ap_balance → performance_score/total_ap mapping is effectively dead alias code. Log for a future consistency pass.
+- **[Seasonality] [D/S4] `— wont-fix 2026-04-22`** `backend/apps/analytics/services/seasonality.py:146-148, :230` — Categories grouped by `category__name` (string); `category_id` back-filled from `cat_transactions[0]`. Safe under org-scoped querysets, fragile only if grouping is ever broadened cross-org. The drilldown at `:330` already keys correctly on `(category_id, name)`, so no visible inconsistency today. Defensive concern only; no user impact to fix.
+- **[Seasonality] [D/S4] `— wont-fix 2026-04-22`** `backend/apps/analytics/services/seasonality.py:176` — `low_month_index = ... if min_spend > 0 else 0`. The `else 0` fallback is unreachable: `non_zero_spends` at `:172` is already filtered to strictly-positive values and the `total_spend == 0` guard at `:165` skips all-zero categories entirely. Removing the defensive guard would risk reintroducing a crash path if the outer guards ever change — cost-free to keep, latent-risk to remove.
 
 ---
 
