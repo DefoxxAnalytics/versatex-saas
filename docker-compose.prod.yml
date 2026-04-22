@@ -1,11 +1,27 @@
 # Production Docker Compose Override
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Security enhancements:
-# - No external port exposure for DB and Redis
-# - Redis authentication enabled
-# - Internal network isolation
-# - Read-only filesystem where possible
+# Phase 5a of deployment prep added (vs. pre-deploy state):
+# - restart: unless-stopped on every service (VPS reboots no longer leave the
+#   stack dead — important because the only alternative is manual `up -d`).
+# - json-file log rotation via anchor, capping footprint at ~300 MB total.
+# - Image pinning via ghcr.io/defoxxanalytics/versatex-saas-* tagged by
+#   APP_VERSION for rollback-via-`docker compose pull && up -d`.
+# - Backend healthcheck switched to /api/health/ (Phase 2b added the endpoint).
+# - Celery beat embedded in worker with tmpfs-backed schedule file -- single-
+#   VPS scale is fine; split to dedicated beat service when adding workers.
+#
+# Pre-existing (kept as-is):
+# - No external ports for DB/Redis.
+# - Redis password + maxmemory policy.
+# - Read-only filesystem + no-new-privileges on frontend.
+# - internal network for db/redis isolation.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   # PostgreSQL Database - No external ports in production
@@ -24,6 +40,8 @@ services:
       -c log_statement=ddl
       -c log_connections=on
       -c log_disconnections=on
+    restart: unless-stopped
+    logging: *default-logging
     networks:
       - internal
       - default
@@ -41,26 +59,36 @@ services:
       --appendonly yes
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+    restart: unless-stopped
+    logging: *default-logging
     networks:
       - internal
       - default
 
   # Backend - Production configuration
   backend:
+    # GHCR-pinned image. APP_VERSION is the git SHA or semver tag that the
+    # deploy.yml build-push workflow published. Rollback = `APP_VERSION=<prev>
+    # docker compose pull && docker compose up -d` (~90 s typical).
+    image: ghcr.io/defoxxanalytics/versatex-saas-backend:${APP_VERSION:-latest}
+    restart: unless-stopped
+    logging: *default-logging
     environment:
       - DEBUG=False
       - DB_HOST=db
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
-    # Healthcheck follows ADMIN_URL (from .env). The base compose hardcodes /admin/login/,
-    # which 404s in prod where ADMIN_URL is set to an obscured path. See
-    # docs/deployment/CLOUDFLARE-HETZNER.md#admin-panel
+    # Use the readiness endpoint (Phase 2b). It probes DB + cache, so a dead
+    # Redis or Postgres takes the container unhealthy -- the previous
+    # ADMIN_URL-based check required ADMIN_URL to be set at container start
+    # and only confirmed the admin login page renders.
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/${ADMIN_URL}login/ || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
@@ -76,8 +104,19 @@ services:
       - internal
       - default
 
-  # Celery Worker - Production configuration
+  # Celery Worker (+ embedded beat for scheduled tasks)
   celery:
+    image: ghcr.io/defoxxanalytics/versatex-saas-backend:${APP_VERSION:-latest}
+    # -B enables beat in the same container. /var/run/celery-beat is a tmpfs
+    # below, so the schedule file is writable by the celery user without
+    # permission gymnastics. Single-VPS deploy: acceptable trade-off (beat
+    # dies with the worker); split to a dedicated celery-beat service when
+    # adding a second worker.
+    command: celery -A config worker -B -l info --concurrency=2 -s /var/run/celery-beat/celerybeat-schedule
+    restart: unless-stopped
+    logging: *default-logging
+    tmpfs:
+      - /var/run/celery-beat
     environment:
       - DEBUG=False
       - DB_HOST=db
@@ -95,8 +134,16 @@ services:
       - internal
       - default
 
+  # Celery Flower (monitoring)
+  flower:
+    restart: unless-stopped
+    logging: *default-logging
+
   # Frontend - Production configuration
   frontend:
+    image: ghcr.io/defoxxanalytics/versatex-saas-frontend:${APP_VERSION:-latest}
+    restart: unless-stopped
+    logging: *default-logging
     deploy:
       resources:
         limits:
