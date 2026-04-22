@@ -185,6 +185,65 @@ Legacy endpoints (`/api/auth/`, `/api/procurement/`, `/api/analytics/`) are supp
 
 **Frontend API Client:** All API calls use typed interfaces in `frontend/src/lib/api.ts`. This file contains `authAPI`, `procurementAPI`, `analyticsAPI`, and `reportsAPI` objects with typed request/response interfaces.
 
+## Analytics accuracy conventions
+
+Conventions established by the 8-cluster accuracy audit (closed 2026-04-22, see [docs/ACCURACY_AUDIT.md](docs/ACCURACY_AUDIT.md) for full background and per-finding detail). These apply to any new work in `apps/analytics/`, `apps/reports/generators/`, and `apps/authentication/` preferences plumbing.
+
+### 1. Amount-weighted rate companion fields
+
+Count-based rates (match rate, compliance rate, on-time rate) must be accompanied by an `*_by_amount` companion whenever the UI exposes the count-based value. Rationale: a 95% count-based match rate on low-value invoices can coexist with a 60% amount-weighted rate — users need both.
+
+**Examples already shipped:** `exception_rate_by_amount` at `p2p_services.py` (3-Way Matching), amount-weighted compliance rate (Maverick/Compliance), `on_time_eligible_count` denominator for PO leakage.
+
+### 2. Deprecated alias lifetime when renaming response fields
+
+When renaming a response field, keep the old key as a deprecated alias for one release. In the TypeScript interface, mark both fields with `@deprecated` JSDoc pointing readers at the canonical field.
+
+**Example:** AP aging response now emits both `days_to_pay` (canonical) and `avg_days_to_pay` (deprecated alias); TS interface `AgingOverview` in `frontend/src/lib/api.ts` reflects both. Before removing any alias, add a concrete trigger criterion (version number or date) — "deprecated for one release" alone is ambiguous since this project has no fixed release cadence.
+
+### 3. Fiscal-year math goes through the base helpers
+
+All FY calculations route through `BaseAnalyticsService._get_fiscal_year()` / `_get_fiscal_month(date, use_fiscal_year=True)` at `backend/apps/analytics/services/base.py:96-113`. No inline re-implementations. Per-org FY-start override is a pending Cross-Module Open item — when it lands, it lands in exactly one place.
+
+### 4. Growth metrics require equal-span windows
+
+Any YoY, 6-month, or 3-month growth metric must omit its key (or emit an explicit `insufficient_data_for_*: true` flag) when fewer than two full windows of data exist. Never fall back to partial windows — that was the root cause of the Predictive 13-month ~1100% anomaly.
+
+### 5. `ALLOWED_PREFERENCE_KEYS` two-site gate
+
+New keys on `UserProfile.preferences` must be added to **both**:
+- `ALLOWED_PREFERENCE_KEYS` at `backend/apps/authentication/models.py:167-170` (allowlist, otherwise silently dropped by the model)
+- An explicit `Field()` declaration on `UserPreferencesSerializer` at `backend/apps/authentication/serializers.py` (otherwise silently dropped by the serializer)
+
+Sensitive preference keys (API keys, tokens, secrets) must also be added to `MASKED_PREFERENCE_KEYS` and masking must occur in both `UserProfileSerializer.to_representation` AND `UserPreferencesView.get` (which bypasses the serializer by returning `profile.preferences` directly).
+
+### 6. No-silent-fallback when AI enhancement is unavailable
+
+When `AIInsightsService` cannot enhance because no API key is configured, the response **must** omit the `ai_enhancement` key, and the frontend **must** render a "(Deterministic)" label next to the insight. No silent fallback — users cannot tell whether they're seeing enhanced or deterministic output otherwise.
+
+Scope note: this rule currently covers only the no-key case. A tri-state `enhancement_status` field covering LLM failure separately is tracked as Cross-Module Open; until it lands, LLM-failure fallback remains silent.
+
+### 7. Class-C relabels change labels, not response shape
+
+When a metric is mislabeled (e.g., "DPO" that is actually "Avg Days to Pay", "Concentration" that is actually "Top Subcat %"), the fix is a UI-label change plus optional field rename with deprecated alias (§2). Do not add brand-new response fields — those are feature additions, not accuracy fixes. New fields widen the audit surface without addressing the original mislabel.
+
+### 8. Document-don't-refactor for divergent shared primitives
+
+When a shared primitive (DPO calc, HHI formula, amount-weighted rate) is re-implemented in another service rather than imported, the default action is to **document the divergence in the ledger**, not refactor for DRY-ness. Refactor only when the divergence produces a user-visible wrong number. The `ai_services.py` direct-ORM divergence vs analytics services is the canonical example — currently documented, not refactored.
+
+### 9. Reusable primitives — prefer these over re-implementation
+
+| Primitive | Location | Purpose |
+|---|---|---|
+| `BaseAnalyticsService._get_fiscal_year` / `_get_fiscal_month` | `backend/apps/analytics/services/base.py` | FY math (Jul–Jun default) |
+| `BaseAnalyticsService._validate_filters` | `backend/apps/analytics/services/base.py` | Date-range + amount-range filter validation |
+| `P2PAnalyticsService._avg_days_to_pay` | `backend/apps/analytics/p2p_services.py` (staticmethod) | The canonical "days from invoice to payment" calc — 8 call sites consolidated here |
+| `apps.analytics.services.yoy._yoy_change` | `backend/apps/analytics/services/yoy.py` (module-level function) | YoY delta with is_new/is_discontinued/insufficient_data flags |
+| `AIInsightsService.deduplicate_savings` | `backend/apps/analytics/ai_services.py` (instance method, `:873`) | Prevents double-counting across insight types |
+| `UserProfile.mask_preferences` | `backend/apps/authentication/models.py` (staticmethod) | Masks sensitive preference keys per `MASKED_PREFERENCE_KEYS` |
+
+Note: `P2PAnalyticsService` does NOT inherit from `BaseAnalyticsService` — this divergence is tracked as Cross-Module Open (see ledger). Until that lands, P2P filter validation is ad-hoc.
+
 ## Port Configuration
 
 This project uses non-default host ports to avoid collisions with other projects that may already occupy 3000/5432/6379/8001/5555 on the same host. All host ports are parameterized in `docker-compose.yml` via env vars with the defaults below.
