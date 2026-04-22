@@ -2232,9 +2232,15 @@ export const analyticsAPI = {
   getDetailedSeasonality: (
     useFiscalYear: boolean = true,
     filters?: AnalyticsFilters,
+    year?: number,
   ): Promise<AxiosResponse<DetailedSeasonality>> =>
     api.get("/analytics/seasonality/detailed/", {
-      params: { ...getOrganizationParam(), use_fiscal_year: useFiscalYear, ...buildFilterParams(filters) },
+      params: {
+        ...getOrganizationParam(),
+        use_fiscal_year: useFiscalYear,
+        ...(year !== undefined ? { year } : {}),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getSeasonalityCategoryDrilldown: (

@@ -61,13 +61,19 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
 
         return result
 
-    def get_detailed_seasonality_analysis(self, use_fiscal_year=True):
+    def get_detailed_seasonality_analysis(self, use_fiscal_year=True, year=None):
         """
         Get detailed seasonality analysis with fiscal year support, category breakdowns,
         seasonal indices, and savings potential calculations.
 
         Args:
             use_fiscal_year: If True, use fiscal year (Jul-Jun); else calendar year
+            year: Optional fiscal-year filter. When provided, `category_seasonality`
+                  is computed from only that year's transactions so the
+                  "Highest/Lowest Seasonality" cards reflect the selected View Mode
+                  year instead of a multi-year aggregate. `monthly_data` and
+                  `summary.available_years` are always computed across all
+                  available years — the chart still needs per-year series.
 
         Returns:
             dict: Comprehensive seasonality data with summary, monthly_data, category_seasonality
@@ -96,15 +102,24 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
                     'available_years': []
                 },
                 'monthly_data': [],
-                'category_seasonality': []
+                'category_seasonality': [],
+                'filter_year': year,
             }
 
-        # Extract unique fiscal years
+        # Extract unique fiscal years (always computed across ALL transactions,
+        # so the "Years Available" UI always shows the full range even when a
+        # specific year is selected).
         available_years = sorted(
             set(self._get_fiscal_year(t['date'], use_fiscal_year) for t in transactions)
         )
 
-        # Build monthly data by fiscal year
+        # Validate the year filter — if the caller requests a year with no
+        # transactions, return empty category_seasonality rather than silently
+        # falling through to aggregate data.
+        year_filter_active = year is not None and year in available_years
+
+        # Build monthly data by fiscal year (uses ALL years, not filtered —
+        # the chart legend needs per-year series regardless of View Mode).
         # Structure: {fiscal_month: {fiscal_year: total_spend}}
         monthly_by_year = defaultdict(lambda: defaultdict(float))
 
@@ -122,18 +137,28 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
                 'years': {}
             }
             year_values = []
-            for year in available_years:
-                spend = monthly_by_year[fiscal_month].get(year, 0)
-                month_entry['years'][f'FY{year}'] = round(spend, 2)
+            for yr in available_years:
+                spend = monthly_by_year[fiscal_month].get(yr, 0)
+                month_entry['years'][f'FY{yr}'] = round(spend, 2)
                 year_values.append(spend)
 
             month_entry['average'] = round(sum(year_values) / len(year_values), 2) if year_values else 0
             monthly_data.append(month_entry)
 
-        # Calculate category seasonality
+        # Category seasonality. When a year filter is active, restrict the
+        # transaction set to that fiscal year before grouping — so strength,
+        # peak/low, and savings_potential reflect ONLY that year's pattern.
+        if year_filter_active:
+            cat_scope_txns = [
+                t for t in transactions
+                if self._get_fiscal_year(t['date'], use_fiscal_year) == year
+            ]
+        else:
+            cat_scope_txns = transactions
+
         # Group transactions by category
         category_data = defaultdict(list)
-        for t in transactions:
+        for t in cat_scope_txns:
             category_data[t['category__name']].append(t)
 
         category_seasonality = []
@@ -249,10 +274,12 @@ class SeasonalityAnalyticsService(BaseAnalyticsService):
                 'high_impact_count': high_impact_count,
                 'total_savings_potential': round(total_savings_potential, 2),
                 'avg_yoy_growth': round(avg_yoy_growth, 2),
-                'available_years': available_years
+                'available_years': available_years,
+                'filter_year': year if year_filter_active else None,
             },
             'monthly_data': monthly_data,
-            'category_seasonality': category_seasonality
+            'category_seasonality': category_seasonality,
+            'filter_year': year if year_filter_active else None,
         }
 
     def get_seasonality_category_drilldown(self, category_id, use_fiscal_year=True):

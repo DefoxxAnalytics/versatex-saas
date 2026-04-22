@@ -497,13 +497,16 @@ export function useSeasonality() {
  * Use this for the Seasonality dashboard page.
  * Supports filtering by date range, suppliers, categories, and amount range.
  */
-export function useDetailedSeasonality(useFiscalYear: boolean = true) {
+export function useDetailedSeasonality(
+  useFiscalYear: boolean = true,
+  year?: number,
+) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.analytics.seasonalityDetailed(useFiscalYear, orgId, filters),
+    queryKey: queryKeys.analytics.seasonalityDetailed(useFiscalYear, orgId, filters, year),
     queryFn: async () => {
-      const response = await analyticsAPI.getDetailedSeasonality(useFiscalYear, filters);
+      const response = await analyticsAPI.getDetailedSeasonality(useFiscalYear, filters, year);
       return response.data;
     },
   });

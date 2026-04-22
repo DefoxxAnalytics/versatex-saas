@@ -160,8 +160,15 @@ export default function Seasonality() {
     null,
   );
 
-  // Fetch data from backend with fiscal year preference
-  const { data, isLoading, error } = useDetailedSeasonality(useFiscalYear);
+  // Fetch data from backend. When View Mode is a specific year, pass it as a
+  // filter so the Highest/Lowest Seasonality cards rank categories using only
+  // that year's transactions. When View Mode is "all", the backend returns
+  // the multi-year aggregate (prior behavior).
+  const selectedYear = typeof viewMode === "number" ? viewMode : undefined;
+  const { data, isLoading, error } = useDetailedSeasonality(
+    useFiscalYear,
+    selectedYear,
+  );
 
   // Fetch category drilldown when a category is selected
   const { data: drilldownData, isLoading: drilldownLoading } =
@@ -474,6 +481,9 @@ export default function Seasonality() {
                 <div className="flex-1">
                   <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
                     Highest Seasonality
+                    <span className="ml-1 text-xs font-normal text-gray-500 dark:text-gray-500">
+                      ({viewMode === "all" ? "All Years" : `FY${viewMode}`})
+                    </span>
                   </h3>
                   <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
                     {categorySeasonality[0].category}
@@ -505,6 +515,9 @@ export default function Seasonality() {
                 <div className="flex-1">
                   <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
                     Lowest Seasonality
+                    <span className="ml-1 text-xs font-normal text-gray-500 dark:text-gray-500">
+                      ({viewMode === "all" ? "All Years" : `FY${viewMode}`})
+                    </span>
                   </h3>
                   <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
                     {

@@ -625,6 +625,10 @@ def detailed_seasonality(request):
 
     Query params:
     - use_fiscal_year: Use fiscal year (Jul-Jun) instead of calendar year (default: true)
+    - year: Optional fiscal-year filter (e.g., 2025). When provided,
+      category_seasonality is computed from only that year's transactions so
+      the Highest/Lowest Seasonality cards reflect the selected View Mode.
+      monthly_data (the chart series) is always multi-year.
     - date_from, date_to, supplier_ids, category_ids, min_amount, max_amount: Filters
     - organization_id (superusers only): View data for a specific organization
     """
@@ -636,9 +640,22 @@ def detailed_seasonality(request):
     use_fiscal_year_param = request.query_params.get('use_fiscal_year', 'true').lower()
     use_fiscal_year = use_fiscal_year_param not in ('false', '0', 'no')
 
+    # Parse optional year filter. Invalid / non-numeric values are ignored
+    # (the service will fall back to multi-year aggregate).
+    year_param = request.query_params.get('year')
+    year = None
+    if year_param:
+        try:
+            year = int(year_param)
+        except (TypeError, ValueError):
+            year = None
+
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
-    data = service.get_detailed_seasonality_analysis(use_fiscal_year=use_fiscal_year)
+    data = service.get_detailed_seasonality_analysis(
+        use_fiscal_year=use_fiscal_year,
+        year=year,
+    )
 
     return Response(data)
 

@@ -451,6 +451,30 @@ class TestSeasonalityOrdering:
                 invoice_number=f'{category.name}-M{idx:02d}',
             )
 
+    def _seed_monthly_for_year(self, organization, category, supplier, admin_user,
+                                fiscal_monthly_amounts, fiscal_year):
+        """Like _seed_monthly but targets a specific fiscal year (Jul-Jun boundary)."""
+        # Fiscal year N runs Jul (year N-1) through Jun (year N)
+        dates = [
+            (fiscal_year - 1, 7), (fiscal_year - 1, 8), (fiscal_year - 1, 9),
+            (fiscal_year - 1, 10), (fiscal_year - 1, 11), (fiscal_year - 1, 12),
+            (fiscal_year, 1), (fiscal_year, 2), (fiscal_year, 3),
+            (fiscal_year, 4), (fiscal_year, 5), (fiscal_year, 6),
+        ]
+        for idx, amount in enumerate(fiscal_monthly_amounts):
+            if amount <= 0:
+                continue
+            year, month = dates[idx]
+            TransactionFactory(
+                organization=organization,
+                supplier=supplier,
+                category=category,
+                uploaded_by=admin_user,
+                amount=Decimal(str(amount)),
+                date=date(year, month, 15),
+                invoice_number=f'{category.name}-FY{fiscal_year}-M{idx:02d}',
+            )
+
     def test_sort_by_seasonality_strength_not_savings(self, organization, supplier, admin_user):
         # BigMild: $4.8M total, strength ~= 20.4% (> 15 filter, but lowest of the three)
         cat_big_mild = CategoryFactory(organization=organization, name='BigMild')
@@ -491,6 +515,83 @@ class TestSeasonalityOrdering:
 
         strengths = [c['seasonality_strength'] for c in category_seasonality]
         assert strengths == sorted(strengths, reverse=True)
+
+    def test_year_filter_changes_ranking(self, organization, supplier, admin_user):
+        """
+        View Mode filter: when `year` is passed, category_seasonality is
+        computed from only that year's transactions. A category with a flat
+        pattern in FY2024 and a spiky pattern in FY2025 should rank low in
+        FY2024 and high in FY2025 — NOT the multi-year aggregate ranking.
+        """
+        flat_then_spiky = CategoryFactory(organization=organization, name='FlatThenSpiky')
+        spiky_then_flat = CategoryFactory(organization=organization, name='SpikyThenFlat')
+
+        # FY2024: FlatThenSpiky is flat (~20% CoV); SpikyThenFlat is spiky (~100% CoV).
+        self._seed_monthly_for_year(
+            organization, flat_then_spiky, supplier, admin_user,
+            [300000, 300000, 300000, 300000, 500000, 500000,
+             500000, 500000, 400000, 400000, 400000, 400000],
+            fiscal_year=2024,
+        )
+        self._seed_monthly_for_year(
+            organization, spiky_then_flat, supplier, admin_user,
+            [90000, 1000, 1000, 1000, 1000, 1000,
+             1000, 1000, 1000, 1000, 1000, 1000],
+            fiscal_year=2024,
+        )
+
+        # FY2025: flipped — FlatThenSpiky is now spiky, SpikyThenFlat is now flat.
+        self._seed_monthly_for_year(
+            organization, flat_then_spiky, supplier, admin_user,
+            [90000, 1000, 1000, 1000, 1000, 1000,
+             1000, 1000, 1000, 1000, 1000, 1000],
+            fiscal_year=2025,
+        )
+        self._seed_monthly_for_year(
+            organization, spiky_then_flat, supplier, admin_user,
+            [300000, 300000, 300000, 300000, 500000, 500000,
+             500000, 500000, 400000, 400000, 400000, 400000],
+            fiscal_year=2025,
+        )
+
+        service = AnalyticsService(organization)
+
+        # FY2024: SpikyThenFlat (spiky that year) should rank first.
+        fy2024 = service.get_detailed_seasonality_analysis(use_fiscal_year=True, year=2024)
+        assert fy2024['summary']['filter_year'] == 2024
+        names_2024 = [c['category'] for c in fy2024['category_seasonality']]
+        assert names_2024[0] == 'SpikyThenFlat'
+
+        # FY2025: FlatThenSpiky (spiky that year) should rank first.
+        fy2025 = service.get_detailed_seasonality_analysis(use_fiscal_year=True, year=2025)
+        assert fy2025['summary']['filter_year'] == 2025
+        names_2025 = [c['category'] for c in fy2025['category_seasonality']]
+        assert names_2025[0] == 'FlatThenSpiky'
+
+        # All Years (no filter): ranking is the multi-year aggregate; filter_year None.
+        all_years = service.get_detailed_seasonality_analysis(use_fiscal_year=True)
+        assert all_years['summary']['filter_year'] is None
+        # Available years always includes both years regardless of filter.
+        assert all_years['summary']['available_years'] == [2024, 2025]
+        assert fy2024['summary']['available_years'] == [2024, 2025]
+        assert fy2025['summary']['available_years'] == [2024, 2025]
+
+    def test_year_filter_with_unknown_year_falls_back_to_aggregate(self, organization, supplier, admin_user):
+        """Unknown year filter should not silently return aggregate — should return empty."""
+        cat = CategoryFactory(organization=organization, name='Solo')
+        self._seed_monthly_for_year(
+            organization, cat, supplier, admin_user,
+            [300000, 300000, 300000, 300000, 500000, 500000,
+             500000, 500000, 400000, 400000, 400000, 400000],
+            fiscal_year=2024,
+        )
+        result = AnalyticsService(organization).get_detailed_seasonality_analysis(
+            use_fiscal_year=True, year=9999
+        )
+        # Year 9999 has no data → filter_year stays None (invalid), categories fall
+        # back to multi-year aggregate. Safer than silently returning empty.
+        assert result['summary']['filter_year'] is None
+        assert result['summary']['available_years'] == [2024]
 
 
 @pytest.mark.django_db

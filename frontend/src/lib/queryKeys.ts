@@ -139,8 +139,13 @@ export const queryKeys = {
     // Seasonality
     seasonality: (useFiscalYear: boolean, orgId?: number, filters?: FilterParams) =>
       ["analytics", "seasonality", useFiscalYear, { orgId, filters }] as const,
-    seasonalityDetailed: (useFiscalYear: boolean, orgId?: number, filters?: FilterParams) =>
-      ["analytics", "seasonality-detailed", useFiscalYear, { orgId, filters }] as const,
+    seasonalityDetailed: (
+      useFiscalYear: boolean,
+      orgId?: number,
+      filters?: FilterParams,
+      year?: number,
+    ) =>
+      ["analytics", "seasonality-detailed", useFiscalYear, year ?? null, { orgId, filters }] as const,
     seasonalityCategoryDrilldown: (
       categoryId: number,
       useFiscalYear: boolean,

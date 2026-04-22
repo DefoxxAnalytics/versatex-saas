@@ -165,9 +165,9 @@ class AnalyticsService:
         """Get basic seasonality analysis."""
         return self._seasonality.get_seasonality_analysis()
 
-    def get_detailed_seasonality_analysis(self, use_fiscal_year=True):
-        """Get detailed seasonality with fiscal year support."""
-        return self._seasonality.get_detailed_seasonality_analysis(use_fiscal_year)
+    def get_detailed_seasonality_analysis(self, use_fiscal_year=True, year=None):
+        """Get detailed seasonality with fiscal year support + optional year filter."""
+        return self._seasonality.get_detailed_seasonality_analysis(use_fiscal_year, year=year)
 
     def get_seasonality_category_drilldown(self, category_id, use_fiscal_year=True):
         """Get seasonality drill-down for a category."""
