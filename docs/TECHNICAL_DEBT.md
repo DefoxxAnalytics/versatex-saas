@@ -521,3 +521,18 @@ class BaseReportGenerator:
 
 **Last Updated:** 2026-01-08 (Updated with performance scaling and type sync items)
 **Next Review:** 2026-02-08
+
+---
+
+## Documentation audit candidates (added 2026-04-23)
+
+These docs may be partially stale; verify before relying on them as authoritative references for Claude Code sessions or customer-facing documentation:
+
+- `docs/AI_INSIGHTS - v1.0.md` — version suffix suggests pre-v2.9 enhancement work
+- `docs/AI_INSIGHTS_ENHANCEMENT_PLAN.md` — planning doc for v2.9, not current reference
+- `docs/P2P_ANALYTICS_SUITE.md` — implementation plan from v2.5 launch, not maintained as reference
+- `docs/P2P_USER_GUIDE.md` — user-facing guide; verify UI screenshots and workflows still match
+- `docs/SECURITY_AUDIT_REPORT.md` — audit snapshot from 2026-01-08, post-v2.7 hardening; currency unverified
+- `docs/REPOSITORY_PATTERN_IMPLEMENTATION_PLAN.md` — implementation plan; verify whether pattern was adopted
+
+Flagged during the 2026-04-23 root CLAUDE.md split (see `docs/superpowers/specs/2026-04-23-claude-md-split-design.md`). Audit individually and either refresh, archive to `docs/archive/`, or link from root CLAUDE.md once verified current.
