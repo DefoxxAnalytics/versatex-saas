@@ -3136,6 +3136,7 @@ def get_rag_stats(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([AIInsightsThrottle])
 def ai_chat_stream(request):
     """
     Stream AI chat responses using Server-Sent Events.
@@ -3213,6 +3214,7 @@ def ai_chat_stream(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([AIInsightsThrottle])
 def ai_quick_query(request):
     """
     Quick query endpoint for single-turn procurement questions.
