@@ -1,6 +1,7 @@
 """
 Analytics API views
 """
+import logging
 from decimal import Decimal
 from django.utils import timezone
 from django.db.models import Count, Sum, Avg, F
@@ -18,6 +19,8 @@ from .models import InsightFeedback
 from .predictive_services import PredictiveAnalyticsService
 from .contract_services import ContractAnalyticsService
 from .compliance_services import ComplianceService
+
+logger = logging.getLogger(__name__)
 
 
 def validate_int_param(request, param_name, default, min_val=1, max_val=1000):
@@ -3200,8 +3203,9 @@ def ai_chat_stream(request):
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            logger.exception("SSE streaming error")  # Finding #6 — diagnostic capture
+            yield f"data: {json.dumps({'error': 'AI service error; see server logs'})}\n\n"
 
     response = StreamingHttpResponse(
         generate_stream(),
@@ -3285,8 +3289,9 @@ def ai_quick_query(request):
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            logger.exception("SSE streaming error")  # Finding #6 — diagnostic capture
+            yield f"data: {json.dumps({'error': 'AI service error; see server logs'})}\n\n"
 
     response = StreamingHttpResponse(
         generate_stream(),
