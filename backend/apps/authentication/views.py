@@ -718,7 +718,20 @@ class UserOrganizationMembershipViewSet(viewsets.ModelViewSet):
         ).select_related('user', 'organization')
 
     def perform_create(self, serializer):
-        from .models import UserOrganizationMembership
+        from rest_framework.exceptions import PermissionDenied
+
+        from .organization_utils import user_is_admin_in_org
+
+        # Finding #2 permanent fix (Phase 1 task 1.2): the class-level IsAdmin
+        # permission gates *who* can call this endpoint but does NOT verify
+        # they are admin of the *target* org. Without this check, an admin of
+        # any org could grant memberships in any OTHER org — full lateral
+        # escalation across tenants.
+        target_org = serializer.validated_data.get('organization')
+        if not user_is_admin_in_org(self.request.user, target_org):
+            raise PermissionDenied(
+                "You must be admin of the target organization to grant memberships."
+            )
 
         # Set invited_by to current user
         serializer.save(invited_by=self.request.user)
