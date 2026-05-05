@@ -14,30 +14,87 @@ from .organization_utils import (
 )
 
 
-class IsAdmin(permissions.BasePermission):
+def _resolve_target_org(request, view, obj=None):
+    """Resolve the target organization for a permission check.
+
+    Priority:
+    1. obj.organization (object-level checks)
+    2. view.kwargs['org_id'] / 'organization_id' / 'organization' (URL-scoped views)
+    3. request.data['organization'] (body-scoped writes)
+    4. request.user.profile.organization (legacy single-org fallback)
+
+    Returns the Organization instance, an int (org_id), or None. The
+    membership helpers (user_is_admin_in_org / user_is_manager_in_org)
+    accept both shapes.
     """
-    Permission class for admin-only access
+    if obj is not None and hasattr(obj, 'organization'):
+        return obj.organization
+
+    kwargs = getattr(view, 'kwargs', None)
+    if isinstance(kwargs, dict):
+        for key in ('org_id', 'organization_id', 'organization'):
+            if key in kwargs:
+                return kwargs[key]
+
+    # Restrict to real dicts so unit-test Mock objects don't leak a Mock value here.
+    data = getattr(request, 'data', None)
+    if isinstance(data, dict):
+        org_from_body = data.get('organization')
+        if org_from_body is not None:
+            return org_from_body
+
+    user = getattr(request, 'user', None)
+    profile = getattr(user, 'profile', None)
+    if profile is not None:
+        return getattr(profile, 'organization', None)
+
+    return None
+
+
+class IsAdmin(permissions.BasePermission):
+    """Allows access only to admins of the target organization.
+
+    Uses membership-aware role lookup (Findings A1 + B9). Multi-org users
+    get correct role evaluation per target org.
     """
     def has_permission(self, request, view):
-        return (
-            request.user and
-            request.user.is_authenticated and
-            hasattr(request.user, 'profile') and
-            request.user.profile.is_admin()
-        )
+        if not (request.user and request.user.is_authenticated):
+            return False
+        target_org = _resolve_target_org(request, view)
+        if target_org is None:
+            return False
+        return user_is_admin_in_org(request.user, target_org)
+
+    def has_object_permission(self, request, view, obj):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        target_org = _resolve_target_org(request, view, obj)
+        if target_org is None:
+            return False
+        return user_is_admin_in_org(request.user, target_org)
 
 
 class IsManager(permissions.BasePermission):
-    """
-    Permission class for manager and admin access
+    """Allows access to admins and managers of the target organization.
+
+    Uses membership-aware role lookup (Findings A1 + B9). Multi-org users
+    get correct role evaluation per target org.
     """
     def has_permission(self, request, view):
-        return (
-            request.user and
-            request.user.is_authenticated and
-            hasattr(request.user, 'profile') and
-            request.user.profile.is_manager()
-        )
+        if not (request.user and request.user.is_authenticated):
+            return False
+        target_org = _resolve_target_org(request, view)
+        if target_org is None:
+            return False
+        return user_is_manager_in_org(request.user, target_org)
+
+    def has_object_permission(self, request, view, obj):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        target_org = _resolve_target_org(request, view, obj)
+        if target_org is None:
+            return False
+        return user_is_manager_in_org(request.user, target_org)
 
 
 class CanUploadData(permissions.BasePermission):
