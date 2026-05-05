@@ -88,6 +88,40 @@ class UserPreferencesSerializer(serializers.Serializer):
     forecastHorizonMonths = serializers.IntegerField(required=False, min_value=1, max_value=36)
     anomalySensitivity = serializers.FloatField(required=False, min_value=0.5, max_value=5.0)
 
+    def validate_aiApiKey(self, value):
+        """Finding A5: validate aiApiKey prefix matches aiProvider.
+
+        - Empty string allowed (clears the key).
+        - Provider taken from the current request OR the user's saved
+          preferences, whichever is present. If neither, accept any non-empty
+          value.
+        - Error message names the expected prefix but does NOT echo the
+          submitted key value (privacy: never log/return user-supplied secrets).
+        """
+        if not value:
+            return value
+
+        provider = self.initial_data.get('aiProvider')
+        if not provider:
+            request = self.context.get('request')
+            if request is not None and hasattr(request.user, 'profile'):
+                provider = (request.user.profile.preferences or {}).get('aiProvider')
+
+        if not provider:
+            return value
+
+        expected_prefix = {
+            'anthropic': 'sk-ant-',
+            'openai': 'sk-',
+        }.get(provider)
+
+        if expected_prefix and not value.startswith(expected_prefix):
+            raise serializers.ValidationError(
+                f"API key for provider '{provider}' must start with '{expected_prefix}'."
+            )
+
+        return value
+
     def validate(self, attrs):
         """Filter out keys not in ALLOWED_PREFERENCE_KEYS."""
         allowed_keys = UserProfile.ALLOWED_PREFERENCE_KEYS
