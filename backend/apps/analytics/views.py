@@ -11,7 +11,10 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.exceptions import ValidationError
 from apps.authentication.utils import log_action
 from apps.authentication.models import Organization
-from apps.authentication.organization_utils import get_target_organization
+from apps.authentication.organization_utils import (
+    get_target_organization,
+    user_is_admin_in_org,
+)
 from .services import AnalyticsService
 from .ai_services import AIInsightsService
 from .models import InsightFeedback
@@ -2606,9 +2609,9 @@ def delete_insight_feedback(request, feedback_id):
     except InsightFeedback.DoesNotExist:
         return Response({'error': 'Feedback not found'}, status=404)
 
-    profile = request.user.profile
+    # Finding B9 (Phase 1 task 1.5b): membership-aware admin check, not legacy profile.role.
     is_owner = feedback.action_by == request.user
-    is_admin = profile.role == 'admin'
+    is_admin = user_is_admin_in_org(request.user, feedback.organization)
 
     if not is_owner and not is_admin:
         return Response(
