@@ -116,3 +116,31 @@ class TestMembershipAwarePermissions(TestCase):
         # User's profile.organization is org_a (admin) — should grant.
         self.assertTrue(IsAdmin().has_permission(request, view),
             "Without explicit target, fall back to profile.organization (org_a, admin -> True).")
+
+    # --- query_params resolution (Findings A1 + B9 follow-up) ---
+    # Production views like resolve_exception read ?organization_id=B via
+    # get_target_organization. Without query_params resolution in the helper,
+    # a manager-in-A / viewer-in-B user could escalate by spoofing
+    # ?organization_id=B while the permission falls back to profile.org.
+    def test_isadmin_grants_via_query_param_for_org_a(self):
+        request = self.factory.get(f"/whatever/?organization_id={self.org_a.id}")
+        request.user = self.user
+        request.data = {}
+        view = _StubView()
+        self.assertTrue(IsAdmin().has_permission(request, view))
+
+    def test_isadmin_denies_via_query_param_for_org_b(self):
+        """Multi-org user spoofs ?organization_id=B; permission must deny."""
+        request = self.factory.get(f"/whatever/?organization_id={self.org_b.id}")
+        request.user = self.user
+        request.data = {}
+        view = _StubView()
+        self.assertFalse(IsAdmin().has_permission(request, view),
+            "User is viewer in Org B; ?organization_id=B must NOT escalate.")
+
+    def test_query_param_org_id_alias_also_resolves(self):
+        request = self.factory.get(f"/whatever/?org_id={self.org_b.id}")
+        request.user = self.user
+        request.data = {}
+        view = _StubView()
+        self.assertFalse(IsAdmin().has_permission(request, view))

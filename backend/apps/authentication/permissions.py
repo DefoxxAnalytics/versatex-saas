@@ -20,8 +20,10 @@ def _resolve_target_org(request, view, obj=None):
     Priority:
     1. obj.organization (object-level checks)
     2. view.kwargs['org_id'] / 'organization_id' / 'organization' (URL-scoped views)
-    3. request.data['organization'] (body-scoped writes)
-    4. request.user.profile.organization (legacy single-org fallback)
+    3. request.query_params['organization_id'] / 'org_id' (matches the
+       superuser-aware org targeting used by get_target_organization)
+    4. request.data['organization'] (body-scoped writes)
+    5. request.user.profile.organization (legacy single-org fallback)
 
     Returns the Organization instance, an int (org_id), or None. The
     membership helpers (user_is_admin_in_org / user_is_manager_in_org)
@@ -35,6 +37,27 @@ def _resolve_target_org(request, view, obj=None):
         for key in ('org_id', 'organization_id', 'organization'):
             if key in kwargs:
                 return kwargs[key]
+
+    # Query params next — production views like resolve_exception read
+    # ?organization_id=B via get_target_organization. Without this lookup,
+    # the permission class falls back to profile.organization while the
+    # view body operates against the query-param org, producing a multi-org
+    # privilege escalation (Findings A1 + B9 follow-up).
+    # DRF wraps requests into DRF Request which exposes query_params; raw
+    # Django HttpRequest exposes GET. Check both so unit tests using
+    # APIRequestFactory (which produces raw HttpRequest) and production DRF
+    # views see the same resolution.
+    for source in (
+        getattr(request, 'query_params', None),
+        getattr(request, 'GET', None),
+    ):
+        # Restrict to real dicts (QueryDict subclasses dict) so unit-test
+        # Mock objects don't leak a Mock value here.
+        if isinstance(source, dict):
+            for key in ('organization_id', 'org_id'):
+                org_from_qp = source.get(key)
+                if org_from_qp is not None:
+                    return org_from_qp
 
     # Restrict to real dicts so unit-test Mock objects don't leak a Mock value here.
     data = getattr(request, 'data', None)
