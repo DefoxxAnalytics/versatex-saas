@@ -414,7 +414,11 @@ def report_detail(request, report_id):
     allowing access to reports from any organization user has access to.
     """
     try:
-        report = Report.objects.get(id=report_id)
+        # Phase 0 containment for Finding #4 — block cross-org reads of is_public reports.
+        # Phase 1 task 1.3 refactors can_access with the resolved is_public semantics.
+        report = Report.objects.filter(
+            organization=request.user.profile.organization
+        ).get(id=report_id)
     except Report.DoesNotExist:
         return Response(
             {'error': 'Report not found'},
@@ -442,7 +446,11 @@ def report_status(request, report_id):
     Note: Uses report's own organization rather than current context.
     """
     try:
-        report = Report.objects.get(id=report_id)
+        # Phase 0 containment for Finding #4 — block cross-org reads of is_public reports.
+        # Phase 1 task 1.3 refactors can_access with the resolved is_public semantics.
+        report = Report.objects.filter(
+            organization=request.user.profile.organization
+        ).get(id=report_id)
     except Report.DoesNotExist:
         return Response(
             {'error': 'Report not found'},
@@ -469,7 +477,11 @@ def report_delete(request, report_id):
     Note: Uses report's own organization rather than current context.
     """
     try:
-        report = Report.objects.get(id=report_id)
+        # Phase 0 containment for Finding #4 — block cross-org reads of is_public reports.
+        # Phase 1 task 1.3 refactors can_access with the resolved is_public semantics.
+        report = Report.objects.filter(
+            organization=request.user.profile.organization
+        ).get(id=report_id)
     except Report.DoesNotExist:
         return Response(
             {'error': 'Report not found'},
@@ -522,7 +534,11 @@ def report_download(request, report_id):
     """
     # Get the report first (without org filter)
     try:
-        report = Report.objects.get(id=report_id)
+        # Phase 0 containment for Finding #4 — block cross-org reads of is_public reports.
+        # Phase 1 task 1.3 refactors can_access with the resolved is_public semantics.
+        report = Report.objects.filter(
+            organization=request.user.profile.organization
+        ).get(id=report_id)
     except Report.DoesNotExist:
         return Response(
             {'error': 'Report not found'},
