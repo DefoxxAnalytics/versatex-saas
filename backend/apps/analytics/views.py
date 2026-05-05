@@ -3163,7 +3163,9 @@ def ai_chat_stream(request):
 
     messages = request.data.get('messages', [])
     context = request.data.get('context', {})
-    model = request.data.get('model', 'claude-sonnet-4-20250514')
+    # Phase 0 containment for Finding #8 — client-controlled model escalation.
+    # Phase 4 task 4.2 will replace this with a proper allowlist.
+    model = 'claude-sonnet-4-20250514'
 
     if not messages:
         return Response({'error': 'Messages are required'}, status=400)
