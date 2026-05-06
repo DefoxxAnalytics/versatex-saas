@@ -43,6 +43,14 @@ if DEBUG and 'runserver' not in sys.argv:
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+# Finding A2: IPs from which X-Real-IP / X-Forwarded-For headers are honored
+# by apps.authentication.utils.get_client_ip. Without this allowlist, any
+# client could spoof X-Real-IP to defeat the per-IP-scoped lockout key and
+# pollute audit logs. Empty default = forwarded headers ignored entirely;
+# only direct REMOTE_ADDR is used. Production behind nginx: set to the
+# upstream IP (typically 127.0.0.1 if same-host, or the docker bridge IP).
+TRUSTED_PROXIES = config('TRUSTED_PROXIES', default='').split(',') if config('TRUSTED_PROXIES', default='') else []
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
