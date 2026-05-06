@@ -141,7 +141,10 @@ export function useFilteredProcurementData() {
     return () => {
       window.removeEventListener("filtersUpdated", handleFilterUpdate);
     };
-  }, [queryClient]);
+    // Finding E2: include orgId so the listener tears down + re-installs on
+    // org change. Without this, the closure holds the prior orgId after a
+    // superuser org-switch and invalidates the wrong tenant's queryKey.
+  }, [queryClient, orgId]);
 
   // Use TanStack Query to cache filtered data
   const {
