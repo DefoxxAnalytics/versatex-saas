@@ -156,9 +156,14 @@ def inactive_profile_user(db, organization):
 
 @pytest.fixture
 def authenticated_client(api_client, user):
-    """Return an authenticated API client for a regular user."""
+    """Return an authenticated API client for a regular user.
+
+    Uses the HTTP-only cookie path (the production browser path). The
+    Authorization: Bearer header fallback in CookieJWTAuthentication is
+    DEBUG-only since v3 Phase 0 Task 0.5 (S-#2).
+    """
     refresh = RefreshToken.for_user(user)
-    api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+    api_client.cookies['access_token'] = str(refresh.access_token)
     return api_client
 
 
@@ -166,7 +171,7 @@ def authenticated_client(api_client, user):
 def admin_client(api_client, admin_user):
     """Return an authenticated API client for an admin user."""
     refresh = RefreshToken.for_user(admin_user)
-    api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+    api_client.cookies['access_token'] = str(refresh.access_token)
     return api_client
 
 
@@ -174,7 +179,7 @@ def admin_client(api_client, admin_user):
 def manager_client(api_client, manager_user):
     """Return an authenticated API client for a manager user."""
     refresh = RefreshToken.for_user(manager_user)
-    api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+    api_client.cookies['access_token'] = str(refresh.access_token)
     return api_client
 
 
@@ -182,7 +187,7 @@ def manager_client(api_client, manager_user):
 def other_org_client(api_client, other_org_user):
     """Return an authenticated API client for a user in another organization."""
     refresh = RefreshToken.for_user(other_org_user)
-    api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+    api_client.cookies['access_token'] = str(refresh.access_token)
     return api_client
 
 

@@ -25,10 +25,14 @@ TEST_KEY = 'sk-ant-api03-cluster8-roundtrip-0123456789-abcdef-xyz'
 
 @pytest.fixture
 def auth_client(admin_user):
-    """APIClient authenticated as a real admin_user fixture."""
+    """APIClient authenticated as a real admin_user fixture.
+
+    Uses the cookie path; the Authorization-header fallback is DEBUG-only
+    since v3 Phase 0 Task 0.5 (S-#2).
+    """
     client = APIClient()
     refresh = RefreshToken.for_user(admin_user)
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+    client.cookies['access_token'] = str(refresh.access_token)
     return client
 
 
