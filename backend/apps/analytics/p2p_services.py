@@ -678,14 +678,15 @@ class P2PAnalyticsService:
 
         exceptions = self._apply_date_filters(exceptions, 'invoice_date')
 
-        # Get primary exception type per supplier (most common)
+        # Most-frequent exception type per supplier — single correlated subquery
+        # replaces the per-supplier N+1 lookup.
         primary_type_subquery = Invoice.objects.filter(
             organization=self.organization,
             has_exception=True,
             supplier_id=OuterRef('supplier__id')
         ).values('exception_type').annotate(
             type_count=Count('id')
-        ).order_by('-type_count').values('exception_type')[:1]
+        ).order_by('-type_count', 'exception_type').values('exception_type')[:1]
 
         by_supplier = exceptions.values(
             'supplier__id', 'supplier__name'
@@ -695,32 +696,21 @@ class P2PAnalyticsService:
             open_count=Count(Case(
                 When(exception_resolved=False, then=1),
                 output_field=IntegerField()
-            ))
+            )),
+            primary_exception_type=Subquery(
+                primary_type_subquery, output_field=CharField()
+            ),
         ).order_by('-exception_amount')[:limit]
 
-        # Get total invoices per supplier for exception rate calculation
-        supplier_totals = {}
+        # Total invoices per supplier for exception_rate denominator.
         supplier_ids = [item['supplier__id'] for item in by_supplier if item['supplier__id']]
+        supplier_totals = {}
         if supplier_ids:
             totals = Invoice.objects.filter(
                 organization=self.organization,
                 supplier_id__in=supplier_ids
             ).values('supplier_id').annotate(total=Count('id'))
             supplier_totals = {t['supplier_id']: t['total'] for t in totals}
-
-        # Get primary exception type per supplier
-        primary_types = {}
-        if supplier_ids:
-            for supplier_id in supplier_ids:
-                primary = Invoice.objects.filter(
-                    organization=self.organization,
-                    has_exception=True,
-                    supplier_id=supplier_id
-                ).values('exception_type').annotate(
-                    type_count=Count('id')
-                ).order_by('-type_count').first()
-                if primary:
-                    primary_types[supplier_id] = primary['exception_type']
 
         result = []
         for item in by_supplier:
@@ -736,7 +726,7 @@ class P2PAnalyticsService:
                 'exception_count': exception_count,
                 'exception_rate': round(exception_rate, 1),
                 'exception_amount': float(item['exception_amount'] or 0),
-                'primary_exception_type': primary_types.get(supplier_id),
+                'primary_exception_type': item['primary_exception_type'],
                 'open_count': item['open_count']
             })
 
