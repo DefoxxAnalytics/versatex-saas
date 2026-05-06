@@ -1,7 +1,7 @@
 # Django Core
 Django==5.2.14
 djangorestframework==3.16.1
-djangorestframework-simplejwt==5.3.1
+djangorestframework-simplejwt==5.5.1
 
 # Database
 psycopg2-binary==2.9.9
@@ -42,7 +42,7 @@ pyjwt>=2.8.0
 drf-spectacular==0.28.0
 
 # Production Server
-gunicorn==21.2.0
+gunicorn==22.0.0
 whitenoise==6.6.0
 
 # Cloud Storage (optional, opt-in via USE_R2_MEDIA=True)
