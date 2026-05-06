@@ -88,6 +88,40 @@ class UserPreferencesSerializer(serializers.Serializer):
     forecastHorizonMonths = serializers.IntegerField(required=False, min_value=1, max_value=36)
     anomalySensitivity = serializers.FloatField(required=False, min_value=0.5, max_value=5.0)
 
+    def validate_aiApiKey(self, value):
+        """Finding A5: validate aiApiKey prefix matches aiProvider.
+
+        - Empty string allowed (clears the key).
+        - Provider taken from the current request OR the user's saved
+          preferences, whichever is present. If neither, accept any non-empty
+          value.
+        - Error message names the expected prefix but does NOT echo the
+          submitted key value (privacy: never log/return user-supplied secrets).
+        """
+        if not value:
+            return value
+
+        provider = self.initial_data.get('aiProvider')
+        if not provider:
+            request = self.context.get('request')
+            if request is not None and hasattr(request.user, 'profile'):
+                provider = (request.user.profile.preferences or {}).get('aiProvider')
+
+        if not provider:
+            return value
+
+        expected_prefix = {
+            'anthropic': 'sk-ant-',
+            'openai': 'sk-',
+        }.get(provider)
+
+        if expected_prefix and not value.startswith(expected_prefix):
+            raise serializers.ValidationError(
+                f"API key for provider '{provider}' must start with '{expected_prefix}'."
+            )
+
+        return value
+
     def validate(self, attrs):
         """Filter out keys not in ALLOWED_PREFERENCE_KEYS."""
         allowed_keys = UserProfile.ALLOWED_PREFERENCE_KEYS
@@ -120,35 +154,34 @@ class RegisterSerializer(serializers.ModelSerializer):
     organization = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.filter(is_active=True)
     )
-    role = serializers.ChoiceField(
-        choices=UserProfile.ROLE_CHOICES,
-        default='viewer'
-    )
-    
+    # Finding #1 (Phase 1 task 1.1): role is NOT a registration-input field.
+    # New users always start as 'viewer'. Admin promotion happens via the
+    # membership endpoint (UserOrganizationMembershipViewSet) or Django admin.
+    # Do NOT add `role` back to this serializer without re-evaluating the
+    # tenant-takeover risk documented in docs/codebase-review-2026-05-04-v2.md.
+
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password', 'password_confirm',
-            'first_name', 'last_name', 'organization', 'role'
+            'first_name', 'last_name', 'organization'
         ]
-    
+
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
         return attrs
-    
+
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
         return value
-    
+
     def create(self, validated_data):
-        # Remove password_confirm and organization/role from user data
+        # Discard password_confirm and pop organization off the User payload.
         validated_data.pop('password_confirm')
         organization = validated_data.pop('organization')
-        role = validated_data.pop('role', 'viewer')
-        
-        # Create user
+
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
@@ -156,14 +189,16 @@ class RegisterSerializer(serializers.ModelSerializer):
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', '')
         )
-        
-        # Create user profile
+
+        # Role is hardcoded to 'viewer' regardless of any caller input. See
+        # Finding #1 - allowing role through registration enabled anonymous
+        # admin minting in any active organization.
         UserProfile.objects.create(
             user=user,
             organization=organization,
-            role=role
+            role='viewer'
         )
-        
+
         return user
 
 

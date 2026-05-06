@@ -10,6 +10,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.conf import settings
 from django_ratelimit.decorators import ratelimit
@@ -656,18 +657,37 @@ def switch_organization(request, org_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
-    # Update primary flag
-    UserOrganizationMembership.objects.filter(
-        user=request.user,
-        is_primary=True
-    ).update(is_primary=False)
+    # Finding #11 (Phase 1 task 1.4): atomic + locked.
+    # The two .update() calls bypass the model's save() guard. Wrap both in
+    # transaction.atomic() with select_for_update on the user's memberships
+    # to preserve the 'exactly one is_primary=True per user' invariant under
+    # concurrent calls. Raising inside the atomic block on missing target
+    # triggers rollback so the previous primary survives.
+    try:
+        with transaction.atomic():
+            # Lock the user's memberships to serialize concurrent switch calls.
+            list(
+                UserOrganizationMembership.objects.select_for_update().filter(
+                    user=request.user
+                )
+            )
 
-    updated = UserOrganizationMembership.objects.filter(
-        user=request.user,
-        organization_id=org_id
-    ).update(is_primary=True)
+            UserOrganizationMembership.objects.filter(
+                user=request.user,
+                is_primary=True
+            ).update(is_primary=False)
 
-    if not updated:
+            updated = UserOrganizationMembership.objects.filter(
+                user=request.user,
+                organization_id=org_id,
+                is_active=True,
+            ).update(is_primary=True)
+
+            if not updated:
+                raise UserOrganizationMembership.DoesNotExist(
+                    'No active membership for the requested organization'
+                )
+    except UserOrganizationMembership.DoesNotExist:
         return Response(
             {'error': 'Membership not found'},
             status=status.HTTP_404_NOT_FOUND
@@ -719,7 +739,20 @@ class UserOrganizationMembershipViewSet(viewsets.ModelViewSet):
         ).select_related('user', 'organization')
 
     def perform_create(self, serializer):
-        from .models import UserOrganizationMembership
+        from rest_framework.exceptions import PermissionDenied
+
+        from .organization_utils import user_is_admin_in_org
+
+        # Finding #2 permanent fix (Phase 1 task 1.2): the class-level IsAdmin
+        # permission gates *who* can call this endpoint but does NOT verify
+        # they are admin of the *target* org. Without this check, an admin of
+        # any org could grant memberships in any OTHER org — full lateral
+        # escalation across tenants.
+        target_org = serializer.validated_data.get('organization')
+        if not user_is_admin_in_org(self.request.user, target_org):
+            raise PermissionDenied(
+                "You must be admin of the target organization to grant memberships."
+            )
 
         if not getattr(settings, 'MEMBERSHIP_CREATE_ENABLED', False):
             # Phase 0 containment for Finding #2 — cross-org admin escalation.
