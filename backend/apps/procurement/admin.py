@@ -5,6 +5,7 @@ Includes Data Upload Center with organization management and upload wizard.
 import json
 import csv
 import io
+import logging
 import uuid as uuid_lib
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -34,6 +35,26 @@ from apps.authentication.models import Organization
 from apps.authentication.utils import log_action
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def _record_import_failure(stats, row_num, exc, doc_type):
+    """Capture a per-row CSV import failure into stats['errors'].
+
+    Truncates the message to 500 chars to avoid pathological log spam from
+    cascading exceptions, and emits logger.exception so ops have full
+    traceback visibility regardless of admin UI surfacing.
+    """
+    stats['failed'] += 1
+    errors = stats.setdefault('errors', [])
+    errors.append({
+        'row': row_num,
+        'error_class': type(exc).__name__,
+        'message': str(exc)[:500],
+    })
+    logger.exception(
+        "P2P %s CSV import row %s failed", doc_type, row_num
+    )
 
 
 @admin.register(Supplier)
@@ -1416,6 +1437,23 @@ class P2PImportMixin:
                         f'Imported {stats["successful"]} {self.p2p_doc_type.upper()}(s), '
                         f'{stats["failed"]} failed, {stats["skipped"]} skipped.'
                     )
+                    error_entries = stats.get('errors') or []
+                    if error_entries:
+                        preview = error_entries[:5]
+                        summary = '; '.join(
+                            f'row {e["row"]}: {e["error_class"]}: {e["message"]}'
+                            for e in preview
+                        )
+                        more = ''
+                        if len(error_entries) > len(preview):
+                            more = (
+                                f' (+{len(error_entries) - len(preview)} more — '
+                                f'see server logs)'
+                            )
+                        messages.error(
+                            request,
+                            f'Row failures: {summary}{more}'
+                        )
 
                 return redirect('..')
 
@@ -1640,8 +1678,8 @@ class PurchaseRequisitionAdmin(P2PImportMixin, admin.ModelAdmin):
                     )
 
                 stats['successful'] += 1
-            except Exception:
-                stats['failed'] += 1
+            except Exception as e:
+                _record_import_failure(stats, row_num, e, 'PR')
 
         return stats
 
@@ -1860,8 +1898,8 @@ class PurchaseOrderAdmin(P2PImportMixin, admin.ModelAdmin):
                     )
 
                 stats['successful'] += 1
-            except Exception:
-                stats['failed'] += 1
+            except Exception as e:
+                _record_import_failure(stats, row_num, e, 'PO')
 
         return stats
 
@@ -2051,8 +2089,8 @@ class GoodsReceiptAdmin(P2PImportMixin, admin.ModelAdmin):
                     )
 
                 stats['successful'] += 1
-            except Exception:
-                stats['failed'] += 1
+            except Exception as e:
+                _record_import_failure(stats, row_num, e, 'GR')
 
         return stats
 
@@ -2303,8 +2341,8 @@ class InvoiceAdmin(P2PImportMixin, admin.ModelAdmin):
                     )
 
                 stats['successful'] += 1
-            except Exception:
-                stats['failed'] += 1
+            except Exception as e:
+                _record_import_failure(stats, row_num, e, 'Invoice')
 
         return stats
 
