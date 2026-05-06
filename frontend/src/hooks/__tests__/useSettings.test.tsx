@@ -42,7 +42,7 @@ const defaultSettings: UserSettings = {
   currency: "USD",
   dateFormat: "MM/DD/YYYY",
   timezone: "America/New_York",
-  forecastingModel: "standard",
+  forecastingModel: "simple_average",
   useExternalAI: false,
   aiProvider: "anthropic",
   forecastHorizonMonths: 6,
@@ -57,7 +57,7 @@ const customSettings: UserSettings = {
   currency: "EUR",
   dateFormat: "DD/MM/YYYY",
   timezone: "Europe/London",
-  forecastingModel: "simple",
+  forecastingModel: "advanced",
   useExternalAI: true,
   aiProvider: "openai",
   forecastHorizonMonths: 12,
@@ -351,7 +351,7 @@ describe("useSettings Hooks", () => {
 
       await act(async () => {
         await result.current.mutateAsync({
-          forecastingModel: "simple",
+          forecastingModel: "linear",
           useExternalAI: true,
           aiProvider: "openai",
         });
@@ -360,7 +360,7 @@ describe("useSettings Hooks", () => {
       const stored = JSON.parse(
         localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}",
       );
-      expect(stored.forecastingModel).toBe("simple");
+      expect(stored.forecastingModel).toBe("linear");
       expect(stored.useExternalAI).toBe(true);
       expect(stored.aiProvider).toBe("openai");
     });
@@ -446,7 +446,8 @@ describe("useSettings Hooks", () => {
       expect(api.authAPI.updatePreferences).toHaveBeenCalled();
     });
 
-    it("should not fail if backend sync fails", async () => {
+    it("should still save to localStorage but reject mutation when backend sync fails (Finding E6)", async () => {
+      // #given an authenticated user with a backend that rejects
       localStorage.setItem(USER_KEY, JSON.stringify({ id: 1 }));
       localStorage.setItem(
         SETTINGS_STORAGE_KEY,
@@ -460,16 +461,25 @@ describe("useSettings Hooks", () => {
         wrapper: createWrapper(),
       });
 
+      // #when a save is attempted
       await act(async () => {
-        await result.current.mutateAsync({ theme: "dark" });
+        try {
+          await result.current.mutateAsync({ theme: "dark" });
+        } catch {
+          // expected — mutation should reject so consumers can react
+        }
       });
 
-      // Should still succeed locally
-      expect(result.current.isSuccess).toBe(true);
+      // #then localStorage was still updated (optimistic primary store)
+      // but the mutation surfaces an error rather than silently succeeding
       const stored = JSON.parse(
         localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}",
       );
       expect(stored.theme).toBe("dark");
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+      expect(result.current.error).toBeTruthy();
     });
 
     it("should update multiple settings at once", async () => {
@@ -561,7 +571,8 @@ describe("useSettings Hooks", () => {
       expect(api.authAPI.replacePreferences).toHaveBeenCalledWith({});
     });
 
-    it("should not fail if backend sync fails on reset", async () => {
+    it("should still clear localStorage but reject mutation when backend reset fails (Finding E6)", async () => {
+      // #given an authenticated user with a backend that rejects
       localStorage.setItem(USER_KEY, JSON.stringify({ id: 1 }));
       localStorage.setItem(
         SETTINGS_STORAGE_KEY,
@@ -575,18 +586,22 @@ describe("useSettings Hooks", () => {
         wrapper: createWrapper(),
       });
 
-      // Should complete without throwing even if backend fails
-      let didComplete = false;
-      let returnedSettings: UserSettings | undefined;
+      // #when a reset is attempted
       await act(async () => {
-        returnedSettings = await result.current.mutateAsync();
-        didComplete = true;
+        try {
+          await result.current.mutateAsync();
+        } catch {
+          // expected — mutation should reject so consumers can react
+        }
       });
 
-      // Mutation should complete successfully (error is caught internally)
-      expect(didComplete).toBe(true);
-      // Should return default settings
-      expect(returnedSettings?.theme).toBe("light");
+      // #then localStorage was still cleared (optimistic primary store)
+      // but the mutation surfaces an error rather than silently succeeding
+      expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toBeNull();
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+      expect(result.current.error).toBeTruthy();
     });
   });
 

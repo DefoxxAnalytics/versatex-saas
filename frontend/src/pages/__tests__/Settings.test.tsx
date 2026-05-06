@@ -22,6 +22,11 @@ vi.mock("@/hooks/useSettings", () => ({
   useSettings: vi.fn(),
   useUpdateSettings: vi.fn(),
   useResetSettings: vi.fn(),
+  FORECASTING_MODEL_LABELS: {
+    simple_average: "Simple Average",
+    linear: "Linear Regression",
+    advanced: "Advanced (ML)",
+  },
 }));
 
 // Mock ThemeContext
@@ -115,7 +120,7 @@ const mockSettings = {
   userRole: "Procurement Manager",
   currency: "USD",
   dateFormat: "MM/DD/YYYY",
-  forecastingModel: "standard" as const,
+  forecastingModel: "simple_average" as const,
   useExternalAI: false,
   aiProvider: "anthropic" as const,
   forecastHorizonMonths: 6,
@@ -408,7 +413,7 @@ describe("Settings Page", () => {
       expect(screen.getByText("Forecasting Model")).toBeInTheDocument();
       expect(
         screen.getByText(
-          "Standard ML provides more accurate forecasts with trend and seasonality detection",
+          /Simple Average is the most conservative.*Linear Regression.*Advanced \(ML\)/i,
         ),
       ).toBeInTheDocument();
     });

@@ -100,7 +100,7 @@ export interface UserPreferences {
   dashboardLayout?: Record<string, unknown>;
   sidebarCollapsed?: boolean;
   // AI & Predictive Analytics Settings
-  forecastingModel?: "simple" | "standard";
+  forecastingModel?: "simple_average" | "linear" | "advanced";
   useExternalAI?: boolean;
   aiProvider?: "anthropic" | "openai";
   forecastHorizonMonths?: number;
@@ -3056,7 +3056,15 @@ export interface AgingOverview {
   avg_dpo?: number;
   on_time_rate: number;
   buckets: AgingBucket[];
-  trend: { month: string; days_to_pay?: number; dpo?: number }[];
+  trend: {
+    month: string;
+    days_to_pay?: number;
+    avg_days_to_pay?: number;
+    /** @deprecated use days_to_pay */
+    dpo?: number;
+    /** @deprecated use avg_days_to_pay */
+    avg_dpo?: number;
+  }[];
 }
 
 export interface AgingBySupplier {

@@ -3,6 +3,7 @@ import {
   useSettings,
   useUpdateSettings,
   useResetSettings,
+  FORECASTING_MODEL_LABELS,
   type ColorScheme,
   type AIProvider,
   type ForecastingModel,
@@ -486,14 +487,15 @@ export default function Settings() {
           <div className="space-y-3">
             <Label htmlFor="forecastingModel">Forecasting Model</Label>
             <Select
-              value={settings?.forecastingModel || "standard"}
+              value={settings?.forecastingModel ?? "simple_average"}
               onValueChange={(value) => {
+                const next = value as ForecastingModel;
                 updateSettings.mutate(
-                  { forecastingModel: value as ForecastingModel },
+                  { forecastingModel: next },
                   {
                     onSuccess: () => {
                       toast.success(
-                        `Forecasting model set to ${value === "standard" ? "Standard ML" : "Simple (Moving Average)"}`,
+                        `Forecasting model set to ${FORECASTING_MODEL_LABELS[next]}`,
                       );
                     },
                   },
@@ -507,23 +509,30 @@ export default function Settings() {
                 <SelectValue placeholder="Select forecasting model" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="simple">
+                <SelectItem value="simple_average">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
-                    <span>Simple (Moving Average)</span>
+                    <span>{FORECASTING_MODEL_LABELS.simple_average}</span>
                   </div>
                 </SelectItem>
-                <SelectItem value="standard">
+                <SelectItem value="linear">
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4" />
-                    <span>Standard ML (Recommended)</span>
+                    <span>{FORECASTING_MODEL_LABELS.linear}</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="advanced">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-4 w-4" />
+                    <span>{FORECASTING_MODEL_LABELS.advanced}</span>
                   </div>
                 </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">
-              Standard ML provides more accurate forecasts with trend and
-              seasonality detection
+              Simple Average is the most conservative; Linear Regression adds
+              trend detection; Advanced (ML) layers seasonality and outlier
+              handling on top.
             </p>
           </div>
 
