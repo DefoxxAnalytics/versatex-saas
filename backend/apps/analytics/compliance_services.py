@@ -8,9 +8,10 @@ Provides analysis for:
 - Violation trend analysis
 """
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.db.models import Sum, Count, Avg, Q, F
 from django.db.models.functions import TruncMonth
+from django.utils import timezone
 from apps.procurement.models import (
     Transaction,
     Supplier,
@@ -57,7 +58,7 @@ class ComplianceService:
         unresolved_violations = self.violations.filter(is_resolved=False).count()
         resolved_today = self.violations.filter(
             is_resolved=True,
-            resolved_at__date=datetime.now().date()
+            resolved_at__date=timezone.now().date()
         ).count()
 
         # Violation severity breakdown
@@ -289,7 +290,7 @@ class ComplianceService:
         Returns:
             dict: Violation trends by month and type
         """
-        cutoff_date = datetime.now().date() - timedelta(days=months * 30)
+        cutoff_date = timezone.now().date() - timedelta(days=months * 30)
 
         monthly_violations = self.violations.filter(
             created_at__date__gte=cutoff_date
@@ -434,7 +435,7 @@ class ComplianceService:
 
         violation.is_resolved = True
         violation.resolved_by = user
-        violation.resolved_at = datetime.now()
+        violation.resolved_at = timezone.now()
         violation.resolution_notes = resolution_notes
         violation.save()
 
