@@ -3,7 +3,6 @@ Authentication views
 """
 from rest_framework import status, generics, viewsets
 from rest_framework.decorators import api_view, permission_classes, action
-from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -753,13 +752,6 @@ class UserOrganizationMembershipViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You must be admin of the target organization to grant memberships."
             )
-
-        if not getattr(settings, 'MEMBERSHIP_CREATE_ENABLED', False):
-            # Phase 0 containment for Finding #2 — cross-org admin escalation.
-            # Permanent fix in Phase 1 task 1.2.
-            exc = APIException("Membership creation temporarily disabled (security review in progress).")
-            exc.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-            raise exc
 
         # Set invited_by to current user
         serializer.save(invited_by=self.request.user)

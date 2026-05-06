@@ -455,11 +455,6 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 # outbound POST. Set to an ntfy.sh topic URL for zero-friction alerting.
 COST_ALERT_WEBHOOK_URL = config('COST_ALERT_WEBHOOK_URL', default='')
 
-# Phase 0 interim containment for Finding #2 — cross-org admin escalation.
-# When False, blocks ALL membership creation endpoint calls.
-# Permanent fix in Phase 1 task 1.2; flip to True (or remove flag) when that lands.
-MEMBERSHIP_CREATE_ENABLED = config('MEMBERSHIP_CREATE_ENABLED', default=False, cast=bool)
-
 # Logging configuration for security events
 # Build handlers dict - only include file handler in production
 _logging_handlers = {
