@@ -450,6 +450,38 @@ FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default='')
 ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 
+# AI streaming chat payload bounds (Finding B10).
+# Defaults are conservative; ops can override via env. Combined with the
+# per-call AIInsightsThrottle (Finding #7), these prevent single-call
+# cost-blast attacks (e.g., one 10MB chat history hitting the LLM with
+# millions of input tokens).
+AI_CHAT_MAX_MESSAGES = config('AI_CHAT_MAX_MESSAGES', default=50, cast=int)
+AI_CHAT_MAX_MESSAGE_CONTENT_CHARS = config(
+    'AI_CHAT_MAX_MESSAGE_CONTENT_CHARS', default=8000, cast=int
+)
+AI_CHAT_MAX_PAYLOAD_BYTES = config(
+    'AI_CHAT_MAX_PAYLOAD_BYTES', default=200_000, cast=int
+)
+
+# AI streaming chat model allowlist (Finding #8 permanent fix).
+# Phase 0 hardcoded the model; Phase 4 task 4.2 replaces that with a
+# settings-driven allowlist + default. Add new model strings here when
+# upgrading; do NOT accept unknown values from the client (Opus is ~5x
+# Sonnet pricing — a single mis-pointed model burns the daily budget).
+# Note: AI_CHAT_DEFAULT_MODEL MUST be present in AI_CHAT_ALLOWED_MODELS
+# for the validation to be coherent (the default is what we fall back to
+# when no client-supplied value is present, and it is then re-checked
+# against the allowlist).
+AI_CHAT_ALLOWED_MODELS = config(
+    'AI_CHAT_ALLOWED_MODELS',
+    default='claude-sonnet-4-20250514',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()],
+)
+AI_CHAT_DEFAULT_MODEL = config(
+    'AI_CHAT_DEFAULT_MODEL',
+    default='claude-sonnet-4-20250514',
+)
+
 # Daily LLM cost-digest webhook (ntfy.sh / Slack / Teams compatible).
 # When empty, send_llm_cost_digest task logs the daily rollup but skips the
 # outbound POST. Set to an ntfy.sh topic URL for zero-friction alerting.

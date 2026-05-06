@@ -69,6 +69,41 @@ To enumerate current endpoints: `grep -E "path\(" backend/apps/analytics/urls.py
 - Run: `docker-compose exec backend pytest backend/apps/analytics/tests/test_ai_services.py -v`
 - Mock LLM calls — never hit the live API in tests
 
+## AI streaming throttle quotas (Finding #7 follow-up)
+
+The two streaming endpoints (`ai_chat_stream`, `ai_quick_query`) carry `@throttle_classes([AIInsightsThrottle])` (added Phase 0 task 0.3 — drift-guard test at `backend/apps/analytics/tests/test_streaming_throttle_driftguard.py`).
+
+**Rate:** `30/hour` per authenticated user. Settings-driven via `REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['ai_insights']` at `backend/config/settings.py:224`. The throttle class itself is a thin `ScopedRateThrottle` subclass at `backend/apps/analytics/views.py:180-182` (scope `'ai_insights'`).
+
+**Scope key:** DRF's `ScopedRateThrottle.get_cache_key` keys by `request.user.pk` for authenticated requests. The 30/hour budget is per-user, not per-org. An org with N active users gets up to N × 30 calls/hour collectively.
+
+**Cost ceiling per user under throttle:**
+
+Per-call cost ~$0.032 at default Sonnet model (500 input + 2K output tokens, list pricing as of 2026-05-04 — see Finding #7 in `docs/codebase-review-2026-05-04-v2.md`).
+
+| Window | Calls | Cost |
+|---|---|---|
+| Per hour, per user | 30 | $0.96 |
+| Per day, per user | 720 | $23.04 |
+| Per day, 50-user org (worst case, all users saturating) | 36,000 | ~$1,152 |
+
+The 50-user assumption is illustrative — actual per-org ceiling scales linearly with active-user count. Real-world spend is far lower because typical sessions don't saturate the throttle. The number worth communicating to ops is **per-user-per-day max ≈ $23**.
+
+**Override (emergency rate change):**
+
+Edit `DEFAULT_THROTTLE_RATES['ai_insights']` at `backend/config/settings.py:224` and redeploy. The rate is settings-driven, so an env-var override is a one-line patch (`'ai_insights': config('AI_INSIGHTS_THROTTLE_RATE', default='30/hour')`) if zero-deploy override becomes a requirement — not currently wired.
+
+There is no admin-UI / runtime path to change the rate. By design — throttle rate is an operational guarantee, not a tunable.
+
+For per-user exceptions (a power user needs more headroom), DRF supports a `get_cache_key` override pattern; not currently configured. If implemented, document the override path here at the time of implementation.
+
+**Related cost-containment controls:**
+
+- **Payload bounds (Finding B10, Phase 4 task 4.1):** `AI_CHAT_MAX_MESSAGES`, `AI_CHAT_MAX_MESSAGE_CONTENT_CHARS`, `AI_CHAT_MAX_PAYLOAD_BYTES` at `backend/config/settings.py:458-464`. Prevents single-call cost-blast (e.g., one 10MB chat history hitting the LLM with millions of input tokens) that the per-call throttle alone cannot stop.
+- **Model allowlist (Finding #8 permanent, Phase 4 task 4.2):** `AI_CHAT_ALLOWED_MODELS` / `AI_CHAT_DEFAULT_MODEL` at `backend/config/settings.py:475-483`. Prevents Opus escalation (~5× Sonnet pricing) via client-supplied `model` parameter.
+
+These three controls (throttle + payload bounds + model allowlist) together form the streaming cost-containment story. Throttle bounds call volume; payload bounds cap per-call input size; model allowlist caps per-token unit cost.
+
 ## See also
 
 - `backend/apps/analytics/ai_services.py` — `AIInsightsService`
@@ -77,3 +112,4 @@ To enumerate current endpoints: `grep -E "path\(" backend/apps/analytics/urls.py
 - `frontend/src/hooks/useAIInsights.ts` — frontend hooks
 - `docs/ACCURACY_AUDIT.md` — Conventions §5 (preferences), §6 (no silent fallback), §8 (document don't refactor)
 - `docs/CHANGELOG.md` — v2.6 (AI Insights ROI) and v2.9 (LLM enhancement) historical context
+- `docs/codebase-review-2026-05-04-v2.md` — Finding #7 (throttle), Finding #8 (model allowlist), Finding B10 (payload bounds)
