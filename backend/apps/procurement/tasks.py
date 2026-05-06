@@ -5,6 +5,7 @@ Handles background CSV upload processing for large files.
 import csv
 import io
 import json
+import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -12,7 +13,15 @@ from celery import shared_task
 from django.db import transaction
 from django.utils import timezone
 
+from apps.authentication.models import UserOrganizationMembership
+
 from .models import DataUpload, Transaction, Supplier, Category
+
+logger = logging.getLogger(__name__)
+
+MEMBERSHIP_REVOKED_ERROR = (
+    "User no longer an active member of organization at execution time"
+)
 
 
 @shared_task(bind=True, soft_time_limit=600, max_retries=3, retry_backoff=True)
@@ -34,6 +43,34 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         upload = DataUpload.objects.get(id=upload_id)
     except DataUpload.DoesNotExist:
         return {'error': 'Upload not found'}
+
+    # Finding C4: re-verify the uploader's organization membership at execution
+    # time. Between `delay()` and execution, the user may have been removed,
+    # had their membership deactivated, or had their role/access revoked. If
+    # they are no longer an active member, abort before any rows are written.
+    if not UserOrganizationMembership.objects.filter(
+        user=upload.uploaded_by,
+        organization=upload.organization,
+        is_active=True,
+    ).exists():
+        logger.warning(
+            "process_csv_upload aborted: user_id=%s no longer an active member "
+            "of organization_id=%s (upload_id=%s, batch_id=%s)",
+            getattr(upload.uploaded_by, 'id', None),
+            upload.organization_id,
+            upload.id,
+            upload.batch_id,
+        )
+        upload.status = 'failed'
+        upload.error_log = json.dumps([{'message': MEMBERSHIP_REVOKED_ERROR}])
+        upload.progress_message = MEMBERSHIP_REVOKED_ERROR
+        upload.completed_at = timezone.now()
+        upload.save()
+        return {
+            'status': 'failed',
+            'error': MEMBERSHIP_REVOKED_ERROR,
+            'upload_id': upload.id,
+        }
 
     try:
         # Update status
