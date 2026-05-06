@@ -24,6 +24,7 @@ These canonical docs auto-load via subdirectory `CLAUDE.md` breadcrumbs at `back
 - **Demo data seeding** (industry profiles, command reference) → [docs/DEMO_DATA.md](docs/DEMO_DATA.md)
 - **Architectural decision history** (the "why" behind v2.0–v2.12) → [docs/CHANGELOG.md](docs/CHANGELOG.md)
 - **Codebase review remediation** (v2.12, completed 2026-05-06) → [docs/plans/2026-05-05-codebase-remediation.md](docs/plans/2026-05-05-codebase-remediation.md) Closure status section. Per-finding SHAs for the 17 verified Critical + 28 confirmed High findings closed across Phases 0-5.
+- **Open items from remediation** (Task 1.3 product decision, Task 5.4 scale criterion) → [docs/REMEDIATION-OPEN-ITEMS.md](docs/REMEDIATION-OPEN-ITEMS.md)
 - **Production deployment** (Railway) → [docs/RAILWAY-DEPLOY-WALKTHROUGH.md](docs/RAILWAY-DEPLOY-WALKTHROUGH.md)
 - **First-time setup** → [docs/setup/QUICK_START_GUIDE.md](docs/setup/QUICK_START_GUIDE.md)
 - **Docker troubleshooting** → [docs/setup/DOCKER-TROUBLESHOOTING.md](docs/setup/DOCKER-TROUBLESHOOTING.md)
