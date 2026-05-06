@@ -535,7 +535,14 @@ class UserPreferencesView(generics.GenericAPIView):
         AIInsightsCache.invalidate_org_cache(profile.organization_id)
 
     def patch(self, request):
-        """Update user preferences (merge with existing). Response masked."""
+        """Update user preferences (merge with existing). Response masked.
+
+        S-#4: read-merge-write is wrapped in transaction.atomic() with
+        select_for_update() on the profile row. Without the row lock, two
+        concurrent PATCHes (e.g., user updates `theme` in tab A and `aiApiKey`
+        in tab B simultaneously) would silently lose one update - the second
+        writer's full JSON blob would overwrite the first.
+        """
         if not hasattr(request.user, 'profile'):
             return Response(
                 {'error': 'User profile not found'},
@@ -545,12 +552,14 @@ class UserPreferencesView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Merge with existing preferences
-        profile = request.user.profile
-        current_prefs = profile.preferences or {}
-        current_prefs.update(serializer.validated_data)
-        profile.preferences = current_prefs
-        profile.save(update_fields=['preferences', 'updated_at'])
+        with transaction.atomic():
+            profile = UserProfile.objects.select_for_update().get(
+                pk=request.user.profile.pk
+            )
+            current_prefs = profile.preferences or {}
+            current_prefs.update(serializer.validated_data)
+            profile.preferences = current_prefs
+            profile.save(update_fields=['preferences', 'updated_at'])
 
         self._invalidate_ai_cache_if_needed(profile, set(serializer.validated_data.keys()))
 
@@ -853,10 +862,16 @@ class OrganizationSavingsConfigView(generics.GenericAPIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        current_config = org.savings_config or {}
-        current_config.update(serializer.validated_data)
-        org.savings_config = current_config
-        org.save(update_fields=['savings_config', 'updated_at'])
+        # S-#4: read-merge-write under select_for_update to prevent lost
+        # updates when two admins edit the same org's savings_config
+        # concurrently. Without the row lock, the second writer's full JSON
+        # blob overwrites the first.
+        with transaction.atomic():
+            org = Organization.objects.select_for_update().get(pk=org.pk)
+            current_config = org.savings_config or {}
+            current_config.update(serializer.validated_data)
+            org.savings_config = current_config
+            org.save(update_fields=['savings_config', 'updated_at'])
 
         log_action(
             user=request.user,
