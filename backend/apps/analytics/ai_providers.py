@@ -1085,6 +1085,18 @@ class AIProviderManager:
         if not self._validator:
             return response
 
+        # Finding #10 (Phase 2 task 2.6): seed _validation with the
+        # failure-state marker BEFORE the try block. Three downstream sites
+        # read `result.get('_validation', {}).get('validated', True)` and
+        # default a missing key to True. If the validator crashes mid-run,
+        # an absent _validation key would silently pass un-validated AI
+        # output (potential hallucinations) as validated. The try/except
+        # below overwrites this on success; a crash leaves it visible.
+        response['_validation'] = {
+            'validated': False,
+            'reason': 'validator_crashed',
+        }
+
         try:
             validation = self._validator.validate(response, source_data)
 
@@ -1105,8 +1117,11 @@ class AIProviderManager:
                     f"{validation['critical_count']} critical, {validation['error_count']} errors"
                 )
 
-        except Exception as e:
-            logger.error(f"Validation failed with exception: {e}")
+        except Exception:
+            logger.exception(
+                f"Validation crashed for {request_type}; "
+                "response retains validated=False, reason=validator_crashed"
+            )
 
         return response
 
