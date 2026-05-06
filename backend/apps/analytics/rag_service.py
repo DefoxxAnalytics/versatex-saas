@@ -127,7 +127,15 @@ class RAGService:
         if self._pgvector_available and self.openai_client:
             embedding = self._get_embedding(query)
             if embedding:
-                return self._vector_search(embedding, doc_types, top_k, threshold)
+                try:
+                    return self._vector_search(
+                        embedding, doc_types, top_k, threshold
+                    )
+                except Exception:
+                    logger.exception(
+                        "Vector search failed; falling back to keyword search"
+                    )
+                    return self._keyword_search(query, doc_types, top_k)
 
         return self._keyword_search(query, doc_types, top_k)
 
@@ -138,67 +146,64 @@ class RAGService:
         top_k: int,
         threshold: float
     ) -> List[dict]:
-        """Perform vector similarity search using pgvector."""
-        from .models import EmbeddedDocument
+        """Perform vector similarity search using pgvector.
 
-        try:
-            type_filter = ""
-            params = [embedding, self.organization_id]
+        Raises on failure; the caller (`search`) handles the fallback to
+        keyword search with the original query (Finding B12).
+        """
+        from .models import EmbeddedDocument  # noqa: F401  (import-time validation)
 
-            if doc_types:
-                placeholders = ', '.join(['%s'] * len(doc_types))
-                type_filter = f"AND document_type IN ({placeholders})"
-                params.extend(doc_types)
+        type_filter = ""
+        params = [embedding, self.organization_id]
 
-            params.extend([embedding, threshold, top_k])
+        if doc_types:
+            placeholders = ', '.join(['%s'] * len(doc_types))
+            type_filter = f"AND document_type IN ({placeholders})"
+            params.extend(doc_types)
 
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    SELECT
-                        id,
-                        document_type,
-                        title,
-                        content,
-                        metadata,
-                        1 - (content_embedding <=> %s::vector) as similarity
-                    FROM analytics_embeddeddocument
-                    WHERE organization_id = %s
-                      AND is_active = TRUE
-                      AND content_embedding IS NOT NULL
-                      {type_filter}
-                    ORDER BY content_embedding <=> %s::vector
-                    LIMIT %s
-                    """,
-                    params[:-1] + [params[-2], params[-1]]
-                )
+        params.extend([embedding, threshold, top_k])
 
-                columns = [col[0] for col in cursor.description]
-                results = []
-
-                for row in cursor.fetchall():
-                    row_dict = dict(zip(columns, row))
-                    if row_dict['similarity'] >= threshold:
-                        results.append({
-                            'id': str(row_dict['id']),
-                            'document_type': row_dict['document_type'],
-                            'title': row_dict['title'],
-                            'content': row_dict['content'],
-                            'metadata': row_dict['metadata'],
-                            'similarity': round(row_dict['similarity'], 4),
-                        })
-
-                logger.info(
-                    f"RAG vector search: {len(results)} docs found "
-                    f"(threshold: {threshold}, top_k: {top_k})"
-                )
-                return results
-
-        except Exception as e:
-            logger.error(f"Vector search failed: {e}")
-            return self._keyword_search(
-                "fallback", doc_types, top_k
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT
+                    id,
+                    document_type,
+                    title,
+                    content,
+                    metadata,
+                    1 - (content_embedding <=> %s::vector) as similarity
+                FROM analytics_embeddeddocument
+                WHERE organization_id = %s
+                  AND is_active = TRUE
+                  AND content_embedding IS NOT NULL
+                  {type_filter}
+                ORDER BY content_embedding <=> %s::vector
+                LIMIT %s
+                """,
+                params[:-1] + [params[-2], params[-1]]
             )
+
+            columns = [col[0] for col in cursor.description]
+            results = []
+
+            for row in cursor.fetchall():
+                row_dict = dict(zip(columns, row))
+                if row_dict['similarity'] >= threshold:
+                    results.append({
+                        'id': str(row_dict['id']),
+                        'document_type': row_dict['document_type'],
+                        'title': row_dict['title'],
+                        'content': row_dict['content'],
+                        'metadata': row_dict['metadata'],
+                        'similarity': round(row_dict['similarity'], 4),
+                    })
+
+            logger.info(
+                f"RAG vector search: {len(results)} docs found "
+                f"(threshold: {threshold}, top_k: {top_k})"
+            )
+            return results
 
     def _keyword_search(
         self,
