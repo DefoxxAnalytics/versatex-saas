@@ -145,12 +145,7 @@ export function useResolveViolation() {
       return response.data;
     },
     onSuccess: () => {
-      // Invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ["policy-violations"] });
-      queryClient.invalidateQueries({ queryKey: ["compliance-overview"] });
-      queryClient.invalidateQueries({
-        queryKey: ["supplier-compliance-scores"],
-      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.compliance.all });
     },
   });
 }
