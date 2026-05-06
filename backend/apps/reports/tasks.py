@@ -35,6 +35,15 @@ def generate_report_async(self, report_id: str):
         service.generate_report_data(report)
 
         logger.info(f"Report {report_id} generated successfully")
+
+        # Finding D1 (Phase 2 task 2.1): chain reschedule_report so scheduled
+        # reports advance next_run after a successful run. Without this,
+        # process_scheduled_reports re-queues the same report on every Celery
+        # Beat tick because next_run stays in the past forever. The
+        # reschedule_report task is a no-op for non-scheduled reports.
+        if report.is_scheduled:
+            reschedule_report.delay(str(report.pk))
+
         return {
             'status': 'completed',
             'report_id': str(report.id),
@@ -48,8 +57,17 @@ def generate_report_async(self, report_id: str):
         if self.request.retries < self.max_retries:
             raise self.retry(exc=e)
 
-        # Final failure
-        report.mark_failed(str(e))
+        # Final failure: mark the report as failed for one-off reports, but
+        # for scheduled reports advance next_run so the schedule survives a
+        # bad run instead of being permanently disabled. (status stays
+        # 'scheduled' so process_scheduled_reports picks it up next cadence.)
+        if report.is_scheduled:
+            report.error_message = str(e)
+            report.save(update_fields=['error_message'])
+            reschedule_report.delay(str(report.pk))
+        else:
+            report.mark_failed(str(e))
+
         return {
             'status': 'failed',
             'report_id': str(report.id),
