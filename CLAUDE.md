@@ -210,7 +210,7 @@ Sensitive keys (API keys, tokens, secrets) also require `MASKED_PREFERENCE_KEYS`
 
 When `AIInsightsService` cannot enhance because no API key is configured, the response **must** omit the `ai_enhancement` key, and the frontend **must** render a "(Deterministic)" label. No silent fallback — users cannot tell otherwise.
 
-Scope: this rule covers only the no-key case. Tri-state `enhancement_status` covering LLM-failure separately is tracked as Cross-Module Open; until it lands, LLM-failure fallback remains silent.
+Scope: as of Phase 2 task 2.4, responses always carry `enhancement_status` ∈ `{enhanced, unavailable_no_key, unavailable_failed}` — the LLM-failure-vs-no-key gap is closed. Frontend renders three distinct deterministic-mode subtitles. The orchestrator also emits `enhancement_error_code` (typed code from `apps/analytics/llm_error_codes.py`) on `unavailable_failed`. Streaming SSE error frames carry `{error_code, error}` from the same vocabulary.
 
 ### 7. Class-C relabels change labels, not response shape
 
