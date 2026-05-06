@@ -22,7 +22,8 @@ These canonical docs auto-load via subdirectory `CLAUDE.md` breadcrumbs at `back
 
 - **Accuracy conventions ledger** (full background, Cross-Module Open tracker) → [docs/ACCURACY_AUDIT.md](docs/ACCURACY_AUDIT.md)
 - **Demo data seeding** (industry profiles, command reference) → [docs/DEMO_DATA.md](docs/DEMO_DATA.md)
-- **Architectural decision history** (the "why" behind v2.0–v2.11) → [docs/CHANGELOG.md](docs/CHANGELOG.md)
+- **Architectural decision history** (the "why" behind v2.0–v2.12) → [docs/CHANGELOG.md](docs/CHANGELOG.md)
+- **Codebase review remediation** (v2.12, completed 2026-05-06) → [docs/plans/2026-05-05-codebase-remediation.md](docs/plans/2026-05-05-codebase-remediation.md) Closure status section. Per-finding SHAs for the 17 verified Critical + 28 confirmed High findings closed across Phases 0-5.
 - **Production deployment** (Railway) → [docs/RAILWAY-DEPLOY-WALKTHROUGH.md](docs/RAILWAY-DEPLOY-WALKTHROUGH.md)
 - **First-time setup** → [docs/setup/QUICK_START_GUIDE.md](docs/setup/QUICK_START_GUIDE.md)
 - **Docker troubleshooting** → [docs/setup/DOCKER-TROUBLESHOOTING.md](docs/setup/DOCKER-TROUBLESHOOTING.md)
@@ -313,7 +314,21 @@ GitHub Actions runs on push/PR to `main`: backend lint (black, isort, flake8), D
 
 [![CI](https://github.com/DefoxxAnalytics/versatex-saas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DefoxxAnalytics/versatex-saas/actions/workflows/ci.yml)
 
-## Recent Updates (v2.11) — Demo Tenant Support
+## Recent Updates (v2.12) — Codebase review remediation (38 commits, 6 phases)
+
+Closed 17 verified Critical + 28 confirmed High findings from the 2026-05-04 codebase review across Phases 0–5 (commit range `1e9c434`..`371c4da`, pushed 2026-05-06). Two intentional deferrals: Task 1.3 (`Report.is_public` semantics — pending product decision) and Task 5.4 (aging DB-side aggregation — gated on tenant invoice count exceeding 20K; current max is 267).
+
+**Load-bearing gotchas to know about post-remediation:**
+- **`enhancement_status` tri-state replaces silent fallback.** AI insights responses always carry `enhancement_status` ∈ `{enhanced, unavailable_no_key, unavailable_failed}` plus `enhancement_error_code` (typed code from `apps/analytics/llm_error_codes.py`) on failure. Frontend renders 3 distinct deterministic-mode subtitles. See accuracy convention §6 below.
+- **`_resolve_target_org` helper at `apps/authentication/permissions.py`** — every membership-aware permission class now resolves target org from `obj.organization → view.kwargs → request.query_params → request.data → profile.organization fallback`. Don't add new permission classes that revisit `request.user.profile.role` directly; use `user_is_admin_in_org` / `user_is_manager_in_org` against the resolved target.
+- **Postgres triggers enforce cross-org supplier FK invariants** (migration `0009_cross_org_fk_check_constraints`). `Transaction`, `Contract`, `PurchaseOrder`, `Invoice` cannot have `organization_id != supplier.organization_id` even via raw SQL or `.update()`. Tests skip on SQLite (`settings_test`); CI Postgres exercises them.
+- **Streaming AI cost-containment is layered**: throttle (`AIInsightsThrottle` at `30/hour` per user) + payload bounds (`AI_CHAT_MAX_*` settings) + model allowlist (`AI_CHAT_ALLOWED_MODELS`). Each can be tuned independently. See [docs/claude/ai-insights.md](docs/claude/ai-insights.md) for the full cost story.
+- **Phase 0 interim survivors on `main`:** the nginx `/auth/register/` block is redundant (Phase 1 task 1.1 hardened the serializer; harmless defense-in-depth) and the Reports endpoint org filter is REQUIRED until Task 1.3 ships. Do NOT remove either without the corresponding Phase 1.1 / 1.3 verification.
+- **MSW server uses deferred-handler init** (`installHandlers()` in `beforeAll`) plus `pool: forks` `singleFork: true`. Don't reintroduce `setupServer(...handlers)` at module-load — it races with Vite SSR.
+
+Full per-finding closure SHAs: [docs/plans/2026-05-05-codebase-remediation.md § Closure status](docs/plans/2026-05-05-codebase-remediation.md). Architectural reasoning: [docs/CHANGELOG.md § v2.12](docs/CHANGELOG.md).
+
+## Previous Updates (v2.11) — Demo Tenant Support
 
 Added `Organization.is_demo` BooleanField to distinguish synthetic-data tenants from real customers, plus an admin export action.
 
@@ -325,7 +340,7 @@ Added `Organization.is_demo` BooleanField to distinguish synthetic-data tenants 
 
 Full implementation history: [docs/CHANGELOG.md § v2.11](docs/CHANGELOG.md).
 
-## Previous Updates (v2.10) — Brand Color Scheme + Demo Data Seeding
+## Earlier Updates (v2.10) — Brand Color Scheme + Demo Data Seeding
 
 Third `colorScheme` option `"versatex"` added (alongside `"navy"` / `"classic"`) using grayscale chrome with brand yellow `#FDC00F` accent. Two new management commands stand up realistic, industry-specific demo environments.
 

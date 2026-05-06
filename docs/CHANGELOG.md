@@ -4,6 +4,40 @@ Curated history of significant architectural decisions and the reasoning behind 
 
 > **For Claude Code sessions:** This file is reference-only. Read it when investigating "why does the code work this way" or before changing a design that has historical context.
 
+## v2.12 (2026-05-06) — Codebase review remediation (38 commits across 6 phases)
+
+**Why:** A multi-agent codebase review at commit `1e9c434` surfaced 17 verified Critical findings (auth/tenant takeover, AI cost surface, broken-in-prod features) and 28 confirmed High findings (perf, observability, type-safety). All 45 actionable findings closed; two intentionally deferred. Branch baseline `1e9c434` → `371c4da` (Phase 5 merge, pushed 2026-05-06).
+
+**Key architectural decisions:**
+
+- **Phased rollout (interim → permanent → hardening) over big-bang refactor.** Phase 0 shipped reversible interim mitigations (nginx blocks, feature flags, single-line decorators) within hours so the live-exploitation paths closed before the permanent fixes were ready. Phase 0's `MEMBERSHIP_CREATE_ENABLED` flag was removed in cleanup commit `489ef58` after Phase 1 task 1.2 superseded it; the nginx `/auth/register/` block and Reports interim org filter survive on `main` until their permanent successors land (Task 1.3 still pending).
+
+- **Tri-state `enhancement_status` closes Cross-Module Open #6.** AI insights responses now always carry `enhancement_status` ∈ `{enhanced, unavailable_no_key, unavailable_failed}` plus `enhancement_error_code` from `apps/analytics/llm_error_codes.py` on the failure branch. Frontend renders three distinct deterministic-mode subtitles. Convention §6 in `docs/ACCURACY_AUDIT.md` updated to reflect the resolution.
+
+- **Membership-aware permission helper at `apps/authentication/permissions.py:_resolve_target_org`.** Replaces legacy `profile.role` single-org check on 8+ permission classes (`IsAdmin`, `IsManager`, `CanResolveExceptions`, `CanViewPaymentData`, `CanApprovePO`, `CanApprovePR`, `CanViewOwnRequisitions`, `delete_insight_feedback`). Resolves target org from `obj.organization → view.kwargs → request.query_params → request.data → profile.organization fallback`. Multi-org users now get correct role evaluation per request.
+
+- **Cross-org FK enforcement via Postgres triggers, not Django CheckConstraints.** Postgres CHECK constraints can't reference related-table columns. Migration `0009_cross_org_fk_check_constraints.py` creates 4 trigger functions (one per supplier-FK model: Transaction, Contract, PurchaseOrder, Invoice) that fire on INSERT/UPDATE and raise on `organization_id != supplier.organization_id`. Survives ORM bypass (admin shell, raw SQL, bulk imports). Tests skip on SQLite; CI Postgres exercises them.
+
+- **Deferred-handler init for MSW server in tests.** `setupServer(...handlers)` at module-load raced with Vite SSR's `handlers` import resolution under parallel workers (`__vite_ssr_import_1__.handlers is not iterable`). Refactored to `setupServer()` at module-load + `installHandlers()` in `beforeAll` plus `pool: forks` with `singleFork: true`. Original specific failure mode eliminated; residual ~30% Vite-transform-pipeline flake (different error class) deferred as upstream issue.
+
+- **CSP `unsafe-eval` removed; `unsafe-inline` retained for now.** Bundle scan + Playwright smoke confirmed ECharts 6.x doesn't use `eval`/`new Function`; `unsafe-eval` removed from `script-src` in `nginx.conf`. `unsafe-inline` retained because `vite-plugin-manus-runtime` injects a 365 KB inline script into every prod build (Manus IDE preview tooling shipping into prod). Future cleanup: gate the plugin on `command === 'serve'` in `vite.config.ts` so prod doesn't ship it; once landed, drop `unsafe-inline` too.
+
+- **Subagent-driven execution with two-stage review per task.** ~30 implementer subagents dispatched across phases, each with a spec-compliance review + code-quality review. Two findings caught during review (#5 conflated two issues; #20 disputed `get_or_create __iexact` reviewer error) prevented incorrect fixes. Drift-guard tests added per fix so the same defect can't regress silently.
+
+**Test count delta:**
+- Backend: 753 → **851** (+98 tests, +30% suite size)
+- Frontend (clean run): ~810 → **887** (+77 tests)
+
+**Two intentional deferrals (with explicit criteria):**
+- **Task 1.3** — `Report.is_public` semantics. Reports product owner must decide between (a) "public within org" or (b) "public platform-wide with admin gating on the setter." Phase 0 interim org filter at `reports/views.py:417, 449, 480, 537` keeps the cross-org read path closed until then.
+- **Task 5.4** — aging method DB-side aggregation. Diagnostic at remediation time showed max **267** open invoices per tenant (Bolt & Nuts: 267, Pacific State: 251, Mercy: 244), well below the 20K elevation threshold. Re-run the diagnostic if any tenant approaches the threshold.
+
+**Sources of truth:**
+- `docs/codebase-review-2026-05-04-v2.md` — verified Critical findings (the 17)
+- `docs/codebase-review-2026-05-04-highs-verified.md` — verified High findings (the 28)
+- `docs/codebase-review-2026-05-04_Review_Summary.md` — meta-review of the v2 doc
+- `docs/plans/2026-05-05-codebase-remediation.md` — implementation plan with per-finding closure SHAs
+
 ## v2.11 (2026-01-22) — Demo tenant support
 
 **Why:** Superusers needed to distinguish demo orgs (containing seeded synthetic data) from real customer orgs at a glance, and data-governance actions needed to gate on the distinction.
