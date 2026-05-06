@@ -588,11 +588,40 @@ export interface ChatStreamState {
   usage: { input_tokens?: number; output_tokens?: number } | null;
 }
 
+/**
+ * Typed SSE error codes emitted by the backend's streaming endpoints.
+ *
+ * Mirrors `apps/analytics/llm_error_codes.AIErrorCode`. When the backend
+ * cannot produce tokens, it emits a frame `{error_code, error}` so the UI
+ * can branch on the code (and not parse free-text).
+ */
+export const SSE_ERROR_CODE_MESSAGES: Record<string, string> = {
+  auth_error: "AI authentication failed. Update the API key in Settings.",
+  rate_limited: "AI service is rate limited. Try again shortly.",
+  service_unavailable: "AI service is temporarily unavailable.",
+  bad_request: "AI request was rejected.",
+  unknown: "AI service error. See server logs.",
+};
+
 interface StreamEvent {
   token?: string;
   done?: boolean;
   error?: string;
+  error_code?: string;
   usage?: { input_tokens: number; output_tokens: number };
+}
+
+/**
+ * Pick the user-facing message for a streaming error frame.
+ *
+ * Prefers the typed `error_code` mapping (frontend owns the copy) and falls
+ * back to the server-provided `error` string, then a generic default.
+ */
+function resolveStreamErrorMessage(data: StreamEvent): string {
+  if (data.error_code && SSE_ERROR_CODE_MESSAGES[data.error_code]) {
+    return SSE_ERROR_CODE_MESSAGES[data.error_code];
+  }
+  return data.error || "Unknown error";
 }
 
 /**
@@ -681,11 +710,11 @@ export function useAIChatStream() {
             try {
               const data: StreamEvent = JSON.parse(line.slice(6));
 
-              if (data.error) {
+              if (data.error || data.error_code) {
                 setState((prev) => ({
                   ...prev,
                   isStreaming: false,
-                  error: data.error || "Unknown error",
+                  error: resolveStreamErrorMessage(data),
                 }));
                 return;
               }
@@ -823,11 +852,11 @@ export function useAIQuickQuery() {
             try {
               const data: StreamEvent = JSON.parse(line.slice(6));
 
-              if (data.error) {
+              if (data.error || data.error_code) {
                 setState((prev) => ({
                   ...prev,
                   isStreaming: false,
-                  error: data.error || "Unknown error",
+                  error: resolveStreamErrorMessage(data),
                 }));
                 return;
               }

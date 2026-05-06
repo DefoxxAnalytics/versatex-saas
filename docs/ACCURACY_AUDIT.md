@@ -291,7 +291,7 @@ Every item in `Cross-Module Open` has a named disposition:
 - **`P2PAnalyticsService` does not inherit BaseAnalyticsService** — owner: dedicated P2P-filter-parity pass.
 - **`aiApiKey` storage encryption** — owner: security-review TBD. Label fix (remove false "stored encrypted" text) shipped in Cluster 8.
 - **AI-enhanced insight accuracy acceptance criteria** — owner: future initiative TBD. LLM correctness explicitly out of charter.
-- **`enhancement_status` tri-state UX** — owner: future UX pass. Label-only indicator shipped instead.
+- **`enhancement_status` tri-state UX** — **RESOLVED** by Phase 2 task 2.4 (commit `8cd0e61`) + task 2.3 (commit `ed84a56`). Response now always carries `enhancement_status` ∈ `{enhanced, unavailable_no_key, unavailable_failed}` plus `enhancement_error_code` (typed code from `apps/analytics/llm_error_codes.py`) on the failure branch. Frontend renders three distinct deterministic-mode subtitles. SSE streaming error frames carry the same typed-code vocabulary.
 
 ### Branch + test state at close
 

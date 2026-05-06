@@ -28,6 +28,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List, Dict, Any, Callable
 
+from .llm_error_codes import classify_anthropic_error
+
 logger = logging.getLogger(__name__)
 
 
@@ -994,7 +996,12 @@ class AIProviderManager:
         self.enable_validation = enable_validation
 
         self._providers: Dict[str, AIProvider] = {}
-        self._provider_errors: Dict[str, str] = {}
+        # Finding B14: per-provider error context with typed code instead
+        # of just a string. Shape: {provider_name: {'code': AIErrorCode, 'message': str}}.
+        # Read by orchestrator (ai_services.py) to populate enhancement_error_code
+        # so callers can distinguish auth vs rate-limit vs unknown failures.
+        self._provider_errors: Dict[str, Dict[str, str]] = {}
+        self._last_error_code: Optional[str] = None
         self._last_successful_provider: Optional[str] = None
         self._semantic_cache = None
         self._rag_service = None
@@ -1014,7 +1021,10 @@ class AIProviderManager:
                     logger.info(f"Initialized {name} provider")
                 except Exception as e:
                     logger.warning(f"Failed to initialize {name} provider: {e}")
-                    self._provider_errors[name] = str(e)
+                    self._provider_errors[name] = {
+                        'code': classify_anthropic_error(e),
+                        'message': str(e)[:300],
+                    }
 
     def _initialize_semantic_cache(self) -> None:
         """Initialize semantic cache service if enabled."""
@@ -1085,6 +1095,18 @@ class AIProviderManager:
         if not self._validator:
             return response
 
+        # Finding #10 (Phase 2 task 2.6): seed _validation with the
+        # failure-state marker BEFORE the try block. Three downstream sites
+        # read `result.get('_validation', {}).get('validated', True)` and
+        # default a missing key to True. If the validator crashes mid-run,
+        # an absent _validation key would silently pass un-validated AI
+        # output (potential hallucinations) as validated. The try/except
+        # below overwrites this on success; a crash leaves it visible.
+        response['_validation'] = {
+            'validated': False,
+            'reason': 'validator_crashed',
+        }
+
         try:
             validation = self._validator.validate(response, source_data)
 
@@ -1105,8 +1127,11 @@ class AIProviderManager:
                     f"{validation['critical_count']} critical, {validation['error_count']} errors"
                 )
 
-        except Exception as e:
-            logger.error(f"Validation failed with exception: {e}")
+        except Exception:
+            logger.exception(
+                f"Validation crashed for {request_type}; "
+                "response retains validated=False, reason=validator_crashed"
+            )
 
         return response
 
@@ -1222,6 +1247,16 @@ class AIProviderManager:
         """Get list of available (configured) providers."""
         return [name for name, provider in self._providers.items() if provider.is_available()]
 
+    def get_last_error_code(self) -> Optional[str]:
+        """Return the most recent failover error code (Finding B14).
+
+        The orchestrator (`AIInsightsService`) reads this when an LLM call
+        returns no usable result so the response's `enhancement_error_code`
+        reflects the actual failure mode (auth_error, rate_limited, etc.)
+        instead of the previous hardcoded 'llm_call_failed' string.
+        """
+        return self._last_error_code
+
     def health_check_all(self) -> Dict[str, dict]:
         """Perform health check on all providers."""
         results = {}
@@ -1308,7 +1343,15 @@ class AIProviderManager:
                         self._log_request(provider.last_metrics, cache_hit=False)
             except Exception as e:
                 last_error = e
-                self._provider_errors[provider_name] = str(e)
+                # Finding B14: record typed error code so the orchestrator
+                # can map it to enhancement_error_code and the SSE pipeline
+                # can branch on auth vs rate-limit vs unknown.
+                error_code = classify_anthropic_error(e)
+                self._provider_errors[provider_name] = {
+                    'code': error_code,
+                    'message': str(e)[:300],
+                }
+                self._last_error_code = error_code
                 logger.warning(f"Provider {provider_name} failed: {e}")
 
                 if hasattr(provider, 'last_metrics') and provider.last_metrics:
@@ -1382,7 +1425,12 @@ class AIProviderManager:
                         self._log_request(provider.last_metrics, cache_hit=False)
             except Exception as e:
                 last_error = e
-                self._provider_errors[provider_name] = str(e)
+                error_code = classify_anthropic_error(e)
+                self._provider_errors[provider_name] = {
+                    'code': error_code,
+                    'message': str(e)[:300],
+                }
+                self._last_error_code = error_code
                 logger.warning(f"Provider {provider_name} failed for single insight: {e}")
 
                 if hasattr(provider, 'last_metrics') and provider.last_metrics:
@@ -1466,7 +1514,12 @@ class AIProviderManager:
                         self._log_request(provider.last_metrics, cache_hit=False)
             except Exception as e:
                 last_error = e
-                self._provider_errors[provider_name] = str(e)
+                error_code = classify_anthropic_error(e)
+                self._provider_errors[provider_name] = {
+                    'code': error_code,
+                    'message': str(e)[:300],
+                }
+                self._last_error_code = error_code
                 logger.warning(f"Provider {provider_name} failed for deep analysis: {e}")
 
                 if hasattr(provider, 'last_metrics') and provider.last_metrics:
@@ -1517,6 +1570,7 @@ class AIProviderManager:
             "primary_provider": self.primary_provider,
             "fallback_enabled": self.enable_fallback,
             "last_successful_provider": self._last_successful_provider,
+            "last_error_code": self._last_error_code,
             "available_providers": self.get_available_providers(),
             "provider_errors": self._provider_errors.copy(),
             "providers": {
