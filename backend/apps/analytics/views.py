@@ -1043,6 +1043,7 @@ def ai_insights(request):
         'insight_count': data['summary']['total_insights'],
         'cache_hit': data.get('cache_hit', False),
         'ai_enhanced': 'ai_enhancement' in data,
+        'enhancement_status': data.get('enhancement_status'),
     }
     if request.user.is_superuser:
         log_details['organization_id'] = organization.id

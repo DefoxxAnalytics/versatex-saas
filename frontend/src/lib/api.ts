@@ -948,11 +948,29 @@ export interface AIInsightsSummary {
   by_type: Record<AIInsightType, number>;
 }
 
+/**
+ * Tri-state status for AI enhancement availability (Finding #9, CLAUDE.md
+ * Cross-Module Open). The orchestrator always emits this so the UI can
+ * distinguish "no key configured" from "key configured but LLM call failed".
+ *
+ * - `enhanced`: LLM enhancement succeeded; `ai_enhancement` payload present.
+ * - `unavailable_no_key`: no API key configured; `ai_enhancement` omitted.
+ * - `unavailable_failed`: key configured but LLM call failed or returned no
+ *    usable result; `ai_enhancement` omitted, `enhancement_error_code` may
+ *    be set.
+ */
+export type AIEnhancementStatus =
+  | "enhanced"
+  | "unavailable_no_key"
+  | "unavailable_failed";
+
 export interface AIInsightsResponse {
   insights: AIInsight[];
   summary: AIInsightsSummary;
   ai_enhancement?: AIEnhancement;
   cache_hit?: boolean;
+  enhancement_status?: AIEnhancementStatus;
+  enhancement_error_code?: string;
 }
 
 export interface AIInsightsListResponse {

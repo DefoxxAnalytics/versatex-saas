@@ -280,6 +280,16 @@ class AIInsightsService:
     ANOMALY_Z_SCORE_THRESHOLD = 2.0  # Standard deviations for anomaly
     CONSOLIDATION_MIN_SUPPLIERS = 3  # Minimum suppliers for consolidation insight
 
+    # enhancement_status tri-state — Finding #9 (CLAUDE.md Cross-Module Open).
+    # Always emitted on the orchestrator response. Frontend branches on this
+    # value to render distinct labels:
+    #   ENHANCED            — LLM call succeeded; ai_enhancement payload present
+    #   UNAVAILABLE_NO_KEY  — no API key configured; ai_enhancement omitted
+    #   UNAVAILABLE_FAILED  — API key configured but LLM call failed; ai_enhancement omitted
+    ENHANCEMENT_STATUS_ENHANCED = 'enhanced'
+    ENHANCEMENT_STATUS_UNAVAILABLE_NO_KEY = 'unavailable_no_key'
+    ENHANCEMENT_STATUS_UNAVAILABLE_FAILED = 'unavailable_failed'
+
     def __init__(
         self,
         organization,
@@ -396,8 +406,15 @@ class AIInsightsService:
             Dictionary with:
             - insights: List of insight objects
             - summary: Summary statistics
-            - ai_enhancement: Structured AI recommendations (if enabled)
-            - cache_hit: Whether AI enhancement was served from cache
+            - enhancement_status: Tri-state (Finding #9). Always present. One of:
+                * 'enhanced' — LLM enhancement succeeded; ai_enhancement payload included
+                * 'unavailable_no_key' — no API key configured; ai_enhancement omitted
+                * 'unavailable_failed' — API key configured but LLM call failed
+                  or returned no usable result; ai_enhancement omitted and
+                  enhancement_error_code is set (currently 'llm_call_failed').
+            - ai_enhancement: Structured AI recommendations (only when enhanced)
+            - cache_hit: Whether AI enhancement was served from cache (only when enhanced)
+            - enhancement_error_code: Typed error code (only when unavailable_failed)
         """
         # Collect raw insights from all generators
         cost_insights = self.get_cost_optimization_insights()
@@ -457,38 +474,56 @@ class AIInsightsService:
             'summary': summary
         }
 
-        if self.use_external_ai and self.api_key:
-            cache_hit = False
-            ai_enhancement = None
+        # Finding #9 — `enhancement_status` tri-state. Always emit so the
+        # frontend can distinguish "no key configured" from "key configured
+        # but LLM call failed" — previously both rendered the same label.
+        if not (self.use_external_ai and self.api_key):
+            result['enhancement_status'] = self.ENHANCEMENT_STATUS_UNAVAILABLE_NO_KEY
+            return result
 
-            if not force_refresh:
-                ai_enhancement = AIInsightsCache.get_cached_enhancement(
-                    self.organization.id,
-                    clean_insights
-                )
-                cache_hit = ai_enhancement is not None
+        cache_hit = False
+        ai_enhancement = None
 
-            if not ai_enhancement:
+        if not force_refresh:
+            ai_enhancement = AIInsightsCache.get_cached_enhancement(
+                self.organization.id,
+                clean_insights
+            )
+            cache_hit = ai_enhancement is not None
+
+        if not ai_enhancement:
+            try:
                 ai_enhancement = self._enhance_with_external_ai(clean_insights)
-                if ai_enhancement:
-                    AIInsightsCache.cache_enhancement(
-                        self.organization.id,
-                        clean_insights,
-                        ai_enhancement
-                    )
+            except Exception:
+                logger.exception(
+                    "LLM enhancement raised; downgrading to deterministic "
+                    "(enhancement_status=unavailable_failed)"
+                )
+                ai_enhancement = None
 
             if ai_enhancement:
-                result['ai_enhancement'] = ai_enhancement
-                result['cache_hit'] = cache_hit
+                AIInsightsCache.cache_enhancement(
+                    self.organization.id,
+                    clean_insights,
+                    ai_enhancement
+                )
 
-            # Per-insight enhancement for high-value insights
-            per_insight_enhancer = PerInsightEnhancer(
-                api_key=self.api_key,
-                provider=self.ai_provider,
-                api_keys=self.api_keys,
-                enable_fallback=self.enable_fallback
-            )
-            result['insights'] = per_insight_enhancer.enhance_insights(clean_insights)
+        if ai_enhancement:
+            result['ai_enhancement'] = ai_enhancement
+            result['cache_hit'] = cache_hit
+            result['enhancement_status'] = self.ENHANCEMENT_STATUS_ENHANCED
+        else:
+            result['enhancement_status'] = self.ENHANCEMENT_STATUS_UNAVAILABLE_FAILED
+            result['enhancement_error_code'] = 'llm_call_failed'
+
+        # Per-insight enhancement for high-value insights
+        per_insight_enhancer = PerInsightEnhancer(
+            api_key=self.api_key,
+            provider=self.ai_provider,
+            api_keys=self.api_keys,
+            enable_fallback=self.enable_fallback
+        )
+        result['insights'] = per_insight_enhancer.enhance_insights(clean_insights)
 
         return result
 

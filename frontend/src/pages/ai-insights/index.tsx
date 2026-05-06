@@ -104,6 +104,7 @@ import type {
   AIInsight,
   AIInsightType,
   AIEnhancement,
+  AIEnhancementStatus,
   AIRecommendation,
   InsightActionTaken,
   InsightOutcome,
@@ -1828,10 +1829,24 @@ export default function AIInsightsPage() {
 
   const { summary } = data;
 
-  // If the backend did not enhance the insights with an external LLM (no
-  // API key configured or enhancement failed), surface that clearly so users
-  // aren't under the impression they're seeing AI-enhanced recommendations.
-  const isDeterministicOnly = !data?.ai_enhancement;
+  // Tri-state enhancement status (Finding #9 — CLAUDE.md Cross-Module Open).
+  // Distinguishes "no key configured" from "key configured but LLM call
+  // failed" so users can take the right action (configure key vs. retry).
+  // Default to `unavailable_no_key` for backwards compatibility with any
+  // cached payloads that pre-date the field.
+  const enhancementStatus: AIEnhancementStatus =
+    data?.enhancement_status ?? "unavailable_no_key";
+  const isEnhanced = enhancementStatus === "enhanced";
+  const isEnhancementFailed = enhancementStatus === "unavailable_failed";
+  const isDeterministicOnly = !isEnhanced;
+
+  const deterministicLabel = isEnhancementFailed
+    ? "(Deterministic — AI temporarily unavailable)"
+    : "(Deterministic)";
+
+  const deterministicSubtitle = isEnhancementFailed
+    ? "Rule-based recommendations — AI enhancement temporarily unavailable. Check the server logs and try again."
+    : "Rule-based recommendations — External AI Enhancement not active. Configure an API key in Settings to enable.";
 
   return (
     <div className="space-y-8 p-6">
@@ -1843,13 +1858,13 @@ export default function AIInsightsPage() {
             AI Insights
             {isDeterministicOnly && (
               <span className="text-sm font-normal text-gray-500 ml-1">
-                (Deterministic)
+                {deterministicLabel}
               </span>
             )}
           </h1>
           <p className="text-gray-600 mt-2">
             {isDeterministicOnly
-              ? "Rule-based recommendations — External AI Enhancement not active. Configure an API key in Settings to enable."
+              ? deterministicSubtitle
               : "Smart recommendations powered by machine learning"}
           </p>
         </div>
