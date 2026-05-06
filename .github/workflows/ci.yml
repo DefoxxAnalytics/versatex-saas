@@ -153,6 +153,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Lockfile drift guard (S-#3)
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "::error::frontend/package-lock.json should not exist; project uses pnpm. Delete it."
+            exit 1
+          fi
+          if [ -f yarn.lock ]; then
+            echo "::error::frontend/yarn.lock should not exist; project uses pnpm. Delete it."
+            exit 1
+          fi
+        shell: bash
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
