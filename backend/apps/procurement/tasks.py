@@ -23,6 +23,10 @@ MEMBERSHIP_REVOKED_ERROR = (
     "User no longer an active member of organization at execution time"
 )
 
+# Number of CSV rows committed per `transaction.atomic()` block. Exposed at
+# module scope so tests can patch a smaller value without inflating fixtures.
+CSV_BATCH_SIZE = 1000
+
 
 @shared_task(bind=True, soft_time_limit=600, max_retries=3, retry_backoff=True)
 def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplicates=False, strict_duplicates=False):
@@ -117,12 +121,21 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         failed = 0
         duplicates = 0
         errors = []
+        batch_log = []
+        batches_succeeded = 0
+        batches_failed = 0
+        first_failed_batch_index = None
+        first_failed_batch_rows = None
 
         # Process in batches
-        batch_size = 1000
-        for batch_start in range(0, total_rows, batch_size):
+        batch_size = CSV_BATCH_SIZE
+        total_batches = (total_rows + batch_size - 1) // batch_size
+
+        for batch_index, batch_start in enumerate(range(0, total_rows, batch_size)):
             batch_end = min(batch_start + batch_size, total_rows)
             batch_rows = rows[batch_start:batch_end]
+            batch_first_row_number = batch_start + 2  # +2 for 1-indexed and header row
+            batch_last_row_number = batch_end + 1
 
             # Update progress
             progress = int((batch_start / total_rows) * 100)
@@ -130,89 +143,170 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
             upload.progress_message = f'Processing rows {batch_start + 1} to {batch_end} of {total_rows}'
             upload.save()
 
-            with transaction.atomic():
-                for i, row in enumerate(batch_rows):
-                    row_num = batch_start + i + 2  # +2 for 1-indexed and header row
+            batch_successful = 0
+            batch_failed = 0
+            batch_duplicates = 0
+            batch_row_errors = []
+            first_failed_row_in_batch = None
+            failure_exception = None
+            abort_after_batch = False
 
-                    try:
-                        # Validate row
-                        row_errors = _validate_row(row, mapping, row_num)
-                        if row_errors:
-                            errors.extend(row_errors)
+            try:
+                with transaction.atomic():
+                    for i, row in enumerate(batch_rows):
+                        row_num = batch_start + i + 2  # +2 for 1-indexed and header row
+
+                        try:
+                            # Validate row
+                            row_errors = _validate_row(row, mapping, row_num)
+                            if row_errors:
+                                batch_row_errors.extend(row_errors)
+                                if not skip_invalid:
+                                    raise ValueError(f'Row {row_num} has validation errors')
+                                batch_failed += 1
+                                if first_failed_row_in_batch is None:
+                                    first_failed_row_in_batch = row_num
+                                continue
+
+                            # Check for duplicates (unless skip_duplicates is enabled)
+                            if not skip_duplicates and _is_duplicate_row(row, mapping, organization, strict_mode=strict_duplicates):
+                                batch_duplicates += 1
+                                continue
+
+                            # Get or create supplier
+                            supplier_name = row.get(supplier_col, '').strip()
+                            supplier, _ = Supplier.objects.get_or_create(
+                                organization=organization,
+                                name__iexact=supplier_name,
+                                defaults={'name': supplier_name}
+                            )
+
+                            # Get or create category
+                            category_name = row.get(category_col, '').strip()
+                            category, _ = Category.objects.get_or_create(
+                                organization=organization,
+                                name__iexact=category_name,
+                                defaults={'name': category_name}
+                            )
+
+                            # Parse amount
+                            amount_str = row.get(amount_col, '').strip().replace('$', '').replace(',', '')
+                            amount = Decimal(amount_str)
+
+                            # Parse date
+                            date_str = row.get(date_col, '').strip()
+                            date = _parse_date(date_str)
+
+                            # Create transaction
+                            Transaction.objects.create(
+                                organization=organization,
+                                supplier=supplier,
+                                category=category,
+                                amount=amount,
+                                date=date,
+                                description=row.get(description_col, '').strip() if description_col else '',
+                                invoice_number=row.get(invoice_col, '').strip() if invoice_col else '',
+                                fiscal_year=row.get(fiscal_year_col, '').strip() if fiscal_year_col else str(date.year),
+                                subcategory=row.get(subcategory_col, '').strip() if subcategory_col else '',
+                                location=row.get(location_col, '').strip() if location_col else '',
+                                spend_band=row.get(spend_band_col, '').strip() if spend_band_col else '',
+                                payment_method=row.get(payment_method_col, '').strip() if payment_method_col else '',
+                                uploaded_by=user,
+                                upload_batch=upload.batch_id
+                            )
+                            batch_successful += 1
+
+                        except Exception as e:
+                            batch_failed += 1
+                            if first_failed_row_in_batch is None:
+                                first_failed_row_in_batch = row_num
+                            batch_row_errors.append({
+                                'row': row_num,
+                                'field': 'general',
+                                'message': str(e)[:500],
+                                'value': ''
+                            })
                             if not skip_invalid:
-                                raise ValueError(f'Row {row_num} has validation errors')
-                            failed += 1
-                            continue
+                                raise
+            except Exception as e:
+                # Atomic block rolled back the entire batch. Discard any
+                # in-memory per-row counters/errors from this batch (they
+                # do not reflect committed state) and record the batch
+                # as failed for observability.
+                failure_exception = e
+                abort_after_batch = not skip_invalid
 
-                        # Check for duplicates (unless skip_duplicates is enabled)
-                        if not skip_duplicates and _is_duplicate_row(row, mapping, organization, strict_mode=strict_duplicates):
-                            duplicates += 1
-                            continue
+            if failure_exception is not None:
+                batches_failed += 1
+                if first_failed_batch_index is None:
+                    first_failed_batch_index = batch_index
+                    first_failed_batch_rows = (batch_first_row_number, batch_last_row_number)
+                batch_log.append({
+                    'kind': 'batch',
+                    'batch_index': batch_index,
+                    'first_row_number': batch_first_row_number,
+                    'last_row_number': batch_last_row_number,
+                    'rows_in_batch': len(batch_rows),
+                    'status': 'failed',
+                    'rolled_back': True,
+                    'first_failed_row_number': first_failed_row_in_batch,
+                    'error_class': type(failure_exception).__name__,
+                    'message': str(failure_exception)[:500],
+                })
+                if abort_after_batch:
+                    break
+                # skip_invalid=True: keep going with the next batch
+                continue
 
-                        # Get or create supplier
-                        supplier_name = row.get(supplier_col, '').strip()
-                        supplier, _ = Supplier.objects.get_or_create(
-                            organization=organization,
-                            name__iexact=supplier_name,
-                            defaults={'name': supplier_name}
-                        )
+            # Batch committed successfully. Promote per-batch counters
+            # and per-row errors to the upload-level totals.
+            batches_succeeded += 1
+            successful += batch_successful
+            failed += batch_failed
+            duplicates += batch_duplicates
+            errors.extend(batch_row_errors)
+            batch_log.append({
+                'kind': 'batch',
+                'batch_index': batch_index,
+                'first_row_number': batch_first_row_number,
+                'last_row_number': batch_last_row_number,
+                'rows_in_batch': len(batch_rows),
+                'status': 'succeeded',
+                'rolled_back': False,
+                'rows_ingested': batch_successful,
+                'rows_skipped_invalid': batch_failed,
+                'rows_skipped_duplicate': batch_duplicates,
+            })
 
-                        # Get or create category
-                        category_name = row.get(category_col, '').strip()
-                        category, _ = Category.objects.get_or_create(
-                            organization=organization,
-                            name__iexact=category_name,
-                            defaults={'name': category_name}
-                        )
+        batches_unprocessed = max(total_batches - batches_succeeded - batches_failed, 0)
 
-                        # Parse amount
-                        amount_str = row.get(amount_col, '').strip().replace('$', '').replace(',', '')
-                        amount = Decimal(amount_str)
-
-                        # Parse date
-                        date_str = row.get(date_col, '').strip()
-                        date = _parse_date(date_str)
-
-                        # Create transaction
-                        Transaction.objects.create(
-                            organization=organization,
-                            supplier=supplier,
-                            category=category,
-                            amount=amount,
-                            date=date,
-                            description=row.get(description_col, '').strip() if description_col else '',
-                            invoice_number=row.get(invoice_col, '').strip() if invoice_col else '',
-                            fiscal_year=row.get(fiscal_year_col, '').strip() if fiscal_year_col else str(date.year),
-                            subcategory=row.get(subcategory_col, '').strip() if subcategory_col else '',
-                            location=row.get(location_col, '').strip() if location_col else '',
-                            spend_band=row.get(spend_band_col, '').strip() if spend_band_col else '',
-                            payment_method=row.get(payment_method_col, '').strip() if payment_method_col else '',
-                            uploaded_by=user,
-                            upload_batch=upload.batch_id
-                        )
-                        successful += 1
-
-                    except Exception as e:
-                        failed += 1
-                        errors.append({
-                            'row': row_num,
-                            'field': 'general',
-                            'message': str(e),
-                            'value': ''
-                        })
-                        if not skip_invalid:
-                            raise
-
-        # Finalize upload record
+        # Finalize upload record. error_log carries both per-batch summaries
+        # (kind='batch') and per-row errors (kind='row') so users can drill
+        # from batch-level outcome down to the failing row.
         upload.successful_rows = successful
         upload.failed_rows = failed
         upload.duplicate_rows = duplicates
-        upload.error_log = json.dumps(errors) if errors else ''
+        combined_log = batch_log + [{'kind': 'row', **err} for err in errors]
+        upload.error_log = json.dumps(combined_log) if combined_log else ''
         upload.completed_at = timezone.now()
         upload.progress_percent = 100
-        upload.progress_message = 'Processing complete'
 
-        if failed == 0 and duplicates == 0:
+        if batches_failed:
+            first_failed_start, first_failed_end = first_failed_batch_rows
+            summary = (
+                f'{batches_succeeded} of {total_batches} batches succeeded; '
+                f'first failed batch: {first_failed_batch_index} '
+                f'(rows {first_failed_start}-{first_failed_end}); '
+                f'{batches_unprocessed} unprocessed; see error_log for details.'
+            )
+        else:
+            summary = (
+                f'Processing complete: {batches_succeeded} of '
+                f'{total_batches} batches succeeded.'
+            )
+        upload.progress_message = summary[:255]
+
+        if batches_failed == 0 and failed == 0 and duplicates == 0:
             upload.status = 'completed'
         elif successful > 0:
             upload.status = 'partial'
