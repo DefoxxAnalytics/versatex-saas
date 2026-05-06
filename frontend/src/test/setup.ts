@@ -2,20 +2,24 @@ import "@testing-library/jest-dom";
 import { expect, afterEach, beforeAll, afterAll } from "vitest";
 import { cleanup } from "@testing-library/react";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { server } from "./mocks/server";
+import { server, installHandlers } from "./mocks/server";
 
 // Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers);
 
-// Start MSW server before all tests
+// Start MSW server before all tests. Handlers are installed inside beforeAll
+// rather than at server.ts module-load time to avoid a Vite SSR race in
+// parallel Vitest workers where the `handlers` named import can resolve to
+// undefined, producing "__vite_ssr_import_1__.handlers is not iterable".
 beforeAll(() => {
+  installHandlers();
   server.listen({ onUnhandledRequest: "warn" });
 });
 
-// Reset handlers after each test
+// Reset handlers after each test (back to the full installed set)
 afterEach(() => {
   cleanup();
-  server.resetHandlers();
+  installHandlers();
 });
 
 // Close server after all tests

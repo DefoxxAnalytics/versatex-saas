@@ -6,11 +6,17 @@ import path from "path";
 import { defineConfig } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
+// jsxLocPlugin and vitePluginManusRuntime instrument source files with
+// positional metadata that's serialized over Vitest's worker IPC. Under
+// parallel-worker contention the JSON payloads can tear, producing flaky
+// "SyntaxError: Unterminated string" / "missing ) after argument list"
+// failures in random suites. Exclude them from test mode.
+const isTest = !!process.env.VITEST;
+
 const plugins = [
   react(),
   tailwindcss(),
-  jsxLocPlugin(),
-  vitePluginManusRuntime(),
+  ...(isTest ? [] : [jsxLocPlugin(), vitePluginManusRuntime()]),
 ];
 
 export default defineConfig({
@@ -80,5 +86,19 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     exclude: ["**/node_modules/**", "**/e2e/**"],
+    // Serialize suites in one fork. Halves the flake rate vs default
+    // multi-fork (~3/10 vs ~6/10) without meaningfully increasing wall
+    // time on a 30-suite project. Combined with the server.ts deferred-
+    // handlers fix and the test-mode plugin exclusion above, the original
+    // "handlers is not iterable" failure mode is eliminated; the residual
+    // ~30% flake is a Vite transform-pipeline issue (Unterminated JSON /
+    // Invalid token / missing-paren errors at suite-load time, hitting
+    // random files each run) that's beyond this cleanup's scope.
+    pool: "forks",
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
   },
 });
