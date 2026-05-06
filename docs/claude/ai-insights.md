@@ -104,6 +104,31 @@ For per-user exceptions (a power user needs more headroom), DRF supports a `get_
 
 These three controls (throttle + payload bounds + model allowlist) together form the streaming cost-containment story. Throttle bounds call volume; payload bounds cap per-call input size; model allowlist caps per-token unit cost.
 
+## Streamdown markdown rendering (Finding E4)
+
+Both `frontend/src/components/AIChatBox.tsx` and
+`frontend/src/components/AIInsightsChat.tsx` render LLM-produced markdown
+through `<Streamdown>` from the `streamdown` npm package. There is no
+in-tree sanitization layer — the package's internal DOMPurify pass is the
+only barrier between LLM output and the DOM.
+
+**Pinned version:** `streamdown` at exact `1.4.0` in `frontend/package.json`
+(no `^` caret). A silent minor-version bump could change the package's
+internal sanitization configuration without showing up in a normal review;
+the exact pin forces a deliberate update + audit pass.
+
+**Audit posture for future updates:** before bumping, verify the new version
+still uses DOMPurify with HTML profile (no SVG/MathML enabled by default —
+those open additional XSS surface). Open the package's `node_modules` copy
+and grep for `DOMPurify.sanitize|allowedTags|FORBID`.
+
+**Why no in-tree sanitization layer:** the project deliberately delegates
+to Streamdown's vendor sanitization rather than wrapping its output in a
+project-side `DOMPurify` call, on the rationale that double-sanitization
+risks double-escaping legitimate markdown (code fences, math). The trade-off
+is auditability — captured here so future refactors don't silently change
+the security posture.
+
 ## See also
 
 - `backend/apps/analytics/ai_services.py` — `AIInsightsService`
