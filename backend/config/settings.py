@@ -332,6 +332,11 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@analytics.com
 # Celery Configuration
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+# Finding A6: explicit task-result expiration (Celery's default is 24h with
+# the Redis backend, but making it explicit lets ops tune without surprise
+# and documents the policy. 1h = enough for status polling on long uploads,
+# short enough that Redis OOM risk stays bounded.)
+CELERY_RESULT_EXPIRES = config('CELERY_RESULT_EXPIRES', default=3600, cast=int)
 
 # Django Cache Configuration (Redis)
 # Uses Django's native Redis backend (Django 4.0+)

@@ -76,9 +76,15 @@ def record_failed_login(request, username: str):
     ip = get_client_ip(request)
     key = get_failed_login_key(username, ip)
 
-    # Get current failed attempts
-    failed_attempts = cache.get(key, 0) + 1
-    cache.set(key, failed_attempts, LOCKOUT_DURATION)
+    # Finding A3: preserve the original window from first failure. The prior
+    # cache.set(...) overwrote TTL on every failure, letting a slow attacker
+    # pace attempts indefinitely. Use add() to seed the counter on first
+    # failure (with the full LOCKOUT_DURATION), then incr() for subsequent
+    # failures within that fixed window. Once the window expires, the key
+    # is gone and a fresh attacker gets a fresh window — same lockout
+    # ergonomics for legitimate users, no slow-rate bypass.
+    cache.add(key, 0, LOCKOUT_DURATION)
+    failed_attempts = cache.incr(key)
 
     # Log the failed attempt (don't log full username for privacy)
     logger.warning(
