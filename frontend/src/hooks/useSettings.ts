@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { authAPI, type UserPreferences } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -304,8 +305,14 @@ export function useSettings() {
         queryClient.setQueryData(queryKeys.settings.all, merged);
       })
       .catch((error) => {
-        // Silently fail - use local settings
-        console.debug("Could not sync settings from backend:", error);
+        // Best-effort hydration; localStorage already provides the cached
+        // settings, so a hydration failure is non-blocking. Surface via
+        // console.warn (visible in default devtools) but no toast — the user
+        // hasn't taken any action they'd expect feedback for.
+        console.warn(
+          "Initial settings hydration from backend failed; using localStorage",
+          error,
+        );
       });
   }, [queryClient]);
 
@@ -333,23 +340,31 @@ export function useUpdateSettings() {
 
   return useMutation<UserSettings, Error, Partial<UserSettings>>({
     mutationFn: async (settings: Partial<UserSettings>) => {
-      // Save to localStorage immediately
+      // Save to localStorage immediately (optimistic; primary store)
       const updated = saveSettingsToStorage(settings);
 
-      // Sync to backend if authenticated
+      // Sync to backend if authenticated. Errors propagate so consumers
+      // can react via mutation.error / their own onError handlers.
       if (isAuthenticated()) {
-        try {
-          await authAPI.updatePreferences(toApiFormat(settings));
-        } catch (error) {
-          // Log but don't fail - localStorage is primary
-          console.debug("Could not sync settings to backend:", error);
-        }
+        await authAPI.updatePreferences(toApiFormat(settings));
       }
 
       return updated;
     },
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.settings.all, data);
+    },
+    onError: (error) => {
+      // localStorage save already happened optimistically before this fires.
+      // Surface the backend-sync failure so the user knows their settings
+      // exist locally only.
+      toast.error(
+        "Settings saved locally but couldn't sync to server. Try again.",
+        {
+          description:
+            error instanceof Error ? error.message : "Unknown error",
+        },
+      );
     },
   });
 }
@@ -369,22 +384,31 @@ export function useResetSettings() {
 
   return useMutation<UserSettings, Error, void>({
     mutationFn: async () => {
-      // Clear localStorage
+      // Clear localStorage immediately (optimistic; primary store)
       localStorage.removeItem(SETTINGS_STORAGE_KEY);
 
-      // Sync to backend if authenticated
+      // Sync to backend if authenticated. Errors propagate so consumers
+      // can react via mutation.error / their own onError handlers.
       if (isAuthenticated()) {
-        try {
-          await authAPI.replacePreferences({});
-        } catch (error) {
-          console.debug("Could not reset settings on backend:", error);
-        }
+        await authAPI.replacePreferences({});
       }
 
       return DEFAULT_SETTINGS;
     },
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.settings.all, data);
+    },
+    onError: (error) => {
+      // localStorage clear already happened optimistically before this fires.
+      // Surface the backend-sync failure so the user knows their reset is
+      // local only.
+      toast.error(
+        "Settings reset locally but couldn't clear on server. Try again.",
+        {
+          description:
+            error instanceof Error ? error.message : "Unknown error",
+        },
+      );
     },
   });
 }
