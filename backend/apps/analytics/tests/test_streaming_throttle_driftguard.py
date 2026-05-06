@@ -50,17 +50,25 @@ def _ai_chat_stream_body_source():
     return match.group(0)
 
 
-def test_ai_chat_stream_does_not_accept_client_model_during_phase_0():
-    """Finding #8 interim: model must NOT be read from request.data.
+def test_ai_chat_stream_validates_model_against_allowlist_phase_4():
+    """Finding #8 permanent: ai_chat_stream must read 'model' from request.data
+    AND validate the value against AI_CHAT_ALLOWED_MODELS.
 
-    This test will need to be updated when Phase 4 task 4.2 (allowlist) lands.
+    Replaces the Phase 0 drift-guard that forbade reading 'model' entirely;
+    Phase 4 task 4.2 introduced a settings-driven allowlist + default model so
+    legitimate-but-validated client model selection is allowed again.
     """
     import re
     src = _ai_chat_stream_body_source()
-    # Forbid request.data.get('model', ...) pattern entirely during Phase 0.
-    pattern = re.compile(r"request\.data\.get\(\s*['\"]model['\"]")
-    assert not pattern.search(src), (
-        "ai_chat_stream still reads 'model' from request.data; this is the "
-        "Phase 0 interim guard for Finding #8. If Phase 4 allowlist landed, "
-        "update this drift-guard to check the allowlist instead."
+    # Must read model from request body (validated against allowlist below).
+    assert re.search(r"request\.data\.get\(\s*['\"]model['\"]", src), (
+        "ai_chat_stream must read 'model' from request.data after Phase 4 "
+        "task 4.2 (with allowlist validation). If model is being hardcoded "
+        "again, that's a Finding #8 regression."
+    )
+    # Must reference the allowlist setting.
+    assert "AI_CHAT_ALLOWED_MODELS" in src, (
+        "ai_chat_stream must validate the model against AI_CHAT_ALLOWED_MODELS. "
+        "Reading from request.data without the allowlist is the Finding #8 "
+        "client-controlled-model-escalation hole."
     )

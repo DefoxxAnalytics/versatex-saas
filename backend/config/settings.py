@@ -463,6 +463,25 @@ AI_CHAT_MAX_PAYLOAD_BYTES = config(
     'AI_CHAT_MAX_PAYLOAD_BYTES', default=200_000, cast=int
 )
 
+# AI streaming chat model allowlist (Finding #8 permanent fix).
+# Phase 0 hardcoded the model; Phase 4 task 4.2 replaces that with a
+# settings-driven allowlist + default. Add new model strings here when
+# upgrading; do NOT accept unknown values from the client (Opus is ~5x
+# Sonnet pricing — a single mis-pointed model burns the daily budget).
+# Note: AI_CHAT_DEFAULT_MODEL MUST be present in AI_CHAT_ALLOWED_MODELS
+# for the validation to be coherent (the default is what we fall back to
+# when no client-supplied value is present, and it is then re-checked
+# against the allowlist).
+AI_CHAT_ALLOWED_MODELS = config(
+    'AI_CHAT_ALLOWED_MODELS',
+    default='claude-sonnet-4-20250514',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()],
+)
+AI_CHAT_DEFAULT_MODEL = config(
+    'AI_CHAT_DEFAULT_MODEL',
+    default='claude-sonnet-4-20250514',
+)
+
 # Daily LLM cost-digest webhook (ntfy.sh / Slack / Teams compatible).
 # When empty, send_llm_cost_digest task logs the daily rollup but skips the
 # outbound POST. Set to an ntfy.sh topic URL for zero-friction alerting.

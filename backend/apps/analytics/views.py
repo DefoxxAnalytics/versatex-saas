@@ -3167,12 +3167,28 @@ def ai_chat_stream(request):
 
     messages = request.data.get('messages', [])
     context = request.data.get('context', {})
-    # Phase 0 containment for Finding #8 — client-controlled model escalation.
-    # Phase 4 task 4.2 will replace this with a proper allowlist.
-    model = 'claude-sonnet-4-20250514'
 
     if not messages:
         return Response({'error': 'Messages are required'}, status=400)
+
+    # Finding #8 (Phase 4 task 4.2): model allowlist replaces the Phase 0
+    # hardcode. Default applies when the client doesn't specify (or sends
+    # an empty value); non-default values must be in the allowlist or we
+    # reject with 400. Falling back silently would hide misconfiguration
+    # and let a stale client keep talking to a model the operator removed.
+    allowed_models = getattr(
+        settings, 'AI_CHAT_ALLOWED_MODELS', ['claude-sonnet-4-20250514']
+    )
+    default_model = getattr(
+        settings, 'AI_CHAT_DEFAULT_MODEL', 'claude-sonnet-4-20250514'
+    )
+    requested_model = request.data.get('model') or default_model
+    if requested_model not in allowed_models:
+        return Response(
+            {'error': f"Model '{requested_model}' is not in the allowlist."},
+            status=400,
+        )
+    model = requested_model
 
     # Finding B10: settings-driven payload bounds. Combined with the per-call
     # AIInsightsThrottle (Finding #7), these block single-call cost-blast
