@@ -76,3 +76,9 @@ cloudflared/*.json
 # Railway
 .railway/
 railway.json
+
+# Repo-root debug / one-off artifacts (keep these in subdirs if intentional)
+/Screenshot*.png
+/screenshot*.png
+/*-review-*.txt
+/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt
