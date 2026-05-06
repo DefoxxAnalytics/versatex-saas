@@ -275,13 +275,23 @@ class ParetoTailAnalyticsService(BaseAnalyticsService):
 
         # Consolidation opportunities
         # 1. Multi-category vendors (tail vendors serving multiple categories)
+        multi_tail_supplier_ids = [
+            sup['supplier_id'] for sup in tail_suppliers if sup['category_count'] > 1
+        ]
+
+        # Single query: pull (supplier_id, category__name) pairs for all qualifying
+        # multi-category tail suppliers, then bucket per supplier in Python.
+        sup_categories_lookup = defaultdict(list)
+        if multi_tail_supplier_ids:
+            for row in self.transactions.filter(
+                supplier_id__in=multi_tail_supplier_ids
+            ).values('supplier_id', 'category__name').distinct():
+                sup_categories_lookup[row['supplier_id']].append(row['category__name'])
+
         multi_category = []
         for sup in tail_suppliers:
             if sup['category_count'] > 1:
-                # Get categories for this supplier
-                sup_cats = list(self.transactions.filter(
-                    supplier_id=sup['supplier_id']
-                ).values_list('category__name', flat=True).distinct())
+                sup_cats = sup_categories_lookup.get(sup['supplier_id'], [])
 
                 multi_category.append({
                     'supplier': sup['supplier__name'],
@@ -296,15 +306,27 @@ class ParetoTailAnalyticsService(BaseAnalyticsService):
         multi_category = multi_category[:10]
 
         # 2. Category consolidation (categories with 3+ tail vendors)
+        qualifying_category_ids = [
+            cat['category_id'] for cat in category_analysis if cat['tail_vendors'] >= 3
+        ]
+
+        # Single query: GROUP BY (category_id, supplier__name) ordered by spend desc
+        # within each category. We take the first row per category in Python.
+        top_vendor_by_category = {}
+        if qualifying_category_ids:
+            for row in self.transactions.filter(
+                category_id__in=qualifying_category_ids
+            ).values('category_id', 'supplier__name').annotate(
+                spend=Sum('amount')
+            ).order_by('category_id', '-spend'):
+                # Keep only the first (highest spend) row per category_id
+                if row['category_id'] not in top_vendor_by_category:
+                    top_vendor_by_category[row['category_id']] = row['supplier__name']
+
         category_consolidation = []
         for cat in category_analysis:
             if cat['tail_vendors'] >= 3:
-                # Get top vendor in this category
-                top_vendor = self.transactions.filter(
-                    category_id=cat['category_id']
-                ).values('supplier__name').annotate(
-                    spend=Sum('amount')
-                ).order_by('-spend').first()
+                top_vendor_name = top_vendor_by_category.get(cat['category_id'])
 
                 category_consolidation.append({
                     'category': cat['category'],
@@ -312,7 +334,7 @@ class ParetoTailAnalyticsService(BaseAnalyticsService):
                     'tail_vendors': cat['tail_vendors'],
                     'total_vendors': cat['total_vendors'],
                     'tail_spend': cat['tail_spend'],
-                    'top_vendor': top_vendor['supplier__name'] if top_vendor else 'N/A',
+                    'top_vendor': top_vendor_name if top_vendor_name else 'N/A',
                     'savings_potential': round(cat['tail_spend'] * 0.10, 2)  # 10% consolidation savings
                 })
 
@@ -339,22 +361,37 @@ class ParetoTailAnalyticsService(BaseAnalyticsService):
                 location_data[loc]['tail_vendors'].add(sup_id)
                 location_data[loc]['tail_spend'] += spend
 
+        qualifying_locations = [
+            loc for loc, data in location_data.items() if len(data['tail_vendors']) >= 3
+        ]
+
+        # Single query: GROUP BY (location, supplier__name) ordered so we can pick
+        # the highest-spend vendor per location in Python. We pass `qualifying_locations`
+        # verbatim to `location__in` to preserve the legacy semantics — the prior
+        # loop did `filter(location=loc)` where `loc` could literally be the
+        # 'Unspecified' sentinel string, so empty-string rows weren't matched and
+        # produced `top_vendor='N/A'`. Re-route through the same comparison.
+        top_vendor_by_location = {}
+        if qualifying_locations:
+            for row in self.transactions.filter(
+                location__in=qualifying_locations
+            ).values('location', 'supplier__name').annotate(
+                spend=Sum('amount')
+            ).order_by('location', '-spend'):
+                if row['location'] not in top_vendor_by_location:
+                    top_vendor_by_location[row['location']] = row['supplier__name']
+
         geographic_consolidation = []
         for loc, data in location_data.items():
             if len(data['tail_vendors']) >= 3:
-                # Get top vendor in this location
-                top_vendor = self.transactions.filter(
-                    location=loc
-                ).values('supplier__name').annotate(
-                    spend=Sum('amount')
-                ).order_by('-spend').first()
+                top_vendor_name = top_vendor_by_location.get(loc)
 
                 geographic_consolidation.append({
                     'location': loc,
                     'tail_vendors': len(data['tail_vendors']),
                     'total_vendors': len(data['total_vendors']),
                     'tail_spend': round(data['tail_spend'], 2),
-                    'top_vendor': top_vendor['supplier__name'] if top_vendor else 'N/A',
+                    'top_vendor': top_vendor_name if top_vendor_name else 'N/A',
                     'savings_potential': round(data['tail_spend'] * 0.10, 2)
                 })
 

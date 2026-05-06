@@ -4,6 +4,8 @@ Spend analytics service.
 Provides category and supplier spend analysis including breakdowns,
 HHI calculations, and supplier drilldowns.
 """
+from collections import defaultdict
+
 from django.db.models import Sum, Count, Min, Max
 from apps.procurement.models import Supplier, Category
 from .base import BaseAnalyticsService
@@ -90,6 +92,22 @@ class SpendAnalyticsService(BaseAnalyticsService):
             subcategory_count=Count('subcategory', distinct=True)
         ).order_by('-total_spend'))
 
+        # Single GROUP BY (category_id, subcategory) — replaces the per-category
+        # subquery that previously fired one query per row in `categories`.
+        subcategory_rows = list(self.transactions.values(
+            'category_id', 'subcategory'
+        ).annotate(
+            spend=Sum('amount'),
+            transaction_count=Count('id'),
+            supplier_count=Count('supplier', distinct=True)
+        ).order_by('-spend'))
+
+        # Bucket subcategories by category_id, preserving the spend-desc order
+        # from the single query above.
+        subcategories_by_category = defaultdict(list)
+        for row in subcategory_rows:
+            subcategories_by_category[row['category_id']].append(row)
+
         result = []
         total_all_spend = float(sum(c['total_spend'] or 0 for c in categories))
 
@@ -99,14 +117,7 @@ class SpendAnalyticsService(BaseAnalyticsService):
             total_spend = float(cat['total_spend'] or 0)
             supplier_count = cat['supplier_count'] or 0
 
-            # Get subcategory breakdown for this category
-            subcategories = list(self.transactions.filter(
-                category_id=category_id
-            ).values('subcategory').annotate(
-                spend=Sum('amount'),
-                transaction_count=Count('id'),
-                supplier_count=Count('supplier', distinct=True)
-            ).order_by('-spend'))
+            subcategories = subcategories_by_category.get(category_id, [])
 
             # Find top subcategory
             top_subcategory = subcategories[0] if subcategories else None
