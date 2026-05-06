@@ -3,6 +3,7 @@ Utility functions for authentication
 """
 import hashlib
 import logging
+from django.conf import settings
 from django.core.cache import cache
 from .models import AuditLog
 
@@ -16,25 +17,34 @@ LOCKOUT_DURATION = 900  # 15 minutes in seconds
 def get_client_ip(request):
     """
     Get client IP address from request.
-    Handles X-Forwarded-For header for proxied requests.
 
-    Security Note: X-Forwarded-For can be spoofed. In production,
-    configure your proxy to set a trusted header.
+    Finding A2: forwarded headers (X-Real-IP, X-Forwarded-For) are honored
+    only when the immediate connection (REMOTE_ADDR) is in
+    settings.TRUSTED_PROXIES. Without this gate, any client could spoof
+    X-Real-IP to defeat the per-IP-scoped lockout key (record_failed_login)
+    and pollute audit logs.
+
+    settings.TRUSTED_PROXIES defaults to an empty list — meaning forwarded
+    headers are ignored unless the deployment explicitly trusts a proxy IP.
+    For Docker dev, set TRUSTED_PROXIES=127.0.0.1,172.17.0.1 (or whatever
+    the bridge subnet is). For production behind nginx, set it to the
+    nginx loopback address.
     """
-    # Try trusted proxy header first (configure this in your proxy)
-    x_real_ip = request.META.get('HTTP_X_REAL_IP')
-    if x_real_ip:
-        return x_real_ip.strip()
+    remote_addr = request.META.get('REMOTE_ADDR', '0.0.0.0')
+    trusted_proxies = getattr(settings, 'TRUSTED_PROXIES', []) or []
 
-    # Fall back to X-Forwarded-For (take first IP only)
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        # Only trust the first IP (closest to client)
-        ip = x_forwarded_for.split(',')[0].strip()
-        return ip
+    if remote_addr in trusted_proxies:
+        # Honor forwarded headers from a trusted upstream proxy.
+        x_real_ip = request.META.get('HTTP_X_REAL_IP')
+        if x_real_ip:
+            return x_real_ip.strip()
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            # First IP is closest to the client; rest are intermediate hops.
+            return x_forwarded_for.split(',')[0].strip()
 
-    # Direct connection
-    return request.META.get('REMOTE_ADDR', '0.0.0.0')
+    # Untrusted (direct) connection or no forwarded headers — use REMOTE_ADDR.
+    return remote_addr
 
 
 def get_user_agent(request):
@@ -76,9 +86,15 @@ def record_failed_login(request, username: str):
     ip = get_client_ip(request)
     key = get_failed_login_key(username, ip)
 
-    # Get current failed attempts
-    failed_attempts = cache.get(key, 0) + 1
-    cache.set(key, failed_attempts, LOCKOUT_DURATION)
+    # Finding A3: preserve the original window from first failure. The prior
+    # cache.set(...) overwrote TTL on every failure, letting a slow attacker
+    # pace attempts indefinitely. Use add() to seed the counter on first
+    # failure (with the full LOCKOUT_DURATION), then incr() for subsequent
+    # failures within that fixed window. Once the window expires, the key
+    # is gone and a fresh attacker gets a fresh window — same lockout
+    # ergonomics for legitimate users, no slow-rate bypass.
+    cache.add(key, 0, LOCKOUT_DURATION)
+    failed_attempts = cache.incr(key)
 
     # Log the failed attempt (don't log full username for privacy)
     logger.warning(

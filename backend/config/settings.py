@@ -43,6 +43,14 @@ if DEBUG and 'runserver' not in sys.argv:
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
+# Finding A2: IPs from which X-Real-IP / X-Forwarded-For headers are honored
+# by apps.authentication.utils.get_client_ip. Without this allowlist, any
+# client could spoof X-Real-IP to defeat the per-IP-scoped lockout key and
+# pollute audit logs. Empty default = forwarded headers ignored entirely;
+# only direct REMOTE_ADDR is used. Production behind nginx: set to the
+# upstream IP (typically 127.0.0.1 if same-host, or the docker bridge IP).
+TRUSTED_PROXIES = config('TRUSTED_PROXIES', default='').split(',') if config('TRUSTED_PROXIES', default='') else []
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -332,6 +340,11 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@analytics.com
 # Celery Configuration
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+# Finding A6: explicit task-result expiration (Celery's default is 24h with
+# the Redis backend, but making it explicit lets ops tune without surprise
+# and documents the policy. 1h = enough for status polling on long uploads,
+# short enough that Redis OOM risk stays bounded.)
+CELERY_RESULT_EXPIRES = config('CELERY_RESULT_EXPIRES', default=3600, cast=int)
 
 # Django Cache Configuration (Redis)
 # Uses Django's native Redis backend (Django 4.0+)
@@ -408,13 +421,19 @@ if not DEBUG:
     # plaintext tunnel->nginx hop.
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-    # HSTS - enforce HTTPS for 1 year
+    # HSTS - enforce HTTPS for 1 year (Finding #15).
+    # Paired with the Strict-Transport-Security header in frontend/nginx/nginx.conf
+    # so the header is emitted whether the request hits Django directly (no
+    # nginx in front) or via the canonical nginx -> backend path. Gated on
+    # `not DEBUG` to avoid breaking dev with self-signed certs.
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     # includeSubDomains is irreversible for max-age's duration and pins every
     # *.versatexanalytics.com subdomain to HTTPS. Env-gated so staging/sandbox
     # subdomains can opt in deliberately after 1 week of prod validation.
     # Default False -> header emitted without the includeSubDomains / preload
     # directives -> safe rollback path.
+    # To enable preload (irreversible for max-age): set HSTS_PRELOAD=True after
+    # ≥1 week of prod validation, redeploy, then submit at https://hstspreload.org/.
     SECURE_HSTS_INCLUDE_SUBDOMAINS = config('HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
     SECURE_HSTS_PRELOAD = config('HSTS_PRELOAD', default=False, cast=bool)
 

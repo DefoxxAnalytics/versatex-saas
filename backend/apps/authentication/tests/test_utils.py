@@ -5,6 +5,7 @@ import pytest
 import hashlib
 from unittest.mock import Mock, patch
 from django.core.cache import cache
+from django.test import override_settings
 from apps.authentication.utils import (
     get_client_ip,
     get_user_agent,
@@ -29,14 +30,21 @@ class TestGetClientIP:
         ip = get_client_ip(mock_request)
         assert ip == '192.168.1.1'
 
+    # Finding A2 (Phase 5 task 5.5): forwarded headers honored only when
+    # REMOTE_ADDR is in settings.TRUSTED_PROXIES. The five tests below now
+    # set TRUSTED_PROXIES to the mock REMOTE_ADDR so they exercise the
+    # forwarded-header branch — without the override they would (correctly)
+    # fall through to REMOTE_ADDR.
+    @override_settings(TRUSTED_PROXIES=['192.168.1.1'])
     def test_x_real_ip_header(self, mock_request):
-        """Test getting IP from X-Real-IP header."""
+        """Test getting IP from X-Real-IP header (with trusted REMOTE_ADDR)."""
         mock_request.META['HTTP_X_REAL_IP'] = '10.0.0.50'
         ip = get_client_ip(mock_request)
         assert ip == '10.0.0.50'
 
+    @override_settings(TRUSTED_PROXIES=['10.0.0.1'])
     def test_x_forwarded_for_single_ip(self):
-        """Test getting IP from X-Forwarded-For with single IP."""
+        """Test getting IP from X-Forwarded-For with single IP (trusted)."""
         request = Mock()
         request.META = {
             'REMOTE_ADDR': '10.0.0.1',
@@ -46,14 +54,16 @@ class TestGetClientIP:
         ip = get_client_ip(request)
         assert ip == '203.0.113.195'
 
+    @override_settings(TRUSTED_PROXIES=['10.0.0.1'])
     def test_x_forwarded_for_multiple_ips(self, mock_request_with_proxy):
-        """Test getting first IP from X-Forwarded-For chain."""
+        """Test getting first IP from X-Forwarded-For chain (trusted)."""
         ip = get_client_ip(mock_request_with_proxy)
         # Should take the first IP in the chain (closest to client)
         assert ip == '203.0.113.195'
 
+    @override_settings(TRUSTED_PROXIES=['10.0.0.1'])
     def test_x_real_ip_takes_priority(self):
-        """Test that X-Real-IP takes priority over X-Forwarded-For."""
+        """Test that X-Real-IP takes priority over X-Forwarded-For (trusted)."""
         request = Mock()
         request.META = {
             'REMOTE_ADDR': '10.0.0.1',
@@ -63,8 +73,9 @@ class TestGetClientIP:
         ip = get_client_ip(request)
         assert ip == '1.2.3.4'
 
+    @override_settings(TRUSTED_PROXIES=['10.0.0.1'])
     def test_strips_whitespace(self):
-        """Test that IP addresses are stripped of whitespace."""
+        """Test that IP addresses are stripped of whitespace (trusted)."""
         request = Mock()
         request.META = {
             'REMOTE_ADDR': '10.0.0.1',

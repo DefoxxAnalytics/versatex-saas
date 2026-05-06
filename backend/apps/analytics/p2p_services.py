@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from collections import defaultdict
 from django.db.models import (
     Sum, Count, Avg, Q, F, Min, Max, Case, When, Value,
-    DecimalField, IntegerField, CharField
+    DecimalField, IntegerField, CharField, OuterRef, Subquery
 )
 from django.db.models.functions import TruncMonth, TruncWeek, Coalesce, ExtractMonth
 from apps.procurement.models import (
@@ -91,79 +91,101 @@ class P2PAnalyticsService:
         """
         Get end-to-end P2P cycle time metrics.
         Returns average days for each stage and overall cycle.
+
+        DB-side aggregation: each stage is computed via a single `Avg(F(date_a) - F(date_b))`
+        annotation rather than pulling parent rows into Python and looping. This
+        matches the pattern in `get_cycle_time_trends`.
+
+        Stage semantics (preserves the prior loop's "one datapoint per parent"
+        behavior — the parent's most-recent child by default ordering):
+          - PR→PO: Avg(latest_po.created_date − pr.approval_date) per PR
+          - PO→GR: Avg(latest_gr.received_date − po.sent_date) per PO
+          - GR→Inv: Avg(latest_inv.invoice_date − gr.received_date) per GR
+          - Inv→Pay: Avg(invoice.paid_date − invoice.invoice_date) per paid invoice
+        Negative spreads (data-quality noise) are filtered out.
         """
-        # Get PRs with linked POs (PO.requisition -> PR, so PR.purchase_orders is reverse relation)
-        prs_with_po = PurchaseRequisition.objects.filter(
+        # ---- Stage 1: PR → PO --------------------------------------------------
+        # Subquery picks the most recent PO per requisition (matches default
+        # ordering ['-created_date', '-created_at']).
+        latest_po_per_pr = PurchaseOrder.objects.filter(
+            requisition=OuterRef('pk')
+        ).order_by('-created_date', '-created_at').values('created_date')[:1]
+
+        prs_qs = PurchaseRequisition.objects.filter(
             organization=self.organization,
             status='converted_to_po',
             purchase_orders__isnull=False,
-            submitted_date__isnull=False
-        ).prefetch_related('purchase_orders')
+            submitted_date__isnull=False,
+            approval_date__isnull=False,
+        ).distinct()
+        prs_qs = self._apply_date_filters(prs_qs, 'created_date')
+        prs_qs = prs_qs.annotate(
+            latest_po_date=Subquery(latest_po_per_pr)
+        ).filter(latest_po_date__gte=F('approval_date'))
 
-        prs_with_po = self._apply_date_filters(prs_with_po, 'created_date')
+        pr_agg = prs_qs.aggregate(
+            avg_delta=Avg(F('latest_po_date') - F('approval_date')),
+            sample=Count('id', distinct=True),
+        )
+        avg_pr_to_po = pr_agg['avg_delta'].total_seconds() / 86400 if pr_agg['avg_delta'] else 0
+        pr_to_po_sample = pr_agg['sample'] or 0
 
-        # Calculate PR to PO time
-        pr_to_po_days = []
-        for pr in prs_with_po:
-            po = pr.purchase_orders.first()  # Get the first linked PO
-            if po and pr.approval_date:
-                days = (po.created_date - pr.approval_date).days
-                if days >= 0:
-                    pr_to_po_days.append(days)
+        # ---- Stage 2: PO → GR --------------------------------------------------
+        latest_gr_per_po = GoodsReceipt.objects.filter(
+            purchase_order=OuterRef('pk')
+        ).order_by('-received_date', '-created_at').values('received_date')[:1]
 
-        # Get POs with linked GRs
-        pos_with_gr = PurchaseOrder.objects.filter(
+        pos_qs = PurchaseOrder.objects.filter(
             organization=self.organization,
-            goods_receipts__isnull=False
-        ).prefetch_related('goods_receipts')
+            goods_receipts__isnull=False,
+            sent_date__isnull=False,
+        ).distinct()
+        pos_qs = self._apply_date_filters(pos_qs, 'created_date')
+        pos_qs = pos_qs.annotate(
+            latest_gr_date=Subquery(latest_gr_per_po)
+        ).filter(latest_gr_date__gte=F('sent_date'))
 
-        pos_with_gr = self._apply_date_filters(pos_with_gr, 'created_date')
+        po_agg = pos_qs.aggregate(
+            avg_delta=Avg(F('latest_gr_date') - F('sent_date')),
+            sample=Count('id', distinct=True),
+        )
+        avg_po_to_gr = po_agg['avg_delta'].total_seconds() / 86400 if po_agg['avg_delta'] else 0
+        po_to_gr_sample = po_agg['sample'] or 0
 
-        # Calculate PO to GR time
-        po_to_gr_days = []
-        for po in pos_with_gr:
-            gr = po.goods_receipts.first()
-            if gr and po.sent_date:
-                days = (gr.received_date - po.sent_date).days
-                if days >= 0:
-                    po_to_gr_days.append(days)
+        # ---- Stage 3: GR → Invoice --------------------------------------------
+        latest_inv_per_gr = Invoice.objects.filter(
+            goods_receipt=OuterRef('pk')
+        ).order_by('-invoice_date', '-created_at').values('invoice_date')[:1]
 
-        # Get GRs with linked Invoices
-        grs_with_invoice = GoodsReceipt.objects.filter(
+        grs_qs = GoodsReceipt.objects.filter(
             organization=self.organization,
-            invoices__isnull=False
-        ).prefetch_related('invoices')
+            invoices__isnull=False,
+        ).distinct().annotate(
+            latest_inv_date=Subquery(latest_inv_per_gr)
+        ).filter(latest_inv_date__gte=F('received_date'))
 
-        # Calculate GR to Invoice time
-        gr_to_inv_days = []
-        for gr in grs_with_invoice:
-            inv = gr.invoices.first()
-            if inv:
-                days = (inv.invoice_date - gr.received_date).days
-                if days >= 0:
-                    gr_to_inv_days.append(days)
+        gr_agg = grs_qs.aggregate(
+            avg_delta=Avg(F('latest_inv_date') - F('received_date')),
+            sample=Count('id', distinct=True),
+        )
+        avg_gr_to_inv = gr_agg['avg_delta'].total_seconds() / 86400 if gr_agg['avg_delta'] else 0
+        gr_to_inv_sample = gr_agg['sample'] or 0
 
-        # Get paid invoices for Invoice to Payment time
+        # ---- Stage 4: Invoice → Payment ---------------------------------------
         paid_invoices = Invoice.objects.filter(
             organization=self.organization,
             status='paid',
-            paid_date__isnull=False
+            paid_date__isnull=False,
+            paid_date__gte=F('invoice_date'),
         )
-
         paid_invoices = self._apply_date_filters(paid_invoices, 'invoice_date')
 
-        # Calculate Invoice to Payment time
-        inv_to_pay_days = []
-        for inv in paid_invoices:
-            days = (inv.paid_date - inv.invoice_date).days
-            if days >= 0:
-                inv_to_pay_days.append(days)
-
-        # Calculate averages
-        avg_pr_to_po = sum(pr_to_po_days) / len(pr_to_po_days) if pr_to_po_days else 0
-        avg_po_to_gr = sum(po_to_gr_days) / len(po_to_gr_days) if po_to_gr_days else 0
-        avg_gr_to_inv = sum(gr_to_inv_days) / len(gr_to_inv_days) if gr_to_inv_days else 0
-        avg_inv_to_pay = sum(inv_to_pay_days) / len(inv_to_pay_days) if inv_to_pay_days else 0
+        inv_agg = paid_invoices.aggregate(
+            avg_delta=Avg(F('paid_date') - F('invoice_date')),
+            sample=Count('id'),
+        )
+        avg_inv_to_pay = inv_agg['avg_delta'].total_seconds() / 86400 if inv_agg['avg_delta'] else 0
+        inv_to_pay_sample = inv_agg['sample'] or 0
 
         total_cycle = avg_pr_to_po + avg_po_to_gr + avg_gr_to_inv + avg_inv_to_pay
 
@@ -180,25 +202,25 @@ class P2PAnalyticsService:
                 'pr_to_po': {
                     'avg_days': round(avg_pr_to_po, 1),
                     'target_days': 3,
-                    'sample_size': len(pr_to_po_days),
+                    'sample_size': pr_to_po_sample,
                     'status': get_status(avg_pr_to_po, 3)
                 },
                 'po_to_gr': {
                     'avg_days': round(avg_po_to_gr, 1),
                     'target_days': 7,
-                    'sample_size': len(po_to_gr_days),
+                    'sample_size': po_to_gr_sample,
                     'status': get_status(avg_po_to_gr, 7)
                 },
                 'gr_to_invoice': {
                     'avg_days': round(avg_gr_to_inv, 1),
                     'target_days': 3,
-                    'sample_size': len(gr_to_inv_days),
+                    'sample_size': gr_to_inv_sample,
                     'status': get_status(avg_gr_to_inv, 3)
                 },
                 'invoice_to_payment': {
                     'avg_days': round(avg_inv_to_pay, 1),
                     'target_days': 30,
-                    'sample_size': len(inv_to_pay_days),
+                    'sample_size': inv_to_pay_sample,
                     'status': get_status(avg_inv_to_pay, 30)
                 }
             },
@@ -678,14 +700,15 @@ class P2PAnalyticsService:
 
         exceptions = self._apply_date_filters(exceptions, 'invoice_date')
 
-        # Get primary exception type per supplier (most common)
+        # Most-frequent exception type per supplier — single correlated subquery
+        # replaces the per-supplier N+1 lookup.
         primary_type_subquery = Invoice.objects.filter(
             organization=self.organization,
             has_exception=True,
             supplier_id=OuterRef('supplier__id')
         ).values('exception_type').annotate(
             type_count=Count('id')
-        ).order_by('-type_count').values('exception_type')[:1]
+        ).order_by('-type_count', 'exception_type').values('exception_type')[:1]
 
         by_supplier = exceptions.values(
             'supplier__id', 'supplier__name'
@@ -695,32 +718,21 @@ class P2PAnalyticsService:
             open_count=Count(Case(
                 When(exception_resolved=False, then=1),
                 output_field=IntegerField()
-            ))
+            )),
+            primary_exception_type=Subquery(
+                primary_type_subquery, output_field=CharField()
+            ),
         ).order_by('-exception_amount')[:limit]
 
-        # Get total invoices per supplier for exception rate calculation
-        supplier_totals = {}
+        # Total invoices per supplier for exception_rate denominator.
         supplier_ids = [item['supplier__id'] for item in by_supplier if item['supplier__id']]
+        supplier_totals = {}
         if supplier_ids:
             totals = Invoice.objects.filter(
                 organization=self.organization,
                 supplier_id__in=supplier_ids
             ).values('supplier_id').annotate(total=Count('id'))
             supplier_totals = {t['supplier_id']: t['total'] for t in totals}
-
-        # Get primary exception type per supplier
-        primary_types = {}
-        if supplier_ids:
-            for supplier_id in supplier_ids:
-                primary = Invoice.objects.filter(
-                    organization=self.organization,
-                    has_exception=True,
-                    supplier_id=supplier_id
-                ).values('exception_type').annotate(
-                    type_count=Count('id')
-                ).order_by('-type_count').first()
-                if primary:
-                    primary_types[supplier_id] = primary['exception_type']
 
         result = []
         for item in by_supplier:
@@ -736,7 +748,7 @@ class P2PAnalyticsService:
                 'exception_count': exception_count,
                 'exception_rate': round(exception_rate, 1),
                 'exception_amount': float(item['exception_amount'] or 0),
-                'primary_exception_type': primary_types.get(supplier_id),
+                'primary_exception_type': item['primary_exception_type'],
                 'open_count': item['open_count']
             })
 

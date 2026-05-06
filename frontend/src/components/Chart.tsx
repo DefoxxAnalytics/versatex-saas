@@ -17,7 +17,13 @@ import {
   LegendComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import type { EChartsOption } from "echarts";
+import type {
+  EChartsOption,
+  LegendComponentOption,
+  TooltipComponentOption,
+  XAXisComponentOption,
+  YAXisComponentOption,
+} from "echarts";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
@@ -147,6 +153,52 @@ function applyVersatexPaletteToSeries(
 }
 
 /**
+ * Theme palette returned by getDarkModeColors. Re-declared here so the
+ * axis-merge helper stays decoupled from the function shape.
+ */
+type ChartThemeColors = ReturnType<typeof getDarkModeColors>;
+
+/**
+ * Apply themed axisLine / axisLabel / splitLine overrides to a single
+ * cartesian axis option, preserving any user-provided values.
+ */
+function mergeAxisTheme<T extends XAXisComponentOption | YAXisComponentOption>(
+  axis: T,
+  colors: ChartThemeColors,
+): T {
+  return {
+    ...axis,
+    axisLine: {
+      lineStyle: { color: colors.axisLineColor },
+      ...axis.axisLine,
+    },
+    axisLabel: {
+      color: colors.subTextColor,
+      ...axis.axisLabel,
+    },
+    splitLine: {
+      lineStyle: { color: colors.splitLineColor },
+      ...axis.splitLine,
+    },
+  };
+}
+
+/**
+ * Apply themed axis overrides to either a single axis option or an array of
+ * them, returning `undefined` when the user did not configure an axis.
+ */
+function buildThemedAxis<T extends XAXisComponentOption | YAXisComponentOption>(
+  axis: T | T[] | undefined,
+  colors: ChartThemeColors,
+): T | T[] | undefined {
+  if (axis === undefined) return undefined;
+  if (Array.isArray(axis)) {
+    return axis.map((entry) => mergeAxisTheme(entry, colors));
+  }
+  return mergeAxisTheme(axis, colors);
+}
+
+/**
  * Chart Component
  * Renders an ECharts chart with proper error handling and accessibility
  */
@@ -176,6 +228,29 @@ export function Chart({
       ? { color: [...VERSATEX_CHART_PALETTE] }
       : {};
 
+    const userTooltip = Array.isArray(option.tooltip)
+      ? option.tooltip[0]
+      : option.tooltip;
+    const userLegend = Array.isArray(option.legend)
+      ? option.legend[0]
+      : option.legend;
+
+    const themedTooltip: TooltipComponentOption = {
+      backgroundColor: colors.tooltipBg,
+      borderColor: colors.tooltipBorder,
+      textStyle: {
+        color: colors.textColor,
+      },
+      ...userTooltip,
+    };
+
+    const themedLegend: LegendComponentOption = {
+      textStyle: {
+        color: colors.subTextColor,
+      },
+      ...userLegend,
+    };
+
     // Deep merge with user option, adding dark mode styling
     return {
       ...option,
@@ -183,88 +258,12 @@ export function Chart({
       series,
       textStyle: {
         color: colors.textColor,
-        ...(option as any).textStyle,
+        ...option.textStyle,
       },
-      tooltip: {
-        backgroundColor: colors.tooltipBg,
-        borderColor: colors.tooltipBorder,
-        textStyle: {
-          color: colors.textColor,
-        },
-        ...(option as any).tooltip,
-      },
-      legend: {
-        textStyle: {
-          color: colors.subTextColor,
-        },
-        ...(option as any).legend,
-      },
-      xAxis: Array.isArray((option as any).xAxis)
-        ? (option as any).xAxis.map((axis: any) => ({
-            ...axis,
-            axisLine: {
-              lineStyle: { color: colors.axisLineColor },
-              ...axis?.axisLine,
-            },
-            axisLabel: {
-              color: colors.subTextColor,
-              ...axis?.axisLabel,
-            },
-            splitLine: {
-              lineStyle: { color: colors.splitLineColor },
-              ...axis?.splitLine,
-            },
-          }))
-        : (option as any).xAxis
-          ? {
-              ...(option as any).xAxis,
-              axisLine: {
-                lineStyle: { color: colors.axisLineColor },
-                ...(option as any).xAxis?.axisLine,
-              },
-              axisLabel: {
-                color: colors.subTextColor,
-                ...(option as any).xAxis?.axisLabel,
-              },
-              splitLine: {
-                lineStyle: { color: colors.splitLineColor },
-                ...(option as any).xAxis?.splitLine,
-              },
-            }
-          : undefined,
-      yAxis: Array.isArray((option as any).yAxis)
-        ? (option as any).yAxis.map((axis: any) => ({
-            ...axis,
-            axisLine: {
-              lineStyle: { color: colors.axisLineColor },
-              ...axis?.axisLine,
-            },
-            axisLabel: {
-              color: colors.subTextColor,
-              ...axis?.axisLabel,
-            },
-            splitLine: {
-              lineStyle: { color: colors.splitLineColor },
-              ...axis?.splitLine,
-            },
-          }))
-        : (option as any).yAxis
-          ? {
-              ...(option as any).yAxis,
-              axisLine: {
-                lineStyle: { color: colors.axisLineColor },
-                ...(option as any).yAxis?.axisLine,
-              },
-              axisLabel: {
-                color: colors.subTextColor,
-                ...(option as any).yAxis?.axisLabel,
-              },
-              splitLine: {
-                lineStyle: { color: colors.splitLineColor },
-                ...(option as any).yAxis?.splitLine,
-              },
-            }
-          : undefined,
+      tooltip: themedTooltip,
+      legend: themedLegend,
+      xAxis: buildThemedAxis(option.xAxis, colors),
+      yAxis: buildThemedAxis(option.yAxis, colors),
     };
   }, [option, isDark, isVersatex]);
 

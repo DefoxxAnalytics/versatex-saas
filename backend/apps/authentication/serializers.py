@@ -277,6 +277,14 @@ class UserProfileWithOrgsSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'organization_is_demo', 'created_at', 'is_super_admin', 'organizations']
 
+    def to_representation(self, instance):
+        # Finding #3 (Phase 5 task 5.1): masking parity with UserProfileSerializer.
+        # Both serializer paths must apply mask_preferences so a future endpoint
+        # binding this class can't silently leak plaintext aiApiKey.
+        data = super().to_representation(instance)
+        data['preferences'] = UserProfile.mask_preferences(data.get('preferences') or {})
+        return data
+
     def get_is_super_admin(self, obj):
         """Return whether the user is a super admin (Django superuser)."""
         return obj.is_super_admin()

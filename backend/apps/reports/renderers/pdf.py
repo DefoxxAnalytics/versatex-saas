@@ -13,6 +13,7 @@ Features:
 """
 from io import BytesIO
 from datetime import datetime
+from django.utils import timezone
 from .base import BaseRenderer
 
 # ReportLab imports - handle gracefully if not installed
@@ -280,7 +281,9 @@ class PDFRenderer(BaseRenderer):
         canvas.drawCentredString(page_width / 2, 0.35 * inch, f"Page {page_num}")
 
         # Generation date (left)
-        generated = self.metadata.get('generated_at', datetime.now().strftime('%Y-%m-%d'))
+        # Finding D2: TZ-aware fallback so production timestamps reflect
+        # configured TIME_ZONE, not the server's local clock.
+        generated = self.metadata.get('generated_at', timezone.now().strftime('%Y-%m-%d'))
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(self._get_hex_color(self.GRAY_500))
         canvas.drawString(0.5 * inch, 0.35 * inch, f"Generated: {generated}")

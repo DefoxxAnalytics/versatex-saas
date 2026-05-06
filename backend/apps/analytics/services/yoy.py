@@ -7,10 +7,16 @@ category/supplier breakdowns, and growth metrics.
 from collections import defaultdict
 
 from django.db.models import Sum, Count, Avg
-from django.db.models.functions import TruncYear
+from django.db.models.functions import TruncMonth, TruncYear
 
 from apps.procurement.models import Category, Supplier
 from .base import BaseAnalyticsService
+
+
+# Minimum distinct months a calendar year must contain before its YoY growth
+# is considered to have a "full window" of data. Mirrors the Predictive
+# growth-metrics precedent (>=12 months per window) and accuracy convention §4.
+FULL_YEAR_MONTH_COUNT = 12
 
 
 CALENDAR_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -57,31 +63,63 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         """
         Compare spending year over year.
 
+        growth_percentage is emitted only when the current AND previous calendar
+        years each have a full window of data (12 distinct months). Without
+        equal-and-full spans the formula degenerates: a 12-month current vs.
+        1-month prior produces ~1100% nonsense (same root cause as the
+        Predictive 13-month YoY anomaly — accuracy convention §4). When the
+        guard fails we set ``insufficient_data_for_growth: true`` and OMIT
+        ``growth_percentage`` so the frontend can render an explicit state
+        rather than a misleading number.
+
         Returns:
-            list: Yearly spend with growth percentages
+            list: Yearly spend dicts with optional growth_percentage
         """
-        data = self.transactions.annotate(
+        data = list(self.transactions.annotate(
             year=TruncYear('date')
         ).values('year').annotate(
             total=Sum('amount'),
             count=Count('id'),
             avg=Avg('amount')
-        ).order_by('year')
+        ).order_by('year'))
+
+        # Per-year distinct-month coverage. Used as the equal-span gate before
+        # emitting any growth_percentage. Keyed by calendar year (int).
+        month_coverage = {
+            row['year'].year: row['month_count']
+            for row in self.transactions.annotate(
+                year=TruncYear('date'),
+                month=TruncMonth('date'),
+            ).values('year').annotate(
+                month_count=Count('month', distinct=True)
+            )
+        }
 
         result = []
         for i, item in enumerate(data):
+            year_value = item['year'].year
             year_data = {
-                'year': item['year'].year,
+                'year': year_value,
                 'total_spend': float(item['total']),
                 'transaction_count': item['count'],
                 'avg_transaction': float(item['avg'])
             }
 
-            # Calculate growth if previous year exists
             if i > 0:
-                prev_total = float(data[i-1]['total'])
-                growth = ((float(item['total']) - prev_total) / prev_total * 100) if prev_total > 0 else 0
-                year_data['growth_percentage'] = round(growth, 2)
+                prev_year_value = data[i - 1]['year'].year
+                cur_months = month_coverage.get(year_value, 0)
+                prev_months = month_coverage.get(prev_year_value, 0)
+                has_full_windows = (
+                    cur_months >= FULL_YEAR_MONTH_COUNT
+                    and prev_months >= FULL_YEAR_MONTH_COUNT
+                )
+
+                if has_full_windows:
+                    prev_total = float(data[i - 1]['total'])
+                    growth = ((float(item['total']) - prev_total) / prev_total * 100) if prev_total > 0 else 0
+                    year_data['growth_percentage'] = round(growth, 2)
+                else:
+                    year_data['insufficient_data_for_growth'] = True
 
             result.append(year_data)
 
