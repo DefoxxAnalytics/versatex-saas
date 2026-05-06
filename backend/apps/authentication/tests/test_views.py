@@ -236,7 +236,8 @@ class TestLogoutView:
     def test_logout_blacklists_token(self, api_client, user):
         """Test that logout blacklists the refresh token."""
         refresh = RefreshToken.for_user(user)
-        api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+        # Cookie-based auth (header fallback is DEBUG-only since S-#2).
+        api_client.cookies['access_token'] = str(refresh.access_token)
         api_client.cookies['refresh_token'] = str(refresh)
 
         url = reverse('logout')

@@ -55,7 +55,8 @@ class TestReportCrossOrgIsolation(APITestCase):
         )
 
         refresh = RefreshToken.for_user(self.user_b)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+        # Cookie-based auth (header fallback is DEBUG-only since S-#2).
+        self.client.cookies["access_token"] = str(refresh.access_token)
 
     def test_user_in_org_b_cannot_read_org_a_public_report_detail(self):
         url = reverse("reports:detail", kwargs={"report_id": self.public_report.id})

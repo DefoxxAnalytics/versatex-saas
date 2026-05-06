@@ -1,17 +1,17 @@
 # Django Core
-Django==5.0.1
-djangorestframework==3.14.0
-djangorestframework-simplejwt==5.3.1
+Django==5.2.14
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
 
 # Database
 psycopg2-binary==2.9.9
 pgvector==0.3.6
 
 # CORS
-django-cors-headers==4.3.1
+django-cors-headers==4.6.0
 
 # Filtering
-django-filter==23.5
+django-filter==24.3
 
 # Environment Variables
 python-decouple==3.8
@@ -39,10 +39,10 @@ openai>=1.12.0
 pyjwt>=2.8.0
 
 # API Documentation
-drf-spectacular==0.27.0
+drf-spectacular==0.28.0
 
 # Production Server
-gunicorn==21.2.0
+gunicorn==22.0.0
 whitenoise==6.6.0
 
 # Cloud Storage (optional, opt-in via USE_R2_MEDIA=True)
