@@ -15,7 +15,9 @@ from rest_framework import status
 from apps.authentication.utils import log_action
 from apps.authentication.models import Organization
 from apps.authentication.organization_utils import (
-    get_target_organization as get_user_organization
+    get_target_organization as get_user_organization,
+    get_user_organizations,
+    user_is_admin_in_org,
 )
 from .models import Report
 from .serializers import (
@@ -479,8 +481,12 @@ def report_delete(request, report_id):
     try:
         # Phase 0 containment for Finding #4 — block cross-org reads of is_public reports.
         # Phase 1 task 1.3 refactors can_access with the resolved is_public semantics.
+        # Phase 1 task 1.4 (S-HA): scope the lookup to every org the user can access
+        # (membership-aware), not just the legacy single-org `profile.organization`.
+        # Without this, a multi-org admin of the report's org would 404 here before
+        # the role check below could grant the delete.
         report = Report.objects.filter(
-            organization=request.user.profile.organization
+            organization__in=get_user_organizations(request.user)
         ).get(id=report_id)
     except Report.DoesNotExist:
         return Response(
@@ -495,9 +501,13 @@ def report_delete(request, report_id):
             status=status.HTTP_403_FORBIDDEN
         )
 
-    # Only creator or admin can delete
+    # Only creator or admin can delete.
+    # Phase 1 task 1.4 (S-HA): membership-aware admin check against the report's own
+    # organization (matches the delete_insight_feedback pattern from task 1.5b).
+    # Legacy `profile.role == 'admin'` checked only the user's primary org, which broke
+    # delete for multi-org admins whose `profile.organization` differs from the report's.
     if report.created_by != request.user and not request.user.is_superuser:
-        if not (hasattr(request.user, 'profile') and request.user.profile.role == 'admin'):
+        if not user_is_admin_in_org(request.user, report.organization):
             return Response(
                 {'error': 'Permission denied'},
                 status=status.HTTP_403_FORBIDDEN

@@ -402,6 +402,100 @@ class TestReportDelete:
         response = admin_client.delete(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    def test_multi_org_admin_can_delete_report_in_membership_org(
+        self, api_client, organization, other_organization
+    ):
+        """Phase 1 task 1.4 (S-HA): a user whose primary `profile.organization` is Org B
+        but who is an admin of Org A via UserOrganizationMembership must be able to
+        delete a report owned by Org A. Legacy `profile.role == 'admin'` only inspected
+        the primary org and broke this multi-org persona.
+        """
+        from django.contrib.auth.models import User
+        from apps.authentication.models import UserProfile, UserOrganizationMembership
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        # Org A is the report's org; Org B is the user's primary profile.organization.
+        org_a = organization
+        org_b = other_organization
+
+        # Report creator (admin in Org A) — distinct from the deleter, so the role
+        # check (not the creator-equals-self path) is the gate under test.
+        creator = User.objects.create_user(username='org_a_creator', password='pw')
+        UserProfile.objects.create(
+            user=creator, organization=org_a, role='admin', is_active=True
+        )
+
+        deleter = User.objects.create_user(username='multi_org_admin', password='pw')
+        # post_save signal on UserProfile auto-creates a primary membership in
+        # the profile's org (Org B) — only the Org A membership needs an explicit
+        # create here.
+        UserProfile.objects.create(
+            user=deleter, organization=org_b, role='viewer', is_active=True
+        )
+        UserOrganizationMembership.objects.create(
+            user=deleter, organization=org_a, role='admin', is_active=True,
+            is_primary=False,
+        )
+
+        report = Report.objects.create(
+            organization=org_a,
+            created_by=creator,
+            report_type='spend_analysis',
+        )
+
+        refresh = RefreshToken.for_user(deleter)
+        api_client.cookies['access_token'] = str(refresh.access_token)
+
+        url = reverse('reports:delete', kwargs={'report_id': str(report.id)})
+        response = api_client.delete(url)
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Report.objects.filter(id=report.id).exists()
+
+    def test_admin_of_unrelated_org_cannot_delete(
+        self, api_client, organization, other_organization
+    ):
+        """Phase 1 task 1.4 (S-HA): a user who is admin of Org B only must NOT be able
+        to delete a report owned by Org A. Membership-aware role check evaluates the
+        admin status against the report's own organization, not the user's primary org.
+        """
+        from django.contrib.auth.models import User
+        from apps.authentication.models import UserProfile, UserOrganizationMembership
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        org_a = organization
+        org_b = other_organization
+
+        creator = User.objects.create_user(username='org_a_only_creator', password='pw')
+        UserProfile.objects.create(
+            user=creator, organization=org_a, role='admin', is_active=True
+        )
+
+        outsider = User.objects.create_user(username='org_b_only_admin', password='pw')
+        # post_save signal auto-creates the (outsider, Org B, admin) membership;
+        # outsider has NO membership in Org A.
+        UserProfile.objects.create(
+            user=outsider, organization=org_b, role='admin', is_active=True
+        )
+
+        report = Report.objects.create(
+            organization=org_a,
+            created_by=creator,
+            report_type='spend_analysis',
+        )
+
+        refresh = RefreshToken.for_user(outsider)
+        api_client.cookies['access_token'] = str(refresh.access_token)
+
+        url = reverse('reports:delete', kwargs={'report_id': str(report.id)})
+        response = api_client.delete(url)
+
+        assert response.status_code in (
+            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
+        )
+        assert Report.objects.filter(id=report.id).exists()
+
 
 @pytest.mark.django_db
 class TestReportDownload:
