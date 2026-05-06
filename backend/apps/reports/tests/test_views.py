@@ -316,7 +316,13 @@ class TestReportDetail:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_get_report_access_denied(self, authenticated_client, other_organization, other_org_user):
-        """Test accessing report from another org."""
+        """Test accessing report from another org.
+
+        After Phase 0 Finding #4 containment (org filter at the queryset level),
+        cross-org access raises Report.DoesNotExist and returns 404 instead of
+        falling through to the can_access 403. Both are equivalent denials —
+        accept either until Phase 1 task 1.3 settles the response shape.
+        """
         report = Report.objects.create(
             organization=other_organization,
             created_by=other_org_user,
@@ -325,7 +331,10 @@ class TestReportDetail:
 
         url = reverse('reports:detail', kwargs={'report_id': str(report.id)})
         response = authenticated_client.get(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code in (
+            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
+        )
 
 
 @pytest.mark.django_db

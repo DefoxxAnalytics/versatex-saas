@@ -1,6 +1,7 @@
 """
 Analytics API views
 """
+import logging
 from decimal import Decimal
 from django.utils import timezone
 from django.db.models import Count, Sum, Avg, F
@@ -18,6 +19,8 @@ from .models import InsightFeedback
 from .predictive_services import PredictiveAnalyticsService
 from .contract_services import ContractAnalyticsService
 from .compliance_services import ComplianceService
+
+logger = logging.getLogger(__name__)
 
 
 def validate_int_param(request, param_name, default, min_val=1, max_val=1000):
@@ -3136,6 +3139,7 @@ def get_rag_stats(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([AIInsightsThrottle])
 def ai_chat_stream(request):
     """
     Stream AI chat responses using Server-Sent Events.
@@ -3159,7 +3163,9 @@ def ai_chat_stream(request):
 
     messages = request.data.get('messages', [])
     context = request.data.get('context', {})
-    model = request.data.get('model', 'claude-sonnet-4-20250514')
+    # Phase 0 containment for Finding #8 — client-controlled model escalation.
+    # Phase 4 task 4.2 will replace this with a proper allowlist.
+    model = 'claude-sonnet-4-20250514'
 
     if not messages:
         return Response({'error': 'Messages are required'}, status=400)
@@ -3199,8 +3205,9 @@ def ai_chat_stream(request):
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            logger.exception("SSE streaming error")  # Finding #6 — diagnostic capture
+            yield f"data: {json.dumps({'error': 'AI service error; see server logs'})}\n\n"
 
     response = StreamingHttpResponse(
         generate_stream(),
@@ -3213,6 +3220,7 @@ def ai_chat_stream(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([AIInsightsThrottle])
 def ai_quick_query(request):
     """
     Quick query endpoint for single-turn procurement questions.
@@ -3283,8 +3291,9 @@ def ai_quick_query(request):
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            logger.exception("SSE streaming error")  # Finding #6 — diagnostic capture
+            yield f"data: {json.dumps({'error': 'AI service error; see server logs'})}\n\n"
 
     response = StreamingHttpResponse(
         generate_stream(),
