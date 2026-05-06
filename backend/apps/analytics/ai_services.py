@@ -411,7 +411,10 @@ class AIInsightsService:
                 * 'unavailable_no_key' — no API key configured; ai_enhancement omitted
                 * 'unavailable_failed' — API key configured but LLM call failed
                   or returned no usable result; ai_enhancement omitted and
-                  enhancement_error_code is set (currently 'llm_call_failed').
+                  enhancement_error_code is set to the typed code from
+                  llm_error_codes.AIErrorCode (auth_error, rate_limited,
+                  service_unavailable, bad_request, unknown) when the
+                  provider manager recorded one, else 'llm_call_failed'.
             - ai_enhancement: Structured AI recommendations (only when enhanced)
             - cache_hit: Whether AI enhancement was served from cache (only when enhanced)
             - enhancement_error_code: Typed error code (only when unavailable_failed)
@@ -514,7 +517,16 @@ class AIInsightsService:
             result['enhancement_status'] = self.ENHANCEMENT_STATUS_ENHANCED
         else:
             result['enhancement_status'] = self.ENHANCEMENT_STATUS_UNAVAILABLE_FAILED
-            result['enhancement_error_code'] = 'llm_call_failed'
+            # Finding B14: pull typed error code from provider manager so
+            # callers can distinguish auth vs rate-limit vs unknown. Falls
+            # back to the legacy 'llm_call_failed' marker when the manager
+            # never recorded an error (e.g., enhancement returned None
+            # without raising).
+            manager_code = (
+                self._provider_manager.get_last_error_code()
+                if self._provider_manager else None
+            )
+            result['enhancement_error_code'] = manager_code or 'llm_call_failed'
 
         # Per-insight enhancement for high-value insights
         per_insight_enhancer = PerInsightEnhancer(

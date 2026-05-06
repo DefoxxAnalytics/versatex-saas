@@ -3209,9 +3209,11 @@ def ai_chat_stream(request):
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
-        except Exception:
-            logger.exception("SSE streaming error")  # Finding #6 — diagnostic capture
-            yield f"data: {json.dumps({'error': 'AI service error; see server logs'})}\n\n"
+        except Exception as e:
+            from .llm_error_codes import classify_anthropic_error, USER_FACING_MESSAGES
+            code = classify_anthropic_error(e)
+            logger.exception("SSE streaming error: %s", code)  # Finding #6 — diagnostic capture
+            yield f"data: {json.dumps({'error_code': code, 'error': USER_FACING_MESSAGES[code]})}\n\n"
 
     response = StreamingHttpResponse(
         generate_stream(),
@@ -3295,9 +3297,11 @@ def ai_quick_query(request):
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
-        except Exception:
-            logger.exception("SSE streaming error")  # Finding #6 — diagnostic capture
-            yield f"data: {json.dumps({'error': 'AI service error; see server logs'})}\n\n"
+        except Exception as e:
+            from .llm_error_codes import classify_anthropic_error, USER_FACING_MESSAGES
+            code = classify_anthropic_error(e)
+            logger.exception("SSE streaming error: %s", code)  # Finding #6 — diagnostic capture
+            yield f"data: {json.dumps({'error_code': code, 'error': USER_FACING_MESSAGES[code]})}\n\n"
 
     response = StreamingHttpResponse(
         generate_stream(),

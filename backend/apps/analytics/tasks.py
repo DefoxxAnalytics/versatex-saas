@@ -46,6 +46,11 @@ def refresh_materialized_views(self):
 
     refreshed = 0
     errors = []
+    # Finding B13: track CONCURRENTLY-failed-but-fallback-succeeded cases
+    # separately so callers can distinguish "clean refresh" from "had to take
+    # the blocking-table path". Previously errors.pop()'d the original
+    # CONCURRENTLY error, which silently buried the signal.
+    warnings = []
 
     with connection.cursor() as cursor:
         for view in views:
@@ -55,7 +60,8 @@ def refresh_materialized_views(self):
                 refreshed += 1
                 logger.info(f"Refreshed materialized view: {view}")
             except Exception as e:
-                error_msg = f"Failed to refresh {view}: {str(e)}"
+                concurrently_error = str(e)
+                error_msg = f"Failed to refresh {view}: {concurrently_error}"
                 logger.error(error_msg)
                 errors.append(error_msg)
 
@@ -64,7 +70,15 @@ def refresh_materialized_views(self):
                     cursor.execute(f"REFRESH MATERIALIZED VIEW {view}")
                     refreshed += 1
                     logger.info(f"Refreshed materialized view (non-concurrent): {view}")
-                    errors.pop()  # Remove error if fallback succeeded
+                    # Fallback succeeded — the CONCURRENTLY error stays in
+                    # `errors` so monitoring still sees it, AND we add a
+                    # structured warning entry so callers can detect that
+                    # the view was refreshed via the blocking path.
+                    warnings.append({
+                        'view': view,
+                        'reason': 'concurrently_failed_used_blocking_fallback',
+                        'original_error': concurrently_error,
+                    })
                 except Exception as e2:
                     logger.error(f"Fallback refresh also failed for {view}: {str(e2)}")
 
@@ -73,6 +87,7 @@ def refresh_materialized_views(self):
         'views_refreshed': refreshed,
         'total_views': len(views),
         'errors': errors,
+        'warnings': warnings,
     }
 
 
