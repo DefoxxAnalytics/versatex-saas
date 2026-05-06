@@ -665,7 +665,6 @@ export function useAIChatStream() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const token = localStorage.getItem("access_token");
       const apiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001/api";
 
       const messagesToSend = [...state.messages, userMessage].map((m) => ({
@@ -675,9 +674,9 @@ export function useAIChatStream() {
 
       const response = await fetch(`${apiUrl}/v1/analytics/ai-insights/chat/stream/`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           messages: messagesToSend,
@@ -812,14 +811,13 @@ export function useAIQuickQuery() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const token = localStorage.getItem("access_token");
       const apiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001/api";
 
       const response = await fetch(`${apiUrl}/v1/analytics/ai-insights/chat/quick/`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           query: queryText,
