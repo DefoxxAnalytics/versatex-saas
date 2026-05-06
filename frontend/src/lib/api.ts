@@ -100,7 +100,7 @@ export interface UserPreferences {
   dashboardLayout?: Record<string, unknown>;
   sidebarCollapsed?: boolean;
   // AI & Predictive Analytics Settings
-  forecastingModel?: "simple" | "standard";
+  forecastingModel?: "simple_average" | "linear" | "advanced";
   useExternalAI?: boolean;
   aiProvider?: "anthropic" | "openai";
   forecastHorizonMonths?: number;

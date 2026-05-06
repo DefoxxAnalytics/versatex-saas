@@ -42,7 +42,7 @@ const defaultSettings: UserSettings = {
   currency: "USD",
   dateFormat: "MM/DD/YYYY",
   timezone: "America/New_York",
-  forecastingModel: "standard",
+  forecastingModel: "simple_average",
   useExternalAI: false,
   aiProvider: "anthropic",
   forecastHorizonMonths: 6,
@@ -57,7 +57,7 @@ const customSettings: UserSettings = {
   currency: "EUR",
   dateFormat: "DD/MM/YYYY",
   timezone: "Europe/London",
-  forecastingModel: "simple",
+  forecastingModel: "advanced",
   useExternalAI: true,
   aiProvider: "openai",
   forecastHorizonMonths: 12,
@@ -351,7 +351,7 @@ describe("useSettings Hooks", () => {
 
       await act(async () => {
         await result.current.mutateAsync({
-          forecastingModel: "simple",
+          forecastingModel: "linear",
           useExternalAI: true,
           aiProvider: "openai",
         });
@@ -360,7 +360,7 @@ describe("useSettings Hooks", () => {
       const stored = JSON.parse(
         localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}",
       );
-      expect(stored.forecastingModel).toBe("simple");
+      expect(stored.forecastingModel).toBe("linear");
       expect(stored.useExternalAI).toBe(true);
       expect(stored.aiProvider).toBe("openai");
     });

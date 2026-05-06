@@ -18,9 +18,48 @@ export type ColorScheme = "navy" | "classic" | "versatex";
 export type AIProvider = "anthropic" | "openai";
 
 /**
- * Forecasting model type
+ * Forecasting model type.
+ *
+ * Values mirror the backend ChoiceField at
+ * `backend/apps/authentication/serializers.py:84-87`. Any divergence
+ * causes a 400 on save and the setting silently fails to persist
+ * (Finding #16). Keep the two sides in lock-step.
  */
-export type ForecastingModel = "simple" | "standard";
+export type ForecastingModel = "simple_average" | "linear" | "advanced";
+
+/**
+ * Source-of-truth list for the legal forecasting model values. Exported
+ * so tests can assert it stays in sync with the backend serializer.
+ */
+export const VALID_FORECASTING_MODELS = [
+  "simple_average",
+  "linear",
+  "advanced",
+] as const satisfies readonly ForecastingModel[];
+
+/**
+ * Type guard for forecasting model values. Use this anywhere a value
+ * coming from user input, localStorage, or the API needs to be narrowed
+ * to `ForecastingModel` before sending it back to the backend.
+ */
+export function isValidForecastingModel(
+  value: unknown,
+): value is ForecastingModel {
+  return (
+    typeof value === "string" &&
+    (VALID_FORECASTING_MODELS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Human-readable labels for each forecasting model. Used in the
+ * Settings UI Select and in toast confirmations.
+ */
+export const FORECASTING_MODEL_LABELS: Record<ForecastingModel, string> = {
+  simple_average: "Simple Average",
+  linear: "Linear Regression",
+  advanced: "Advanced (ML)",
+};
 
 /**
  * User settings interface
@@ -60,10 +99,15 @@ export interface UserSettings {
 }
 
 /**
- * Default settings
- * Used when no saved settings exist
+ * Default settings.
+ *
+ * Used when no saved settings exist. Exported so tests can assert
+ * defaults stay aligned with backend ChoiceField constraints.
+ *
+ * `forecastingModel` defaults to `simple_average` -- the most
+ * conservative of the three backend-supported algorithms.
  */
-const DEFAULT_SETTINGS: UserSettings = {
+export const DEFAULT_SETTINGS: UserSettings = {
   theme: "light",
   colorScheme: "navy",
   notifications: true,
@@ -72,7 +116,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   dateFormat: "MM/DD/YYYY",
   timezone: "America/New_York",
   // AI & Predictive Analytics defaults
-  forecastingModel: "standard",
+  forecastingModel: "simple_average",
   useExternalAI: false,
   aiProvider: "anthropic",
   forecastHorizonMonths: 6,
@@ -144,10 +188,12 @@ function saveSettingsToStorage(settings: Partial<UserSettings>): UserSettings {
       updated.exportFormat = DEFAULT_SETTINGS.exportFormat;
     }
 
-    // Validate AI settings
+    // Validate AI settings -- forecastingModel must match the backend
+    // ChoiceField at serializers.py:84-87, otherwise the save 400s and the
+    // setting silently fails (Finding #16).
     if (
-      settings.forecastingModel &&
-      !["simple", "standard"].includes(settings.forecastingModel)
+      settings.forecastingModel !== undefined &&
+      !isValidForecastingModel(settings.forecastingModel)
     ) {
       updated.forecastingModel = DEFAULT_SETTINGS.forecastingModel;
     }
@@ -230,9 +276,16 @@ function fromApiFormat(prefs: UserPreferences): Partial<UserSettings> {
     settings.exportFormat = prefs.exportFormat;
   if (prefs.currency !== undefined) settings.currency = prefs.currency;
   if (prefs.dateFormat !== undefined) settings.dateFormat = prefs.dateFormat;
-  // AI settings
-  if (prefs.forecastingModel !== undefined)
-    settings.forecastingModel = prefs.forecastingModel as "simple" | "standard";
+  // AI settings -- guard against legacy or out-of-range values silently
+  // poisoning the cache (Finding #16). Only adopt the API value when it
+  // matches the current legal set; otherwise leave unset so DEFAULT_SETTINGS
+  // applies during the merge.
+  if (
+    prefs.forecastingModel !== undefined &&
+    isValidForecastingModel(prefs.forecastingModel)
+  ) {
+    settings.forecastingModel = prefs.forecastingModel;
+  }
   if (prefs.useExternalAI !== undefined)
     settings.useExternalAI = prefs.useExternalAI;
   if (prefs.aiProvider !== undefined)
