@@ -450,6 +450,19 @@ FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default='')
 ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 
+# AI streaming chat payload bounds (Finding B10).
+# Defaults are conservative; ops can override via env. Combined with the
+# per-call AIInsightsThrottle (Finding #7), these prevent single-call
+# cost-blast attacks (e.g., one 10MB chat history hitting the LLM with
+# millions of input tokens).
+AI_CHAT_MAX_MESSAGES = config('AI_CHAT_MAX_MESSAGES', default=50, cast=int)
+AI_CHAT_MAX_MESSAGE_CONTENT_CHARS = config(
+    'AI_CHAT_MAX_MESSAGE_CONTENT_CHARS', default=8000, cast=int
+)
+AI_CHAT_MAX_PAYLOAD_BYTES = config(
+    'AI_CHAT_MAX_PAYLOAD_BYTES', default=200_000, cast=int
+)
+
 # Daily LLM cost-digest webhook (ntfy.sh / Slack / Teams compatible).
 # When empty, send_llm_cost_digest task logs the daily rollup but skips the
 # outbound POST. Set to an ntfy.sh topic URL for zero-friction alerting.

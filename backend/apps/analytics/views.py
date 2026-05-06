@@ -3174,6 +3174,33 @@ def ai_chat_stream(request):
     if not messages:
         return Response({'error': 'Messages are required'}, status=400)
 
+    # Finding B10: settings-driven payload bounds. Combined with the per-call
+    # AIInsightsThrottle (Finding #7), these block single-call cost-blast
+    # attacks (e.g., one 10MB chat history → millions of input tokens).
+    max_messages = getattr(settings, 'AI_CHAT_MAX_MESSAGES', 50)
+    if len(messages) > max_messages:
+        return Response(
+            {'error': f'Too many messages (max {max_messages}, got {len(messages)})'},
+            status=400,
+        )
+
+    max_chars = getattr(settings, 'AI_CHAT_MAX_MESSAGE_CONTENT_CHARS', 8000)
+    for i, msg in enumerate(messages):
+        content = msg.get('content', '') if isinstance(msg, dict) else ''
+        if len(content) > max_chars:
+            return Response(
+                {'error': f'Message {i} content exceeds max length ({max_chars} chars)'},
+                status=400,
+            )
+
+    max_bytes = getattr(settings, 'AI_CHAT_MAX_PAYLOAD_BYTES', 200_000)
+    payload_size = len(json.dumps(request.data).encode('utf-8'))
+    if payload_size > max_bytes:
+        return Response(
+            {'error': f'Request payload too large ({payload_size} bytes, max {max_bytes})'},
+            status=400,
+        )
+
     api_key = getattr(settings, 'ANTHROPIC_API_KEY', None)
     if not api_key:
         return Response(
