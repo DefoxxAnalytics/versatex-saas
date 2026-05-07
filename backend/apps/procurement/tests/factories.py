@@ -11,28 +11,35 @@ from apps.authentication.tests.factories import OrganizationFactory, UserFactory
 
 
 class SupplierFactory(DjangoModelFactory):
-    """Factory for creating Supplier instances."""
+    """Factory for creating Supplier instances.
+
+    Names are stored in canonical (lowercase) form to match the
+    `get_or_create_supplier` race-safe helper. Tests that round-trip
+    through CSV uploads expect storage to be canonical.
+    """
 
     class Meta:
         model = Supplier
 
     organization = factory.SubFactory(OrganizationFactory)
-    name = factory.Sequence(lambda n: f'Supplier {n}')
+    name = factory.Sequence(lambda n: f'supplier {n}')
     code = factory.Sequence(lambda n: f'SUP{n:04d}')
-    contact_email = factory.LazyAttribute(lambda obj: f'{obj.name.lower().replace(" ", ".")}@example.com')
+    contact_email = factory.LazyAttribute(lambda obj: f'{obj.name.replace(" ", ".")}@example.com')
     contact_phone = factory.Faker('phone_number')
     address = factory.Faker('address')
     is_active = True
 
 
 class CategoryFactory(DjangoModelFactory):
-    """Factory for creating Category instances."""
+    """Factory for creating Category instances. See `SupplierFactory` for the
+    canonical-form rationale.
+    """
 
     class Meta:
         model = Category
 
     organization = factory.SubFactory(OrganizationFactory)
-    name = factory.Sequence(lambda n: f'Category {n}')
+    name = factory.Sequence(lambda n: f'category {n}')
     parent = None
     description = factory.Faker('sentence')
     is_active = True

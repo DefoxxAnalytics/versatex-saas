@@ -30,7 +30,7 @@ from .models import (
     PurchaseRequisition, PurchaseOrder, GoodsReceipt, Invoice
 )
 from .forms import CSVUploadForm, OrganizationResetForm, DeleteAllDataForm
-from .services import CSVProcessor
+from .services import CSVProcessor, get_or_create_supplier, get_or_create_category
 from apps.authentication.models import Organization
 from apps.authentication.utils import log_action
 
@@ -1266,20 +1266,18 @@ class DataUploadAdmin(admin.ModelAdmin):
                         duplicates += 1
                         continue
 
-                    # Get or create supplier
+                    # Get or create supplier (canonical-case race-safe)
                     supplier_name = row.get(supplier_col, '').strip()
-                    supplier, _ = Supplier.objects.get_or_create(
+                    supplier, _ = get_or_create_supplier(
                         organization=organization,
-                        name__iexact=supplier_name,
-                        defaults={'name': supplier_name}
+                        name=supplier_name,
                     )
 
-                    # Get or create category
+                    # Get or create category (canonical-case race-safe)
                     category_name = row.get(category_col, '').strip()
-                    category, _ = Category.objects.get_or_create(
+                    category, _ = get_or_create_category(
                         organization=organization,
-                        name__iexact=category_name,
-                        defaults={'name': category_name}
+                        name=category_name,
                     )
 
                     # Parse amount
@@ -1711,18 +1709,18 @@ class PurchaseRequisitionAdmin(P2PImportMixin, admin.ModelAdmin):
     def _get_or_create_supplier(self, name, organization):
         if not name or name.strip() == '':
             return None
-        supplier, _ = Supplier.objects.get_or_create(
-            organization=organization, name__iexact=name.strip(),
-            defaults={'name': name.strip()}
+        supplier, _ = get_or_create_supplier(
+            organization=organization,
+            name=name,
         )
         return supplier
 
     def _get_or_create_category(self, name, organization):
         if not name or name.strip() == '':
             return None
-        category, _ = Category.objects.get_or_create(
-            organization=organization, name__iexact=name.strip(),
-            defaults={'name': name.strip()}
+        category, _ = get_or_create_category(
+            organization=organization,
+            name=name,
         )
         return category
 
@@ -1931,18 +1929,18 @@ class PurchaseOrderAdmin(P2PImportMixin, admin.ModelAdmin):
     def _get_or_create_supplier(self, name, organization):
         if not name or name.strip() == '':
             return None
-        supplier, _ = Supplier.objects.get_or_create(
-            organization=organization, name__iexact=name.strip(),
-            defaults={'name': name.strip()}
+        supplier, _ = get_or_create_supplier(
+            organization=organization,
+            name=name,
         )
         return supplier
 
     def _get_or_create_category(self, name, organization):
         if not name or name.strip() == '':
             return None
-        category, _ = Category.objects.get_or_create(
-            organization=organization, name__iexact=name.strip(),
-            defaults={'name': name.strip()}
+        category, _ = get_or_create_category(
+            organization=organization,
+            name=name,
         )
         return category
 
@@ -2375,8 +2373,8 @@ class InvoiceAdmin(P2PImportMixin, admin.ModelAdmin):
     def _get_or_create_supplier(self, name, organization):
         if not name or name.strip() == '':
             return None
-        supplier, _ = Supplier.objects.get_or_create(
-            organization=organization, name__iexact=name.strip(),
-            defaults={'name': name.strip()}
+        supplier, _ = get_or_create_supplier(
+            organization=organization,
+            name=name,
         )
         return supplier

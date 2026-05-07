@@ -32,6 +32,10 @@ from apps.procurement.models import (
 )
 
 from ._industry_profiles import PROFILES
+from apps.procurement.services import (
+    get_or_create_supplier as _service_get_or_create_supplier,
+    get_or_create_category as _service_get_or_create_category,
+)
 
 
 class Command(BaseCommand):
@@ -114,7 +118,7 @@ class Command(BaseCommand):
     def _create_categories(self, org, profile):
         categories = {}
         for cat_def in profile["categories"]:
-            cat, _ = Category.objects.get_or_create(organization=org, name=cat_def["name"])
+            cat, _ = _service_get_or_create_category(organization=org, name=cat_def["name"])
             categories[cat_def["name"]] = cat
         self.stdout.write(f"  Categories: {len(categories)}")
         return categories
@@ -127,7 +131,7 @@ class Command(BaseCommand):
             all_named.update(names)
             cat_suppliers = []
             for name in names:
-                sup, _ = Supplier.objects.get_or_create(organization=org, name=name)
+                sup, _ = _service_get_or_create_supplier(organization=org, name=name)
                 cat_suppliers.append(sup)
             suppliers_by_cat[cat_def["name"]] = cat_suppliers
 
@@ -143,7 +147,7 @@ class Command(BaseCommand):
                     suffix += 1
                     unique_name = f"{name} #{suffix}"
                 all_named.add(unique_name)
-                sup, _ = Supplier.objects.get_or_create(organization=org, name=unique_name)
+                sup, _ = _service_get_or_create_supplier(organization=org, name=unique_name)
                 tail_suppliers.append(sup)
 
         for cat_def in profile["categories"]:

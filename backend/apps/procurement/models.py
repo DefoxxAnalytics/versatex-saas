@@ -286,6 +286,13 @@ class DataUpload(models.Model):
     progress_percent = models.IntegerField(default=0)
     progress_message = models.CharField(max_length=255, blank=True)
 
+    # Idempotency checkpoint for Celery retries (v3.0 Phase 1 task 1.7).
+    # Records the index of the last fully-processed batch (succeeded or
+    # rolled-back under skip_invalid=True). On task entry, a non-zero value
+    # signals a resumed run -- batches with index < this value have already
+    # been handled and must not be re-processed. Reset to 0 on completion.
+    last_processed_batch_index = models.PositiveIntegerField(default=0)
+
     # Column mapping tracking
     column_mapping_template = models.ForeignKey(
         'ColumnMappingTemplate',

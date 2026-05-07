@@ -188,8 +188,10 @@ class TestTransactionViewSet:
         }
         response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_201_CREATED
-        assert Supplier.objects.filter(name='New Supplier via Name').exists()
-        assert Category.objects.filter(name='New Category via Name').exists()
+        # Names are canonicalized (lowercase, whitespace-collapsed) to
+        # eliminate the case-collision race in concurrent CSV uploads.
+        assert Supplier.objects.filter(name='new supplier via name').exists()
+        assert Category.objects.filter(name='new category via name').exists()
 
     def test_transaction_organization_scoped(self, authenticated_client, other_organization, other_org_user):
         """Test that transactions from other orgs are not visible."""

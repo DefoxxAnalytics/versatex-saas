@@ -3296,6 +3296,25 @@ def ai_quick_query(request):
     if not query:
         return Response({'error': 'Query is required'}, status=400)
 
+    # Finding B10 (half-fix completion): same settings-driven payload bounds as
+    # ai_chat_stream. The throttle gates calls/hour but not per-call cost — a
+    # single oversized query still drives massive LLM spend per request.
+    # AI_CHAT_MAX_MESSAGES is skipped (no messages array on this endpoint).
+    max_chars = getattr(settings, 'AI_CHAT_MAX_MESSAGE_CONTENT_CHARS', 8000)
+    if len(query) > max_chars:
+        return Response(
+            {'error': f'Query content exceeds max length ({max_chars} chars)'},
+            status=400,
+        )
+
+    max_bytes = getattr(settings, 'AI_CHAT_MAX_PAYLOAD_BYTES', 200_000)
+    payload_size = len(json.dumps(request.data).encode('utf-8'))
+    if payload_size > max_bytes:
+        return Response(
+            {'error': f'Request payload too large ({payload_size} bytes, max {max_bytes})'},
+            status=400,
+        )
+
     api_key = getattr(settings, 'ANTHROPIC_API_KEY', None)
     if not api_key:
         return Response(

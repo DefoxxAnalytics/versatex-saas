@@ -302,8 +302,10 @@ New Supplier,New Category,1500.00,2024-02-01"""
         )
         processor.process()
 
-        assert Supplier.objects.filter(organization=organization, name='New Supplier').exists()
-        assert Category.objects.filter(organization=organization, name='New Category').exists()
+        # Names are canonicalized to lowercase + collapsed whitespace
+        # to eliminate the case-collision race in concurrent CSV uploads.
+        assert Supplier.objects.filter(organization=organization, name='new supplier').exists()
+        assert Category.objects.filter(organization=organization, name='new category').exists()
 
     def test_process_skip_duplicates(self, organization, admin_user, supplier, category):
         """Test that duplicates are skipped when skip_duplicates=True."""

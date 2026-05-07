@@ -29,6 +29,10 @@ from apps.procurement.models import (
     PurchaseRequisition, PurchaseOrder, GoodsReceipt, Invoice,
     Supplier, Category
 )
+from apps.procurement.services import (
+    get_or_create_supplier as _service_get_or_create_supplier,
+    get_or_create_category as _service_get_or_create_category,
+)
 
 
 class Command(BaseCommand):
@@ -161,26 +165,22 @@ class Command(BaseCommand):
             return None
 
     def _get_or_create_supplier(self, name, organization):
-        """Get or create supplier by name."""
+        """Get or create supplier by name (canonical-case race-safe)."""
         if not name or name.strip() == '':
             return None
-        name = name.strip()
-        supplier, _ = Supplier.objects.get_or_create(
+        supplier, _ = _service_get_or_create_supplier(
             organization=organization,
-            name__iexact=name,
-            defaults={'name': name}
+            name=name,
         )
         return supplier
 
     def _get_or_create_category(self, name, organization):
-        """Get or create category by name."""
+        """Get or create category by name (canonical-case race-safe)."""
         if not name or name.strip() == '':
             return None
-        name = name.strip()
-        category, _ = Category.objects.get_or_create(
+        category, _ = _service_get_or_create_category(
             organization=organization,
-            name__iexact=name,
-            defaults={'name': name}
+            name=name,
         )
         return category
 

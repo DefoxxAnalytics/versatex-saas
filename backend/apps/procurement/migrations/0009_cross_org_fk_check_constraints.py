@@ -16,6 +16,28 @@ backfill detection and is intentionally out of scope here.
 The forward/reverse SQL is gated to Postgres via ``RunPython``. SQLite (used
 in ``settings_test``) lacks PL/pgSQL, so the migration is a no-op there and
 the matching tests are skipped on non-Postgres backends.
+
+Concurrency hardening (v3.0 Phase 1):
+
+CREATE TRIGGER takes ACCESS EXCLUSIVE on the target table. On a busy
+production database, an in-flight long-running query or Celery task holding
+even a weaker lock on ``procurement_transaction`` / ``_invoice`` /
+``_purchaseorder`` / ``_contract`` will block the migration indefinitely.
+
+Two safeguards:
+
+1. ``SET LOCAL lock_timeout = '5s'`` is issued before each trigger CREATE
+   block. If the lock can't be acquired within 5 seconds, Postgres raises
+   ``LockNotAvailable`` and the migration aborts cleanly.
+2. ``atomic = False`` so each table's trigger creation runs in its own
+   transaction. A stuck lock on one table no longer holds up the others;
+   the operator can re-run the migration after the contending transaction
+   releases its lock and Django will skip the already-installed triggers
+   (``CREATE OR REPLACE FUNCTION`` + ``DROP TRIGGER IF EXISTS`` make
+   forward execution idempotent).
+
+Deploy during a low-traffic window. If trigger creation times out, retry
+the migration after the contending transaction releases its lock.
 """
 from django.db import migrations
 
@@ -49,6 +71,8 @@ TRIGGER_TARGETS = [
 
 def _forward_sql(table, function, trigger):
     return f"""
+        SET LOCAL lock_timeout = '5s';
+
         CREATE OR REPLACE FUNCTION {function}()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -78,29 +102,42 @@ def _forward_sql(table, function, trigger):
 
 def _reverse_sql(table, function, trigger):
     return f"""
+        SET LOCAL lock_timeout = '5s';
+
         DROP TRIGGER IF EXISTS {trigger} ON {table};
         DROP FUNCTION IF EXISTS {function}();
     """
 
 
 def install_triggers(apps, schema_editor):
-    """No-op on non-Postgres backends (e.g., SQLite test DB)."""
+    """No-op on non-Postgres backends (e.g., SQLite test DB).
+
+    Each table's trigger is created in its own transaction (atomic=False on
+    the Migration class), with ``SET LOCAL lock_timeout = '5s'`` to bound
+    the wait for ACCESS EXCLUSIVE.
+    """
     if schema_editor.connection.vendor != "postgresql":
         return
-    with schema_editor.connection.cursor() as cur:
-        for table, function, trigger in TRIGGER_TARGETS:
+    for table, function, trigger in TRIGGER_TARGETS:
+        with schema_editor.connection.cursor() as cur:
             cur.execute(_forward_sql(table, function, trigger))
 
 
 def remove_triggers(apps, schema_editor):
     if schema_editor.connection.vendor != "postgresql":
         return
-    with schema_editor.connection.cursor() as cur:
-        for table, function, trigger in TRIGGER_TARGETS:
+    for table, function, trigger in TRIGGER_TARGETS:
+        with schema_editor.connection.cursor() as cur:
             cur.execute(_reverse_sql(table, function, trigger))
 
 
 class Migration(migrations.Migration):
+    # Each table's trigger creation runs in its own transaction so a stuck
+    # lock on one table (e.g., a long-running query on procurement_transaction)
+    # does not block trigger installation on the other three tables. Combined
+    # with SET LOCAL lock_timeout='5s' inside each block, failed acquisitions
+    # abort cleanly with LockNotAvailable and can be retried.
+    atomic = False
 
     dependencies = [
         ("procurement", "0008_remove_unique_transaction_constraint"),

@@ -193,11 +193,11 @@ def other_org_client(api_client, other_org_user):
 
 @pytest.fixture
 def supplier(db, organization, admin_user):
-    """Create a test supplier."""
+    """Create a test supplier (canonical-form name to match CSV processor)."""
     from apps.procurement.models import Supplier
     return Supplier.objects.create(
         organization=organization,
-        name='Test Supplier',
+        name='test supplier',
         code='SUP001',
         contact_email='supplier@example.com',
         is_active=True
@@ -206,11 +206,11 @@ def supplier(db, organization, admin_user):
 
 @pytest.fixture
 def category(db, organization):
-    """Create a test category."""
+    """Create a test category (canonical-form name to match CSV processor)."""
     from apps.procurement.models import Category
     return Category.objects.create(
         organization=organization,
-        name='Test Category',
+        name='test category',
         description='A test category',
         is_active=True
     )

@@ -31,6 +31,7 @@ class AIInsightsCache:
 
     CACHE_PREFIX = "ai_insights"
     DEFAULT_TTL = 3600  # 1 hour
+    STATS_TTL = 86400  # 24 hours for stats counters
 
     @classmethod
     def _get_ttl(cls) -> int:
@@ -166,12 +167,28 @@ class AIInsightsCache:
         return invalidated
 
     @classmethod
-    def _increment_stat(cls, organization_id: int, stat_name: str) -> None:
-        """Increment cache statistics counter."""
+    def _increment_stat(cls, organization_id: int, stat_name: str, delta: int = 1) -> None:
+        """
+        Atomically increment a cache statistics counter.
+
+        Uses cache.add + cache.incr to avoid the lost-update race that the
+        prior cache.get -> cache.set pattern exhibited under concurrent AI
+        requests (two readers see N, both write N+1, real value should be
+        N+2). cache.add only sets the key if it does not exist, and
+        cache.incr is atomic in Django's redis and locmem backends.
+
+        ValueError is raised by cache.incr when the key has expired between
+        the add() and incr() calls. That race is extremely rare (sub-ms
+        window vs. 24-hour TTL) and the count is best-effort, so we drop
+        the increment rather than reseed.
+        """
         stat_key = f"{cls.CACHE_PREFIX}:stats:{organization_id}:{stat_name}"
         try:
-            current = cache.get(stat_key) or 0
-            cache.set(stat_key, current + 1, 86400)  # 24 hour TTL for stats
+            if not cache.add(stat_key, delta, cls.STATS_TTL):
+                try:
+                    cache.incr(stat_key, delta)
+                except ValueError:
+                    pass
         except Exception:
             pass  # Stats are best-effort
 
