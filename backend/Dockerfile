@@ -1,31 +1,50 @@
-FROM python:3.11-slim
+# ---- Builder stage: compile wheels with full toolchain ----
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS builder
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Set work directory
-WORKDIR /app
-
-# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    postgresql-client \
     gcc \
     python3-dev \
     musl-dev \
     libpq-dev \
     libmagic1 \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+WORKDIR /build
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install --prefix=/install -r requirements.txt
 
-# Copy project
+
+# ---- Runtime stage: slim image with only runtime libs ----
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Runtime-only system deps:
+#   libpq5    - PostgreSQL client lib (replaces libpq-dev from builder)
+#   libmagic1 - file-type detection used by python-magic
+#   curl      - required by backend healthcheck in docker-compose.yml
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libmagic1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy installed Python packages from the builder stage
+COPY --from=builder /install /usr/local
+
+WORKDIR /app
+
+# Copy project source
 COPY . .
 
 # Collect static files

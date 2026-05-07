@@ -70,7 +70,7 @@ services:
     # GHCR-pinned image. APP_VERSION is the git SHA or semver tag that the
     # deploy.yml build-push workflow published. Rollback = `APP_VERSION=<prev>
     # docker compose pull && docker compose up -d` (~90 s typical).
-    image: ghcr.io/defoxxanalytics/versatex-saas-backend:${APP_VERSION:-latest}
+    image: ghcr.io/defoxxanalytics/versatex-saas-backend:${APP_VERSION:?APP_VERSION required}
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -106,7 +106,7 @@ services:
 
   # Celery Worker (+ embedded beat for scheduled tasks)
   celery:
-    image: ghcr.io/defoxxanalytics/versatex-saas-backend:${APP_VERSION:-latest}
+    image: ghcr.io/defoxxanalytics/versatex-saas-backend:${APP_VERSION:?APP_VERSION required}
     # -B enables beat in the same container. /var/run/celery-beat is a tmpfs
     # below, so the schedule file is writable by the celery user without
     # permission gymnastics. Single-VPS deploy: acceptable trade-off (beat
@@ -135,13 +135,21 @@ services:
       - default
 
   # Celery Flower (monitoring)
+  # Localhost-only port binding: Flower's UI has BasicAuth but no rate limiting,
+  # so exposing it to the public internet is a direct attack surface. SSH-tunnel
+  # to the deploy host for operator access (e.g. `ssh -L 5556:localhost:5556`).
+  # !override replaces (rather than merges with) the base compose's public 5555
+  # mapping -- without it, both bindings would coexist and prod would still be
+  # exposed to 0.0.0.0.
   flower:
     restart: unless-stopped
     logging: *default-logging
+    ports: !override
+      - "127.0.0.1:${FLOWER_PORT:-5556}:5555"
 
   # Frontend - Production configuration
   frontend:
-    image: ghcr.io/defoxxanalytics/versatex-saas-frontend:${APP_VERSION:-latest}
+    image: ghcr.io/defoxxanalytics/versatex-saas-frontend:${APP_VERSION:?APP_VERSION required}
     restart: unless-stopped
     logging: *default-logging
     deploy:

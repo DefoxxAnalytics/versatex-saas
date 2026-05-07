@@ -36,10 +36,16 @@ jobs:
           pip install flake8 black isort
 
       - name: Check code formatting with Black
+        # Currently informational: ~191 files would reformat. Large-bang
+        # cleanup tracked separately (out of scope for v3 prod hardening).
+        # Promote to a hard gate once cleanup ships and CI is green.
         run: black --check --diff .
         continue-on-error: true
 
       - name: Check import sorting with isort
+        # Currently informational: ~119 files have import order drift. Same
+        # tracking issue as Black above. Bundling the cleanup + the gate
+        # promotion in one PR is cleaner than fighting per-file conflicts.
         run: isort --check-only --diff .
         continue-on-error: true
 
@@ -184,6 +190,9 @@ jobs:
         run: pnpm check
 
       - name: Lint check
+        # Currently informational: ~23 source files have Prettier drift.
+        # Bundling format cleanup with the gate flip is out of scope for the
+        # v3.0 prod-hardening branch; tracked as a separate cleanup task.
         run: pnpm format --check
         continue-on-error: true
 
@@ -301,17 +310,97 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        # Pinned to the v0.36.0 commit SHA. Floating @master is a supply-chain
+        # risk; tag refs (@v0.36.0) are immutable in GitHub Actions but a
+        # digest pin is even safer. Bump deliberately.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-        continue-on-error: true
+          exit-code: '1'
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
+
+  production-validator:
+    name: Production Settings Validator
+    runs-on: ubuntu-latest
+    needs: backend-test
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        # Match backend-test image so vector-extension migrations can run.
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: validator_user
+          # Must match DB_PASSWORD in the validator env block below.
+          POSTGRES_PASSWORD: 'validator-db-password-NOT-REAL-DO-NOT-USE-12345'
+          POSTGRES_DB: validator_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Long, unique-looking values so production-mode checks that flag
+      # short, default, or "MUST_CHANGE"-substring secrets don't trip.
+      # NOT real secrets; do not reuse anywhere.
+      SECRET_KEY: 'long-real-looking-secret-for-validator-NOT-REAL-DO-NOT-USE-AS-TEMPLATE-12345'
+      DEBUG: 'False'
+      DB_NAME: validator_db
+      DB_USER: validator_user
+      DB_PASSWORD: 'validator-db-password-NOT-REAL-DO-NOT-USE-12345'
+      DB_HOST: localhost
+      DB_PORT: 5432
+      REDIS_PASSWORD: 'validator-redis-password-NOT-REAL-DO-NOT-USE-67890'
+      ALLOWED_HOSTS: 'app.example.com,api.example.com'
+      CORS_ALLOWED_ORIGINS: 'https://app.example.com'
+      CSRF_TRUSTED_ORIGINS: 'https://app.example.com,https://api.example.com'
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/0
+      # Set to a placeholder so the "TRUSTED_PROXIES empty in production"
+      # warning doesn't pollute logs. Not a fail-level=ERROR check.
+      TRUSTED_PROXIES: '127.0.0.1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Django deploy check
+        # --fail-level=ERROR — warnings (e.g. SECURE_SSL_REDIRECT not set on
+        # an HTTPS-less test runner) don't fail the build. Promote to
+        # WARNING once production HTTPS posture is fully clean.
+        run: python manage.py check --deploy --fail-level=ERROR
