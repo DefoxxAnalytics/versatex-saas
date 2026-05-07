@@ -13,6 +13,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import models
+from django.db.models import F
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -283,8 +284,21 @@ class SemanticCache(models.Model):
         return timezone.now() > self.expires_at
 
     def increment_hit_count(self) -> None:
-        self.hit_count += 1
-        self.save(update_fields=['hit_count'])
+        """
+        Atomically increment hit_count via SQL ``UPDATE ... SET hit_count = hit_count + 1``.
+
+        The previous read-modify-write pattern (``self.hit_count += 1; self.save()``)
+        was the ORM analog of the ``cache.get -> cache.set`` lost-update race that
+        v3 Phase 1 Task 1.6 fixed in ai_cache.py: two concurrent ``lookup`` calls
+        for the same cached entry would each read N, both write N+1, undercounting
+        hits. ``F('hit_count') + 1`` pushes the increment into the database, where
+        row-level locking serializes concurrent updates.
+
+        Refreshes ``self.hit_count`` from the database so callers observe the
+        new value without an extra round-trip.
+        """
+        type(self).objects.filter(pk=self.pk).update(hit_count=F('hit_count') + 1)
+        self.refresh_from_db(fields=['hit_count'])
 
     @classmethod
     def create_entry(
