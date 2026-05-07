@@ -738,4 +738,33 @@ Test: bulk-create 100 transactions inside a `transaction.atomic()` block; assert
 
 ---
 
-*Plan written 2026-05-06 for code state at commit `9545754`. Companion to `docs/codebase-review-2026-05-06-second-pass.md` and `docs/plans/2026-05-05-codebase-remediation.md`.*
+## Closure status (2026-05-06)
+
+All 4 phases complete. Merged to `main` and pushed to `origin/main`.
+
+| Phase | Tasks | Commits | Merge SHA | Backend tests after |
+|---|---|---|---|---|
+| 0 — Critical CVEs / auth / lockfile | 5 | `fdda892`, `fef7dc7`, `b86da1c`, `9111ca6`, `ef115f2` | `bc83d48` | 855 (+4 new auth tests) |
+| 1 — Concurrency & data integrity | 8 | `273766a`, `9da1a06`, `becb623`, `43972a8`, `185e345`, `91019f6`, `d73ef70`, `3339288` | `ec48e44` | 905 (+50) |
+| 2 — Production hardening | 12 (in 6 commits) | `2794982`, `17bd844`, `c5e1e6e`, `beade15`, `f7a3f1a`, `ab0b1ab` | `f71df1d` | 905 (no app-code change) |
+| 3 — Mediums + observability | 12 (in 7 commits) | `9f688ce`, `9ff004c`, `c029a65`, `8a3ad6e`, `78498c8`, `9b7dd2f`, `46fbda0` | `398aa74` | 923 (+18) |
+
+**Total: 37 commits, 50 distinct sub-fixes (some bundled). Backend tests 855 → 923 (+68). Frontend +3 drift-guard tests.**
+
+**Open follow-ups (deliberately not in v3.0 scope):**
+- Black/isort/Prettier `continue-on-error: true` retained (191/119/24 files would reformat in bulk; deferred to dedicated cleanup commit)
+- drf_spectacular W001/W002 + HSTS subdomain/preload remain at `--fail-level=ERROR` (not WARNING)
+- `urls.W005 'reports' namespace not unique` — pre-existing real bug, not introduced by remediation
+- Other compose files (monitoring, tunnel) still use floating tags
+- Vite-transformer suite-load flake (~30%) on frontend tests — upstream issue
+- `consecutive_failures` counter on scheduled reports — captured for future cycle
+
+**Inherited deferrals from v2.12 (still open):**
+- Task 1.3 — `Report.is_public` semantics pending product decision
+- Task 5.4 — aging method DB-side aggregation gated on >20K open invoices threshold
+
+See `docs/REMEDIATION-OPEN-ITEMS.md` for both.
+
+---
+
+*Plan written 2026-05-06 for code state at commit `9545754`. Closure recorded 2026-05-06 at merge SHA `398aa74`. Companion to `docs/codebase-review-2026-05-06-second-pass.md` and `docs/plans/2026-05-05-codebase-remediation.md`.*
