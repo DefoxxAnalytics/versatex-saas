@@ -1,5 +1,5 @@
 # ---- Builder stage: compile wheels with full toolchain ----
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -21,7 +21,7 @@ RUN pip install --upgrade pip && \
 
 
 # ---- Runtime stage: slim image with only runtime libs ----
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
