@@ -243,6 +243,8 @@ def enhance_insights_async(self, org_id: int, user_id: int, insights_data: list)
     autoretry_for=(Exception,),
     retry_backoff=True,
     track_started=True,
+    soft_time_limit=270,
+    time_limit=300,
 )
 def perform_deep_analysis_async(self, org_id: int, user_id: int, insight_data: dict):
     """
@@ -286,7 +288,10 @@ def perform_deep_analysis_async(self, org_id: int, user_id: int, insight_data: d
 
         cache.set(status_key, {"status": "processing", "progress": 50}, ENHANCEMENT_CACHE_TTL)
 
-        analysis = service.perform_deep_analysis(insight_data)
+        # M-AI2: pass user_id so the semantic cache key is per-user within
+        # the org. Without this, two users in the same org clicking the
+        # same insight would see each other's cached analytical responses.
+        analysis = service.perform_deep_analysis(insight_data, user_id=user_id)
 
         if analysis:
             cache.set(status_key, {"status": "processing", "progress": 90}, ENHANCEMENT_CACHE_TTL)

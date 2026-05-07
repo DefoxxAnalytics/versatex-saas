@@ -54,8 +54,10 @@ class Supplier(models.Model):
     Supplier model - organization-scoped
     Includes UUID for secure external references
     """
-    # UUID for external API references (prevents ID enumeration)
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references (prevents ID enumeration).
+    # `unique=True` already creates a btree index, so `db_index` and an
+    # explicit `Index(fields=['uuid'])` would be duplicates.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     organization = models.ForeignKey(
         Organization,
@@ -76,11 +78,9 @@ class Supplier(models.Model):
 
     class Meta:
         ordering = ['name']
+        # `unique_together` creates a unique btree index on (organization, name)
+        # which already serves left-prefix lookups; no separate Index needed.
         unique_together = ['organization', 'name']
-        indexes = [
-            models.Index(fields=['organization', 'name']),
-            models.Index(fields=['uuid']),
-        ]
 
     def __str__(self):
         return f"{self.name} ({self.organization.name})"
@@ -91,8 +91,9 @@ class Category(models.Model):
     Category model - organization-scoped
     Includes UUID for secure external references
     """
-    # UUID for external API references
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references. `unique=True` already creates a
+    # btree index; no need for `db_index` or a separate Meta.indexes entry.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     organization = models.ForeignKey(
         Organization,
@@ -115,11 +116,9 @@ class Category(models.Model):
     class Meta:
         ordering = ['name']
         verbose_name_plural = 'Categories'
+        # unique_together's unique btree index covers (organization, name)
+        # left-prefix lookups; no separate Index needed.
         unique_together = ['organization', 'name']
-        indexes = [
-            models.Index(fields=['organization', 'name']),
-            models.Index(fields=['uuid']),
-        ]
 
     def __str__(self):
         return f"{self.name} ({self.organization.name})"
@@ -130,8 +129,9 @@ class Transaction(models.Model):
     Procurement transaction model - organization-scoped
     Includes UUID for secure external references
     """
-    # UUID for external API references
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references. `unique=True` already provides
+    # the btree index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     organization = models.ForeignKey(
         Organization,
@@ -184,7 +184,6 @@ class Transaction(models.Model):
             models.Index(fields=['organization', 'category']),
             models.Index(fields=['organization', 'fiscal_year']),
             models.Index(fields=['upload_batch']),
-            models.Index(fields=['uuid']),
         ]
 
     def __str__(self):
@@ -196,7 +195,9 @@ class ColumnMappingTemplate(models.Model):
     Stores reusable column mapping configurations for CSV uploads.
     Scoped per-organization to allow different teams to have their own templates.
     """
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # `unique=True` provides the btree index; no need for db_index or a
+    # separate Meta.indexes entry.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -222,7 +223,6 @@ class ColumnMappingTemplate(models.Model):
         verbose_name_plural = 'Column Mapping Templates'
         indexes = [
             models.Index(fields=['organization', 'is_default']),
-            models.Index(fields=['uuid']),
         ]
 
     def __str__(self):
@@ -243,8 +243,9 @@ class DataUpload(models.Model):
     Track data upload history with background processing support.
     Includes UUID for secure external references.
     """
-    # UUID for external API references
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references. `unique=True` already provides
+    # the btree index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     organization = models.ForeignKey(
         Organization,
@@ -329,7 +330,6 @@ class DataUpload(models.Model):
         indexes = [
             models.Index(fields=['organization', '-created_at']),
             models.Index(fields=['batch_id']),
-            models.Index(fields=['uuid']),
             models.Index(fields=['celery_task_id']),
             models.Index(fields=['status']),
         ]
@@ -351,8 +351,9 @@ class Contract(models.Model):
     Contracts are imported via CSV (read-only in frontend).
     Used for contract analytics and compliance tracking.
     """
-    # UUID for external API references
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references. `unique=True` provides the btree
+    # index; `db_index` and a separate Index would be duplicates.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     organization = models.ForeignKey(
         Organization,
@@ -408,7 +409,6 @@ class Contract(models.Model):
             models.Index(fields=['organization', 'end_date']),
             models.Index(fields=['organization', 'supplier']),
             models.Index(fields=['organization', 'status']),
-            models.Index(fields=['uuid']),
         ]
 
     def __str__(self):
@@ -434,8 +434,9 @@ class SpendingPolicy(models.Model):
     Spending policy model for compliance tracking.
     Defines rules for maverick spend detection.
     """
-    # UUID for external API references
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references. `unique=True` provides the btree
+    # index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     organization = models.ForeignKey(
         Organization,
@@ -467,7 +468,6 @@ class SpendingPolicy(models.Model):
         unique_together = ['organization', 'name']
         indexes = [
             models.Index(fields=['organization', 'is_active']),
-            models.Index(fields=['uuid']),
         ]
 
     def __str__(self):
@@ -479,8 +479,9 @@ class PolicyViolation(models.Model):
     Policy violation model for tracking compliance issues.
     Records transactions that violate spending policies.
     """
-    # UUID for external API references
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references. `unique=True` provides the btree
+    # index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     organization = models.ForeignKey(
         Organization,
@@ -539,7 +540,6 @@ class PolicyViolation(models.Model):
             models.Index(fields=['organization', '-created_at']),
             models.Index(fields=['organization', 'is_resolved']),
             models.Index(fields=['organization', 'severity']),
-            models.Index(fields=['uuid']),
         ]
 
     def __str__(self):
@@ -555,8 +555,9 @@ class PurchaseRequisition(models.Model):
     Purchase Requisition - Initial request for goods/services.
     Part of the P2P Analytics Suite for cycle time and workflow analysis.
     """
-    # UUID for external API references (prevents ID enumeration)
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references (prevents ID enumeration).
+    # `unique=True` already creates a btree index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     STATUS_CHOICES = [
         ('draft', 'Draft'),
@@ -648,7 +649,6 @@ class PurchaseRequisition(models.Model):
             models.Index(fields=['organization', 'created_date']),
             models.Index(fields=['organization', 'department']),
             models.Index(fields=['organization', 'priority']),
-            models.Index(fields=['uuid']),
             models.Index(fields=['upload_batch']),
         ]
 
@@ -676,8 +676,9 @@ class PurchaseOrder(models.Model):
     Purchase Order - Formal commitment to supplier.
     Part of the P2P Analytics Suite for cycle time and contract compliance analysis.
     """
-    # UUID for external API references (prevents ID enumeration)
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references (prevents ID enumeration).
+    # `unique=True` already creates a btree index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     STATUS_CHOICES = [
         ('draft', 'Draft'),
@@ -784,7 +785,6 @@ class PurchaseOrder(models.Model):
             models.Index(fields=['organization', 'supplier']),
             models.Index(fields=['organization', 'created_date']),
             models.Index(fields=['organization', 'is_contract_backed']),
-            models.Index(fields=['uuid']),
             models.Index(fields=['upload_batch']),
         ]
 
@@ -809,8 +809,9 @@ class GoodsReceipt(models.Model):
     Goods Receipt - Confirmation of delivery.
     Critical for 3-way matching (PO vs GR vs Invoice).
     """
-    # UUID for external API references (prevents ID enumeration)
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references (prevents ID enumeration).
+    # `unique=True` already creates a btree index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     STATUS_CHOICES = [
         ('pending', 'Pending Inspection'),
@@ -869,7 +870,6 @@ class GoodsReceipt(models.Model):
             models.Index(fields=['organization', 'status']),
             models.Index(fields=['organization', 'received_date']),
             models.Index(fields=['organization', 'purchase_order']),
-            models.Index(fields=['uuid']),
             models.Index(fields=['upload_batch']),
         ]
 
@@ -894,8 +894,9 @@ class Invoice(models.Model):
     Supplier Invoice - Billing document.
     Core model for 3-way matching and AP aging analysis.
     """
-    # UUID for external API references (prevents ID enumeration)
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    # UUID for external API references (prevents ID enumeration).
+    # `unique=True` already creates a btree index for fast lookups.
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     STATUS_CHOICES = [
         ('received', 'Received'),
@@ -1011,7 +1012,6 @@ class Invoice(models.Model):
             models.Index(fields=['organization', 'supplier']),
             models.Index(fields=['organization', 'has_exception']),
             models.Index(fields=['organization', 'invoice_date']),
-            models.Index(fields=['uuid']),
             models.Index(fields=['upload_batch']),
         ]
 

@@ -210,7 +210,9 @@ STORAGES = {
     },
 }
 
-# File upload limits
+# File upload limits — keep in lockstep with frontend/nginx/nginx.conf
+# `client_max_body_size`. Misalignment lets nginx accept payloads that
+# Django then rejects with a confusing "request body exceeded" 400.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB
 
@@ -544,11 +546,19 @@ if not DEBUG:
         'class': 'logging.FileHandler',
         'filename': BASE_DIR / 'logs' / 'security.log',
         'formatter': 'verbose',
+        # Strip aiApiKey/password/Authorization/token values from records
+        # before they hit the persisted security log volume.
+        'filters': ['redact_sensitive'],
     }
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'redact_sensitive': {
+            '()': 'config.logging_filters.RedactSensitiveFilter',
+        },
+    },
     'formatters': {
         'verbose': {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',

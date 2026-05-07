@@ -1449,14 +1449,22 @@ class AIProviderManager:
         context: dict,
         tool_schema: dict,
         skip_cache: bool = False,
-        skip_rag: bool = False
+        skip_rag: bool = False,
+        user_id: Optional[int] = None,
     ) -> Optional[dict]:
-        """Perform deep analysis with RAG, semantic caching, automatic failover, and logging."""
+        """Perform deep analysis with RAG, semantic caching, automatic failover, and logging.
+
+        M-AI2: ``user_id`` scopes the semantic cache key per-requester within
+        an organization. Without it, two users in the same org sharing an
+        insight ID would receive each other's analytical responses — a
+        privacy leak in multi-user organizations.
+        """
         cache_key = json.dumps({
             'id': insight_data.get('id'),
             'type': insight_data.get('type'),
             'title': insight_data.get('title'),
-            'total_ytd': context.get('spending', {}).get('total_ytd', 0)
+            'total_ytd': context.get('spending', {}).get('total_ytd', 0),
+            'user_id': user_id,
         }, sort_keys=True)
 
         if self._semantic_cache and not skip_cache:

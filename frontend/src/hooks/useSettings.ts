@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { authAPI, type UserPreferences } from "@/lib/api";
+import { isAuthenticated } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryKeys";
 
 /**
@@ -296,13 +297,6 @@ function fromApiFormat(prefs: UserPreferences): Partial<UserSettings> {
     settings.anomalySensitivity = prefs.anomalySensitivity;
 
   return settings;
-}
-
-/**
- * Check if user is authenticated
- */
-function isAuthenticated(): boolean {
-  return localStorage.getItem("user") !== null;
 }
 
 /**

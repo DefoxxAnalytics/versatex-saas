@@ -1300,10 +1300,20 @@ def request_deep_analysis(request):
     if 'id' not in insight_data:
         return Response({'error': 'insight must have an id field'}, status=400)
 
+    # M-AI3: per-field caps prevent a single-field cost-blast inside the
+    # request-level payload bound. Pre-existing AI_CHAT_MAX_PAYLOAD_BYTES
+    # caps total body size; this caps the two free-text fields the LLM
+    # actually consumes from the deep-analysis payload.
+    DEEP_ANALYSIS_TITLE_MAX = 1000
+    DEEP_ANALYSIS_DESC_MAX = 1000
+    title = (insight_data.get('title') or '')[:DEEP_ANALYSIS_TITLE_MAX]
+    description = (insight_data.get('description') or '')[:DEEP_ANALYSIS_DESC_MAX]
+    sanitized_insight_data = {**insight_data, 'title': title, 'description': description}
+
     task = perform_deep_analysis_async.delay(
         org_id=organization.id,
         user_id=request.user.id,
-        insight_data=insight_data
+        insight_data=sanitized_insight_data
     )
 
     log_action(

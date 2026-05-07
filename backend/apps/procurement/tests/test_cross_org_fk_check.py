@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 import unittest
 
+import pytest
 from django.db import IntegrityError, connection, transaction as db_transaction
 from django.test import TestCase, TransactionTestCase
 
@@ -38,6 +39,7 @@ postgres_only = unittest.skipUnless(
 )
 
 
+@pytest.mark.postgres
 @postgres_only
 class CrossOrgFKCheckBase(TransactionTestCase):
     """Shared org/supplier setup.
@@ -69,6 +71,7 @@ class CrossOrgFKCheckBase(TransactionTestCase):
         )
 
 
+@pytest.mark.postgres
 @postgres_only
 class TransactionCrossOrgFKTests(CrossOrgFKCheckBase):
     def setUp(self):
@@ -110,6 +113,7 @@ class TransactionCrossOrgFKTests(CrossOrgFKCheckBase):
                 tx.save()
 
 
+@pytest.mark.postgres
 @postgres_only
 class ContractCrossOrgFKTests(CrossOrgFKCheckBase):
     def _contract_kwargs(self, organization, supplier):
@@ -146,6 +150,7 @@ class ContractCrossOrgFKTests(CrossOrgFKCheckBase):
                 contract.save()
 
 
+@pytest.mark.postgres
 @postgres_only
 class PurchaseOrderCrossOrgFKTests(CrossOrgFKCheckBase):
     def _po_kwargs(self, organization, supplier, po_number="PO-0001"):
@@ -180,6 +185,7 @@ class PurchaseOrderCrossOrgFKTests(CrossOrgFKCheckBase):
                 po.save()
 
 
+@pytest.mark.postgres
 @postgres_only
 class InvoiceCrossOrgFKTests(CrossOrgFKCheckBase):
     def _invoice_kwargs(self, organization, supplier, invoice_number="INV-0001"):
@@ -218,6 +224,7 @@ class InvoiceCrossOrgFKTests(CrossOrgFKCheckBase):
                 invoice.save()
 
 
+@pytest.mark.postgres
 @postgres_only
 class TriggerInstallationTests(TestCase):
     """Sanity check that the migration installed all four triggers."""
