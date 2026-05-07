@@ -562,7 +562,8 @@ export default function PurchaseOrders() {
                 ) : (
                   supplierPOData.map((supplier, index) => (
                     <tr
-                      key={index}
+                      // v3.1 Phase 4 (F-TD1): supplier.fullName is stable.
+                      key={`${supplier.fullName}-${index}`}
                       className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                     >
                       <td className="py-3 px-4">

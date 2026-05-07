@@ -339,7 +339,11 @@ function ContractDetailModal({
                   </div>
                   <div className="space-y-2">
                     {contract.category_breakdown.map((cat, index) => (
-                      <div key={index} className="flex justify-between text-sm">
+                      // v3.1 Phase 4 (F-TD1): stable key by category name.
+                      <div
+                        key={`${contract.id}-cat-${cat.category}-${index}`}
+                        className="flex justify-between text-sm"
+                      >
                         <span>{cat.category}</span>
                         <span className="font-medium">
                           {formatCurrency(cat.amount)}
@@ -358,7 +362,11 @@ function ContractDetailModal({
                 </div>
                 <div className="space-y-2">
                   {contract.monthly_spend.slice(-6).map((month, index) => (
-                    <div key={index} className="flex justify-between text-sm">
+                    // v3.1 Phase 4 (F-TD1): month label is stable.
+                    <div
+                      key={`${contract.id}-mo-${month.month}-${index}`}
+                      className="flex justify-between text-sm"
+                    >
                       <span>{month.month}</span>
                       <span className="font-medium">
                         {formatCurrency(month.amount)}
@@ -769,7 +777,12 @@ function SavingsOpportunitiesSection() {
                 const typeDisplay = getSavingsTypeDisplay(opportunity.type);
 
                 return (
-                  <div key={index} className="p-4 rounded-lg border bg-card">
+                  // v3.1 Phase 4 (F-TD1): opportunity.title is unique enough
+                  // to keep card state aligned during list updates.
+                  <div
+                    key={`${opportunity.title}-${index}`}
+                    className="p-4 rounded-lg border bg-card"
+                  >
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <Badge

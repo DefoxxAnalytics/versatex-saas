@@ -162,6 +162,14 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         Get detailed year-over-year comparison with category and supplier breakdowns.
         Returns comprehensive data for the Year-over-Year dashboard page.
 
+        v3.1 Phase 4 (AN-M3): refactored from full transaction materialisation
+        + Python-side defaultdict accumulation to DB-side grouped aggregation.
+        Uses the BaseAnalyticsService.fiscal_year_db_expr / fiscal_month_db_expr
+        helpers so the FY math matches the Python `_get_fiscal_year` /
+        `_get_fiscal_month` semantics exactly. Per-tenant transaction count
+        was the bottleneck; now it stays O(years × categories) regardless
+        of row volume.
+
         Args:
             year1: First fiscal year to compare (optional, defaults to previous FY)
             year2: Second fiscal year to compare (optional, defaults to current FY)
@@ -170,20 +178,21 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         Returns:
             dict: Comprehensive YoY comparison with summary, monthly, category, supplier data
         """
-        # Get all transactions with dates
-        all_transactions = list(
-            self.transactions.select_related("category", "supplier").values(
-                "id",
-                "amount",
-                "date",
-                "category__name",
-                "category_id",
-                "supplier__name",
-                "supplier_id",
-            )
+        from django.db.models import Count, Sum
+
+        fy_expr = self.fiscal_year_db_expr(use_fiscal_year)
+        fm_expr = self.fiscal_month_db_expr(use_fiscal_year)
+
+        # ── Available years ────────────────────────────────────────────
+        # Note: `.values_list(...).distinct()` on a Case/When-annotated field
+        # is not reliably deduplicated on SQLite (returns duplicates because
+        # DISTINCT is applied to the SELECT projection, not the annotation
+        # value). Wrap with `set()` to enforce uniqueness in Python.
+        available_years = sorted(
+            set(self.transactions.annotate(fy=fy_expr).values_list("fy", flat=True))
         )
 
-        if not all_transactions:
+        if not available_years:
             return {
                 "summary": {
                     "year1": "FY2024" if use_fiscal_year else "2024",
@@ -208,19 +217,7 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 "available_years": [],
             }
 
-        # Calculate fiscal years for all transactions; honor the use_fiscal_year
-        # toggle on month too (earlier versions always returned fiscal months,
-        # which mislabeled the monthly axis when calendar year was selected).
-        for t in all_transactions:
-            t["fiscal_year"] = self._get_fiscal_year(t["date"], use_fiscal_year)
-            t["fiscal_month"] = self._get_fiscal_month(t["date"], use_fiscal_year)
-
-        # Find available fiscal years
-        available_years = sorted(set(t["fiscal_year"] for t in all_transactions))
-
-        # Default years if not specified. If only one year's data exists, the
-        # insufficient_data_for_yoy flag tells the frontend to render a clear
-        # "need more data" state rather than showing a misleading 0% change.
+        # ── Resolve year1 / year2 ──────────────────────────────────────
         insufficient_data_for_yoy = False
         if year1 is None or year2 is None:
             if len(available_years) >= 2:
@@ -237,34 +234,49 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
         year_prefix = "FY" if use_fiscal_year else ""
         month_names = FISCAL_MONTH_NAMES if use_fiscal_year else CALENDAR_MONTH_NAMES
 
-        # Filter transactions by year
-        year1_txns = [t for t in all_transactions if t["fiscal_year"] == year1]
-        year2_txns = [t for t in all_transactions if t["fiscal_year"] == year2]
+        # Restrict subsequent aggregations to year1+year2 to keep them small.
+        scoped_qs = self.transactions.annotate(fy=fy_expr).filter(fy__in={year1, year2})
 
-        # Calculate summary stats
-        year1_total = sum(float(t["amount"] or 0) for t in year1_txns)
-        year2_total = sum(float(t["amount"] or 0) for t in year2_txns)
-        year1_count = len(year1_txns)
-        year2_count = len(year2_txns)
-        year1_suppliers = len(
-            set(t["supplier_id"] for t in year1_txns if t["supplier_id"])
+        # ── Summary per year ───────────────────────────────────────────
+        year_summary_rows = scoped_qs.values("fy").annotate(
+            total=Sum("amount"),
+            count=Count("id"),
+            suppliers=Count("supplier_id", distinct=True),
         )
-        year2_suppliers = len(
-            set(t["supplier_id"] for t in year2_txns if t["supplier_id"])
-        )
+        year_summary = {row["fy"]: row for row in year_summary_rows}
+
+        def _get(year, key, default=0):
+            row = year_summary.get(year)
+            return row[key] if row and row.get(key) is not None else default
+
+        year1_total = float(_get(year1, "total", 0))
+        year2_total = float(_get(year2, "total", 0))
+        year1_count = int(_get(year1, "count", 0))
+        year2_count = int(_get(year2, "count", 0))
+        year1_suppliers = int(_get(year1, "suppliers", 0))
+        year2_suppliers = int(_get(year2, "suppliers", 0))
 
         spend_change = year2_total - year1_total
         spend_change_pct = (
             ((year2_total - year1_total) / year1_total * 100) if year1_total > 0 else 0
         )
 
-        # Monthly comparison
-        monthly_year1 = defaultdict(float)
-        monthly_year2 = defaultdict(float)
-        for t in year1_txns:
-            monthly_year1[t["fiscal_month"]] += float(t["amount"] or 0)
-        for t in year2_txns:
-            monthly_year2[t["fiscal_month"]] += float(t["amount"] or 0)
+        # ── Monthly comparison ─────────────────────────────────────────
+        monthly_rows = (
+            scoped_qs.annotate(fm=fm_expr)
+            .values("fy", "fm")
+            .annotate(spend=Sum("amount"))
+        )
+        monthly_year1 = {
+            row["fm"]: float(row["spend"] or 0)
+            for row in monthly_rows
+            if row["fy"] == year1
+        }
+        monthly_year2 = {
+            row["fm"]: float(row["spend"] or 0)
+            for row in monthly_rows
+            if row["fy"] == year2
+        }
 
         monthly_comparison = []
         for i in range(1, 13):
@@ -283,19 +295,25 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 }
             )
 
-        # Category comparison
-        cat_year1 = defaultdict(lambda: {"spend": 0, "id": None, "name": ""})
-        cat_year2 = defaultdict(lambda: {"spend": 0, "id": None, "name": ""})
-        for t in year1_txns:
-            cat_name = t["category__name"] or "Uncategorized"
-            cat_year1[cat_name]["spend"] += float(t["amount"] or 0)
-            cat_year1[cat_name]["id"] = t["category_id"]
-            cat_year1[cat_name]["name"] = cat_name
-        for t in year2_txns:
-            cat_name = t["category__name"] or "Uncategorized"
-            cat_year2[cat_name]["spend"] += float(t["amount"] or 0)
-            cat_year2[cat_name]["id"] = t["category_id"]
-            cat_year2[cat_name]["name"] = cat_name
+        # ── Category comparison ────────────────────────────────────────
+        category_rows = list(
+            scoped_qs.values("fy", "category_id", "category__name").annotate(
+                spend=Sum("amount")
+            )
+        )
+        cat_year1 = {}
+        cat_year2 = {}
+        for row in category_rows:
+            cat_name = row["category__name"] or "Uncategorized"
+            entry = {
+                "spend": float(row["spend"] or 0),
+                "id": row["category_id"],
+                "name": cat_name,
+            }
+            if row["fy"] == year1:
+                cat_year1[cat_name] = entry
+            elif row["fy"] == year2:
+                cat_year2[cat_name] = entry
 
         all_categories = set(cat_year1.keys()) | set(cat_year2.keys())
         category_comparison = []
@@ -329,35 +347,34 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 }
             )
 
-        # Sort by absolute year2 spend descending
         category_comparison.sort(key=lambda x: x["year2_spend"], reverse=True)
 
-        # Top gainers and decliners (categories with data in both years)
         comparable_cats = [c for c in category_comparison if c["year1_spend"] > 0]
         top_gainers = sorted(
             comparable_cats, key=lambda x: x["change_pct"], reverse=True
         )[:5]
         top_decliners = sorted(comparable_cats, key=lambda x: x["change_pct"])[:5]
 
-        # Supplier comparison
-        sup_year1 = defaultdict(
-            lambda: {"spend": 0, "id": None, "name": "", "count": 0}
+        # ── Supplier comparison ────────────────────────────────────────
+        supplier_rows = list(
+            scoped_qs.values("fy", "supplier_id", "supplier__name").annotate(
+                spend=Sum("amount"), txn_count=Count("id")
+            )
         )
-        sup_year2 = defaultdict(
-            lambda: {"spend": 0, "id": None, "name": "", "count": 0}
-        )
-        for t in year1_txns:
-            sup_name = t["supplier__name"] or "Unknown"
-            sup_year1[sup_name]["spend"] += float(t["amount"] or 0)
-            sup_year1[sup_name]["id"] = t["supplier_id"]
-            sup_year1[sup_name]["name"] = sup_name
-            sup_year1[sup_name]["count"] += 1
-        for t in year2_txns:
-            sup_name = t["supplier__name"] or "Unknown"
-            sup_year2[sup_name]["spend"] += float(t["amount"] or 0)
-            sup_year2[sup_name]["id"] = t["supplier_id"]
-            sup_year2[sup_name]["name"] = sup_name
-            sup_year2[sup_name]["count"] += 1
+        sup_year1 = {}
+        sup_year2 = {}
+        for row in supplier_rows:
+            sup_name = row["supplier__name"] or "Unknown"
+            entry = {
+                "spend": float(row["spend"] or 0),
+                "id": row["supplier_id"],
+                "name": sup_name,
+                "count": int(row["txn_count"] or 0),
+            }
+            if row["fy"] == year1:
+                sup_year1[sup_name] = entry
+            elif row["fy"] == year2:
+                sup_year2[sup_name] = entry
 
         all_suppliers = set(sup_year1.keys()) | set(sup_year2.keys())
         supplier_comparison = []
@@ -387,11 +404,9 @@ class YearOverYearAnalyticsService(BaseAnalyticsService):
                 }
             )
 
-        # Sort by combined spend descending
         supplier_comparison.sort(
             key=lambda x: x["year1_spend"] + x["year2_spend"], reverse=True
         )
-        # Limit to top 50 suppliers
         supplier_comparison = supplier_comparison[:50]
 
         return {

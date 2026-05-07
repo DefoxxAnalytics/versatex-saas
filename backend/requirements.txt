@@ -28,7 +28,9 @@ reportlab==4.1.0
 openpyxl==3.1.2
 
 # Machine Learning & Predictive Analytics
-scikit-learn==1.4.0
+# scikit-learn 1.5.0 patches CVE-2024-5206 (TfidfVectorizer info leak).
+# Pinned conservatively within the 1.5.x line; can ratchet to 1.7+ later.
+scikit-learn==1.5.2
 statsmodels==0.14.1
 
 # AI/LLM Providers
@@ -68,7 +70,11 @@ django-extensions==3.2.3
 ipython==8.20.0
 
 # Testing
-pytest==8.3.4
+# pytest 8.4.x patches CVE-2025-71176 (/tmp/pytest-of-{user} race) while
+# staying within the 8.x major. Pytest 9 dropped some APIs; the
+# conservative 8.x bump avoids touching pytest-django/pytest-cov which
+# are not yet known to be 9-compatible across the matrix used here.
+pytest==8.4.2
 pytest-django==4.7.0
 pytest-cov==4.1.0
 pytest-asyncio==0.24.0

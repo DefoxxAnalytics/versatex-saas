@@ -390,7 +390,8 @@ function MaverickSpendSection() {
                 <div className="space-y-2">
                   {categoryData.map((cat, index) => (
                     <div
-                      key={index}
+                      // v3.1 Phase 4 (F-TD1): cat.name is stable.
+                      key={`${cat.name}-${index}`}
                       className="flex items-center justify-between"
                     >
                       <span className="text-sm">{cat.name}</span>
@@ -409,7 +410,8 @@ function MaverickSpendSection() {
                 <div className="space-y-3">
                   {data.recommendations.map((rec, index) => (
                     <div
-                      key={index}
+                      // v3.1 Phase 4 (F-TD1): rec.title is stable.
+                      key={`${rec.title}-${index}`}
                       className="p-3 rounded-lg border bg-accent/50"
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -1119,7 +1121,13 @@ function PoliciesSection() {
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {policy.rules_summary.map((rule, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
+                    // v3.1 Phase 4 (F-TD1): rule string itself is the
+                    // stable identity here.
+                    <Badge
+                      key={`${policy.id}-rule-${rule}-${index}`}
+                      variant="outline"
+                      className="text-xs"
+                    >
                       {rule}
                     </Badge>
                   ))}
