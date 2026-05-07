@@ -199,7 +199,9 @@ Wait for services to report healthy. Run migrations and create a superuser:
 
 ```bash
 docker compose exec backend python manage.py migrate
-docker compose exec backend python manage.py collectstatic --noinput
+# collectstatic is automatic since v3.1 (backend/entrypoint.sh runs it on
+# every container start). Manual run is a fallback when files under
+# backend/static/ change without a container restart.
 docker compose exec backend python manage.py createsuperuser
 ```
 
@@ -358,7 +360,11 @@ In a browser: navigate to the URL, complete Cloudflare Access OTP (if configured
 
 ### Celery Beat is not started
 
-[`backend/config/celery.py`](../../backend/config/celery.py) defines a `beat_schedule` for the v2.9 AI-insight batch jobs (generation at 02:00, enhancement at 02:30, semantic-cache cleanup at 03:00, log cleanup at 03:30, RAG refresh Sundays at 04:00). But [`docker-compose.yml`](../../docker-compose.yml) only runs `celery -A config worker -l info` — no `-B` flag, no separate beat service. Scheduled tasks **do not run** out of the box.
+[`backend/config/celery.py`](../../backend/config/celery.py) defines a `beat_schedule` covering:
+- AI-insight batch jobs (generation 02:00 UTC, enhancement 02:30, semantic-cache cleanup 03:00, log cleanup 03:30, RAG refresh Sundays 04:00, cost digest 06:00)
+- **v3.1**: `process_scheduled_reports` (hourly, :00) and `cleanup_expired_reports` (01:00 UTC daily)
+
+But [`docker-compose.yml`](../../docker-compose.yml) only runs `celery -A config worker -l info` — no `-B` flag, no separate beat service. Scheduled tasks **do not run** out of the box. Silent failure mode: UI-scheduled Reports never fire because the new `process_scheduled_reports` beat tick is what dispatches them.
 
 Pick one fix:
 

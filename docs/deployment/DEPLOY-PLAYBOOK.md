@@ -20,8 +20,8 @@ Complete **all five** before touching the VPS.
 
 | # | Check | Command / URL |
 |---|---|---|
-| 1 | CI green on `main` for the commit you want to deploy | GitHub → Actions → filter to main → expect green |
-| 2 | GHCR build-push job for that commit completed | GitHub → Actions → "Deploy" workflow run for the sha → "Build & Push Docker Images" job green; images visible at `ghcr.io/defoxxanalytics/versatex-saas-backend:<sha>` and `...-frontend:<sha>` |
+| 1 | CI green on `main` for the commit you want to deploy. **As of v3.1, the `security-scan` (Trivy) job blocks `docker-build`** — a CRITICAL/HIGH dep CVE will fail CI and prevent the GHCR image from publishing. If row 2 below shows no image, check the security-scan job first. | GitHub → Actions → filter to main → expect green |
+| 2 | GHCR build-push job for that commit completed. **As of v3.1, `Deploy.yml` is gated on `workflow_run` from CI**: branch pushes only publish images after CI succeeds (tag pushes still publish directly). | GitHub → Actions → "Deploy" workflow run for the sha → "Build & Push Docker Images" job green; images visible at `ghcr.io/defoxxanalytics/versatex-saas-backend:<sha>` and `...-frontend:<sha>` |
 | 3 | You have the target `APP_VERSION` string | Short 12-char sha is preferred: `git rev-parse --short=12 <commit>` |
 | 4 | A recent Postgres backup exists | EITHER yesterday's nightly (verify: `rclone lsjson r2:versatex-backups/postgres/ \| jq '.[-1].ModTime'` is <24 h old) OR run `./scripts/predeploy-snapshot.sh` on the VPS now |
 | 5 | You can reach the VPS | `ssh deploy@<vps-ip>` succeeds; `docker ps` works |
@@ -67,8 +67,11 @@ docker compose \
 # 6. Apply migrations.
 docker compose exec backend python manage.py migrate
 
-# 7. Collect static assets (only needed when admin assets change).
-docker compose exec backend python manage.py collectstatic --noinput
+# 7. (collectstatic is automatic since v3.1 — backend/entrypoint.sh runs
+#    it on every container start. Manual run is a fallback when files
+#    under backend/static/ changed without a container restart, e.g.
+#    Django admin static asset hotfix.)
+# docker compose exec backend python manage.py collectstatic --noinput
 
 # 8. Smoke check from the VPS.
 curl -s http://localhost:8000/api/health/ | jq .
@@ -186,6 +189,7 @@ docker compose exec backend python manage.py migrate
 
 # 3. Verify the new schema version landed.
 docker compose exec backend python manage.py showmigrations analytics | tail -5
+docker compose exec backend python manage.py showmigrations procurement | tail -5
 
 # 4. Smoke any endpoint that uses the newly-changed table.
 curl -s https://app.versatexanalytics.com/api/health/
@@ -196,6 +200,20 @@ minutes. `SELECT 1` checks continue working during index creation
 (Postgres doesn't lock the table for `CREATE INDEX CONCURRENTLY`; we don't
 currently use CONCURRENTLY but should for indexes on tables >10K rows —
 track as a future migration-helper improvement).
+
+**Trigger-installing migrations require special attention.** The
+following install PL/pgSQL `BEFORE INSERT/UPDATE` triggers and briefly
+take `ACCESS EXCLUSIVE` on their target table:
+
+| Migration | Tables affected | Notes |
+|---|---|---|
+| `procurement.0009_cross_org_fk_check_constraints` | `procurement_transaction`, `procurement_contract`, `procurement_purchaseorder`, `procurement_invoice` | Original cross-org FK enforcement |
+| `procurement.0012_goodsreceipt_cross_org_fk_check` | `procurement_goodsreceipt` | **v3.1**: extends the trigger set to GR (guards `org_id == purchase_order.org_id`) |
+
+Both use `SET LOCAL lock_timeout = '5s'` and `atomic = False`, so a stuck
+lock fails fast (`LockNotAvailable`) and you can retry. Deploy during a
+low-traffic window. See migration source for the retry recipe if a lock
+contention aborts the install.
 
 ---
 
@@ -293,7 +311,23 @@ Changes every deploy; not really a "secret" but belongs on the list.
 
 `docker compose pull` will fail with
 `manifest for ghcr.io/.../versatex-saas-backend:<sha> not found` if the
-"Deploy" GitHub Actions workflow hasn't completed for that sha. Check:
+"Deploy" GitHub Actions workflow hasn't completed for that sha.
+
+**As of v3.1**, the chain is:
+
+```
+push to main
+  → CI workflow runs (lint, tests, security-scan/Trivy, build, validator)
+  → if CI conclusion == success: workflow_run trigger fires Deploy.yml
+  → Deploy.yml builds + publishes GHCR images
+```
+
+A failed CI run (Trivy CRITICAL/HIGH, test failure, lint drift, coverage
+below 62%) means **no image is published**, so `docker compose pull`
+will not find the sha. Tag pushes (`v*`) bypass `workflow_run` and
+publish directly — that's the explicit version-release path.
+
+Check:
 
 ```bash
 gh run list --workflow=Deploy --branch=main --limit 5

@@ -160,11 +160,17 @@ visible (Railway named it something like `versatex-saas`).
 4. **Settings tab → Deploy**:
    - **Start Command**:
      ```
-     python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --timeout 120
+     python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --timeout 120
      ```
-     Note: `$PORT` is Railway-provided (not our `.env`'s port). Running
-     migrations on boot is acceptable for a single-instance deploy;
-     switch to a separate migration job if you scale beyond 1 replica.
+     Notes:
+       - `$PORT` is Railway-provided (not our `.env`'s port).
+       - Running migrations on boot is acceptable for a single-instance
+         deploy; switch to a separate migration job if you scale beyond 1
+         replica.
+       - **Do NOT add `python manage.py collectstatic --noinput &&`** — as
+         of v3.1, `backend/entrypoint.sh` runs `collectstatic` automatically
+         on every container start. Adding it to the start command duplicates
+         the work and can mask entrypoint failures behind the redundant run.
    - **Healthcheck Path**: `/api/health/`
    - **Healthcheck Timeout**: 100s
 5. **Variables tab** → paste the following (each as a separate
@@ -310,6 +316,23 @@ Choose one. Paste results into Railway variables.
    The `-B` embeds Beat in the worker; `/tmp` is writable. Single-
    instance scale: fine; split to dedicated `celery-beat` service when
    adding a second worker.
+
+   **What Beat actually runs** (defined in `backend/config/celery.py:14`,
+   confirm by tailing `celery` logs after first deploy):
+
+   | Schedule | Task | Purpose |
+   |---|---|---|
+   | 02:00 UTC daily | `batch_generate_insights` | Pre-compute org AI insights |
+   | 02:30 UTC daily | `batch_enhance_insights` | LLM-enhance the above |
+   | 03:00 UTC daily | `cleanup_semantic_cache` | Prune RAG cache |
+   | 03:30 UTC daily | `cleanup_llm_request_logs` | Trim LLM audit log |
+   | 04:00 UTC Sundays | `refresh_rag_documents` | Weekly RAG refresh |
+   | 06:00 UTC daily | `send_llm_cost_digest` | Cost-alert webhook |
+   | every hour, :00 | `process_scheduled_reports` | **v3.1**: fire any UI-scheduled Report whose `next_run` ≤ now |
+   | 01:00 UTC daily | `cleanup_expired_reports` | **v3.1**: prune `status=completed`, `is_scheduled=False` reports older than 30d |
+
+   If you don't see `process_scheduled_reports` firing in logs, scheduled
+   reports created via the UI will silently never run.
 5. **Settings → Networking → Remove Public Domain**. Celery doesn't
    need a public URL. (If Railway auto-generated one, delete it.)
 6. **Variables tab → Add All Variables from → backend**. This copies
@@ -572,7 +595,7 @@ Railway's pipeline:
 |---|---|---|
 | `psql: FATAL: database "railway" does not exist` when connecting | Using `DATABASE_URL` vs `DATABASE_PUBLIC_URL` confusion | Always use `${{postgres.DATABASE_URL}}` (internal — fastest, free bandwidth); `DATABASE_PUBLIC_URL` is for external clients |
 | `/api/health/` returns `"redis":"error"` | `CELERY_BROKER_URL` points at Railway's Redis on a different database number than the cache | Set all three Redis-consuming vars (`REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`) to the same `${{redis.REDIS_URL}}` |
-| Static files 404 on admin | `collectstatic` didn't run | Ensure start command begins with `python manage.py collectstatic --noinput &&` |
+| Static files 404 on admin | Container entrypoint failed before exec'ing CMD (since v3.1, `backend/entrypoint.sh` runs `collectstatic` on every start) | Check the deploy logs for the `collectstatic` line — if it errored, the container won't start. Common cause: missing `SECRET_KEY` env var. Do NOT add `collectstatic` to the start command — it duplicates the entrypoint's work. |
 | Deploy fails with "migrations pending" | Start command runs gunicorn before migrations | Chain migrate + collectstatic + gunicorn with `&&` in start command (as shown in 11R.2) |
 | Frontend loads but API calls CORS-blocked | `CORS_ALLOWED_ORIGINS` doesn't match current frontend URL | Add frontend's full origin (with scheme + no trailing slash) to the env var; redeploy backend |
 | pgvector extension disappears after DB restart | Was never properly installed | Re-run `CREATE EXTENSION IF NOT EXISTS vector;` via Data tab; extensions persist across restarts once installed |

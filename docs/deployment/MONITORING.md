@@ -197,6 +197,20 @@ docker stats --no-stream
 - Any single day > 2× average → investigate which `request_type`
   exploded. `LLMRequestLog` has per-row cost + type for drilling down.
 
+### Scheduled Reports (v3.1, beat-driven)
+
+- **Hourly :00 UTC** — `process_scheduled_reports` should appear in
+  `docker compose logs celery` at least once per hour. Silent failure
+  mode: UI-scheduled Reports never run.
+- **Daily 01:00 UTC** — `cleanup_expired_reports` purges stale
+  `ReportFile` rows. Verify weekly with
+  `docker compose logs --since 168h celery | grep cleanup_expired_reports`.
+- These tasks ride the same celery-beat container as the AI batch jobs;
+  if those go quiet, both pipelines are down. See
+  [CLOUDFLARE-HETZNER.md § Known gaps](CLOUDFLARE-HETZNER.md) for the
+  beat-service caveat (compose default doesn't run beat — production
+  override does).
+
 ---
 
 ## 6. Alerting operations
