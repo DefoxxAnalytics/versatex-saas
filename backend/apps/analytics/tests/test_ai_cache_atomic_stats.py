@@ -14,6 +14,7 @@ The fix uses Django's atomic ``cache.add`` (only sets when absent) plus
 3. Verify the public ``get_cached_enhancement`` path (which calls
    ``_increment_stat`` internally on hits and misses) is also race-free.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,7 +25,6 @@ import pytest
 from django.core.cache import cache
 
 from apps.analytics.ai_cache import AIInsightsCache
-
 
 WORKERS = 50
 ORG_ID = 12345
@@ -45,6 +45,7 @@ def test_increment_stat_hit_counter_is_atomic_under_concurrency():
     Final hit counter MUST equal 50. The prior cache.get -> cache.set
     pattern would non-deterministically end at 30-45 due to lost updates.
     """
+
     def worker():
         AIInsightsCache._increment_stat(ORG_ID, "hits")
 
@@ -62,6 +63,7 @@ def test_increment_stat_hit_counter_is_atomic_under_concurrency():
 @pytest.mark.django_db
 def test_increment_stat_miss_counter_is_atomic_under_concurrency():
     """Same concurrency stress for the miss counter."""
+
     def worker():
         AIInsightsCache._increment_stat(ORG_ID, "misses")
 
@@ -88,14 +90,15 @@ def test_increment_stat_supports_delta_argument():
     AIInsightsCache._increment_stat(ORG_ID, "tokens", delta=3)
 
     key = f"{AIInsightsCache.CACHE_PREFIX}:stats:{ORG_ID}:tokens"
-    assert cache.get(key) == 15, (
-        f"Delta accumulation broken: expected 15, got {cache.get(key)}"
-    )
+    assert (
+        cache.get(key) == 15
+    ), f"Delta accumulation broken: expected 15, got {cache.get(key)}"
 
 
 @pytest.mark.django_db
 def test_concurrent_delta_increments_are_atomic():
     """50 workers each increment by delta=2; final value MUST be 100."""
+
     def worker():
         AIInsightsCache._increment_stat(ORG_ID, "tokens", delta=2)
 
@@ -114,6 +117,7 @@ def test_concurrent_delta_increments_are_atomic():
 @pytest.mark.django_db
 def test_get_cache_stats_after_concurrent_increments():
     """End-to-end: concurrent hits + misses + get_cache_stats reports correctly."""
+
     def hit_worker():
         AIInsightsCache._increment_stat(ORG_ID, "hits")
 
@@ -158,9 +162,7 @@ def test_drift_guard_no_get_then_set_increment_pattern_in_ai_cache():
     by a refactor or LLM completion), this test fails before the bug ships.
     """
     src_path = Path(AIInsightsCache.__module__.replace(".", "/"))
-    ai_cache_file = (
-        Path(__file__).resolve().parents[1] / "ai_cache.py"
-    )
+    ai_cache_file = Path(__file__).resolve().parents[1] / "ai_cache.py"
     assert ai_cache_file.exists(), f"ai_cache.py not found at {ai_cache_file}"
     source = ai_cache_file.read_text(encoding="utf-8")
 

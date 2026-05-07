@@ -8,13 +8,17 @@ incorrectly granted (profile.role == 'admin'). Under membership-aware
 check (user_is_admin_in_org with feedback.organization), delete is
 correctly denied (user is only viewer in Org B).
 """
-from rest_framework.test import APITestCase
-from rest_framework import status
+
 from django.contrib.auth import get_user_model
-from apps.authentication.models import (
-    Organization, UserProfile, UserOrganizationMembership
-)
+from rest_framework import status
+from rest_framework.test import APITestCase
+
 from apps.analytics.models import InsightFeedback
+from apps.authentication.models import (
+    Organization,
+    UserOrganizationMembership,
+    UserProfile,
+)
 
 User = get_user_model()
 
@@ -31,8 +35,11 @@ class TestDeleteFeedbackMembershipAware(APITestCase):
         )
         # post_save signal creates membership (user, org_a, admin).
         UserOrganizationMembership.objects.create(
-            user=self.user, organization=self.org_b,
-            role="viewer", is_active=True, is_primary=False,
+            user=self.user,
+            organization=self.org_b,
+            role="viewer",
+            is_active=True,
+            is_primary=False,
         )
 
         # Feedback owned by a different user in Org B.
@@ -68,14 +75,15 @@ class TestDeleteFeedbackMembershipAware(APITestCase):
         url = self._delete_url(self.feedback_in_org_b.id, self.org_b.id)
         response = self.client.delete(url)
         self.assertEqual(
-            response.status_code, status.HTTP_403_FORBIDDEN,
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
             f"Expected 403 (membership-aware admin check denies non-admin in Org B); "
-            f"got {response.status_code}. Feedback should still exist."
+            f"got {response.status_code}. Feedback should still exist.",
         )
         # Sanity: feedback was NOT deleted.
         self.assertTrue(
             InsightFeedback.objects.filter(id=self.feedback_in_org_b.id).exists(),
-            "Feedback must still exist after denied delete."
+            "Feedback must still exist after denied delete.",
         )
 
     def test_admin_in_org_a_can_delete_feedback_in_org_a(self):
@@ -98,8 +106,9 @@ class TestDeleteFeedbackMembershipAware(APITestCase):
         url = self._delete_url(feedback_in_a.id, self.org_a.id)
         response = self.client.delete(url)
         self.assertEqual(
-            response.status_code, status.HTTP_204_NO_CONTENT,
-            f"Expected 204 (admin in Org A); got {response.status_code}."
+            response.status_code,
+            status.HTTP_204_NO_CONTENT,
+            f"Expected 204 (admin in Org A); got {response.status_code}.",
         )
 
     def test_owner_can_always_delete_their_own_feedback(self):
@@ -109,6 +118,7 @@ class TestDeleteFeedbackMembershipAware(APITestCase):
         url = self._delete_url(self.feedback_in_org_b.id, self.org_b.id)
         response = self.client.delete(url)
         self.assertEqual(
-            response.status_code, status.HTTP_204_NO_CONTENT,
-            f"Owner must be able to delete their own feedback; got {response.status_code}."
+            response.status_code,
+            status.HTTP_204_NO_CONTENT,
+            f"Owner must be able to delete their own feedback; got {response.status_code}.",
         )

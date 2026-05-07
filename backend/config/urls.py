@@ -1,58 +1,64 @@
 """
 URL Configuration for Analytics Dashboard
 """
-from django.contrib import admin
-from django.urls import path, include
+
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
 from django.views.generic import RedirectView
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 # Set admin site URL to frontend
 admin.site.site_url = settings.FRONTEND_URL
 
 # Admin site customization
-admin.site.site_header = 'Analytics Dashboard Admin'
-admin.site.site_title = 'Analytics Admin'
-admin.site.index_title = 'Administration'
+admin.site.site_header = "Analytics Dashboard Admin"
+admin.site.site_title = "Analytics Admin"
+admin.site.index_title = "Administration"
 
 urlpatterns = [
     # Root → API docs in DEBUG, admin otherwise. Backend is headless; no SPA served here.
     path(
-        '',
+        "",
         RedirectView.as_view(
-            url='/api/docs/' if settings.DEBUG else '/admin/',
+            url="/api/docs/" if settings.DEBUG else "/admin/",
             permanent=False,
         ),
-        name='root',
+        name="root",
     ),
-
     # Admin - uses configurable URL path from settings
     path(settings.ADMIN_URL, admin.site.urls),
-
     # Readiness probe — hits DB + cache; consumed by compose healthcheck + Uptime Kuma
-    path('api/health/', include('apps.health.urls')),
-
+    path("api/health/", include("apps.health.urls")),
     # API v1 Endpoints (versioned)
-    path('api/v1/auth/', include('apps.authentication.urls')),
-    path('api/v1/procurement/', include('apps.procurement.urls')),
-    path('api/v1/analytics/', include('apps.analytics.urls')),
-    path('api/v1/reports/', include('apps.reports.urls')),
-
+    path("api/v1/auth/", include("apps.authentication.urls")),
+    path("api/v1/procurement/", include("apps.procurement.urls")),
+    path("api/v1/analytics/", include("apps.analytics.urls")),
+    path("api/v1/reports/", include("apps.reports.urls")),
     # Legacy API endpoints (for backwards compatibility, will be deprecated)
-    path('api/auth/', include('apps.authentication.urls')),
-    path('api/procurement/', include('apps.procurement.urls')),
-    path('api/analytics/', include('apps.analytics.urls')),
-    path('api/reports/', include('apps.reports.urls')),
-
+    path("api/auth/", include("apps.authentication.urls")),
+    path("api/procurement/", include("apps.procurement.urls")),
+    path("api/analytics/", include("apps.analytics.urls")),
+    path("api/reports/", include("apps.reports.urls")),
 ]
 
 # API Documentation - only available in DEBUG mode (security: prevent endpoint enumeration in production)
 if settings.DEBUG:
     urlpatterns += [
-        path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-        path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-        path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+        path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+        path(
+            "api/docs/",
+            SpectacularSwaggerView.as_view(url_name="schema"),
+            name="swagger-ui",
+        ),
+        path(
+            "api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"
+        ),
     ]
 
 # Serve media files in development only

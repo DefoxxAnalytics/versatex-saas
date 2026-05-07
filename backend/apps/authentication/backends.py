@@ -2,9 +2,10 @@
 Custom JWT authentication backend that reads tokens from HTTP-only cookies.
 This provides XSS protection by preventing JavaScript access to tokens.
 """
+
 from django.conf import settings
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
+from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken
 
 
 class CookieJWTAuthentication(JWTAuthentication):
@@ -23,7 +24,7 @@ class CookieJWTAuthentication(JWTAuthentication):
 
     def authenticate(self, request):
         jwt_settings = settings.SIMPLE_JWT
-        cookie_name = jwt_settings.get('AUTH_COOKIE', 'access_token')
+        cookie_name = jwt_settings.get("AUTH_COOKIE", "access_token")
         raw_token = request.COOKIES.get(cookie_name)
 
         if raw_token is None:
@@ -31,7 +32,7 @@ class CookieJWTAuthentication(JWTAuthentication):
             # header in DEBUG. In production, returning None forces a 401
             # for header-only browser requests, closing the cookie-XSS
             # bypass that the residual 'unsafe-inline' CSP keeps viable.
-            if getattr(settings, 'DEBUG', False):
+            if getattr(settings, "DEBUG", False):
                 return super().authenticate(request)
             return None
 
@@ -39,6 +40,6 @@ class CookieJWTAuthentication(JWTAuthentication):
             validated_token = self.get_validated_token(raw_token)
             return self.get_user(validated_token), validated_token
         except InvalidToken:
-            if getattr(settings, 'DEBUG', False):
+            if getattr(settings, "DEBUG", False):
                 return super().authenticate(request)
             return None

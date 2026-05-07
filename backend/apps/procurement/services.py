@@ -6,21 +6,25 @@ Business logic for procurement data processing with security enhancements:
 - Cryptographically secure batch IDs
 - Multi-organization support for super admins
 """
-import pandas as pd
-import secrets
+
 import logging
+import secrets
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from django.db import models, transaction, IntegrityError
+
+import pandas as pd
+from django.db import IntegrityError, models, transaction
 from django.db.models import Q
 from django.utils import timezone
-from .models import Supplier, Category, Transaction, DataUpload
+
 from apps.authentication.models import Organization
+
+from .models import Category, DataUpload, Supplier, Transaction
 
 logger = logging.getLogger(__name__)
 
 # Characters that can trigger formula execution in spreadsheets
-FORMULA_CHARS = ('=', '+', '-', '@', '\t', '\r', '\n')
+FORMULA_CHARS = ("=", "+", "-", "@", "\t", "\r", "\n")
 
 # Maximum rows to process in a single upload
 MAX_ROWS_PER_UPLOAD = 50000
@@ -135,7 +139,7 @@ def validate_csv_file(file) -> tuple[bool, str]:
     Returns (is_valid, error_message).
     """
     # Check file extension
-    if not file.name.lower().endswith('.csv'):
+    if not file.name.lower().endswith(".csv"):
         return False, "File must have .csv extension"
 
     # Check file size (50MB max)
@@ -149,16 +153,16 @@ def validate_csv_file(file) -> tuple[bool, str]:
         file.seek(0)
 
         # Check for binary content (null bytes, etc.)
-        if b'\x00' in first_bytes:
+        if b"\x00" in first_bytes:
             return False, "File appears to be binary, not CSV"
 
         # Try to decode as UTF-8
         try:
-            first_bytes.decode('utf-8')
+            first_bytes.decode("utf-8")
         except UnicodeDecodeError:
             # Try common encodings
             try:
-                first_bytes.decode('latin-1')
+                first_bytes.decode("latin-1")
             except UnicodeDecodeError:
                 return False, "File encoding not recognized"
 
@@ -175,13 +179,21 @@ class CSVProcessor:
     With security enhancements for formula injection prevention
     """
 
-    REQUIRED_COLUMNS = ['supplier', 'category', 'amount', 'date']
+    REQUIRED_COLUMNS = ["supplier", "category", "amount", "date"]
     OPTIONAL_COLUMNS = [
-        'description', 'subcategory', 'location', 'fiscal_year',
-        'spend_band', 'payment_method', 'invoice_number', 'organization'
+        "description",
+        "subcategory",
+        "location",
+        "fiscal_year",
+        "spend_band",
+        "payment_method",
+        "invoice_number",
+        "organization",
     ]
 
-    def __init__(self, organization, user, file, skip_duplicates=True, allow_multi_org=False):
+    def __init__(
+        self, organization, user, file, skip_duplicates=True, allow_multi_org=False
+    ):
         """
         Initialize CSV processor.
 
@@ -202,12 +214,7 @@ class CSVProcessor:
         # This prevents batch ID guessing/enumeration attacks
         self.batch_id = secrets.token_urlsafe(32)
         self.errors = []
-        self.stats = {
-            'total': 0,
-            'successful': 0,
-            'failed': 0,
-            'duplicates': 0
-        }
+        self.stats = {"total": 0, "successful": 0, "failed": 0, "duplicates": 0}
         # Track which organizations were affected (for audit logging)
         self.orgs_affected = set()
         # Cache for organization lookups (name/slug -> Organization)
@@ -230,7 +237,7 @@ class CSVProcessor:
             file_name=self.file.name,
             file_size=self.file.size,
             batch_id=self.batch_id,
-            status='processing'
+            status="processing",
         )
 
         try:
@@ -238,7 +245,7 @@ class CSVProcessor:
             df = pd.read_csv(self.file)
             # Strip whitespace from column names to handle columns like " amount "
             df.columns = df.columns.str.strip()
-            self.stats['total'] = len(df)
+            self.stats["total"] = len(df)
 
             # Check row limit
             if len(df) > MAX_ROWS_PER_UPLOAD:
@@ -253,26 +260,26 @@ class CSVProcessor:
             self._process_rows(df)
 
             # Update upload record
-            upload.total_rows = self.stats['total']
-            upload.successful_rows = self.stats['successful']
-            upload.failed_rows = self.stats['failed']
-            upload.duplicate_rows = self.stats['duplicates']
+            upload.total_rows = self.stats["total"]
+            upload.successful_rows = self.stats["successful"]
+            upload.failed_rows = self.stats["failed"]
+            upload.duplicate_rows = self.stats["duplicates"]
             upload.error_log = self._sanitize_error_log()
             upload.completed_at = timezone.now()
 
-            if self.stats['failed'] == 0:
-                upload.status = 'completed'
-            elif self.stats['successful'] > 0:
-                upload.status = 'partial'
+            if self.stats["failed"] == 0:
+                upload.status = "completed"
+            elif self.stats["successful"] > 0:
+                upload.status = "partial"
             else:
-                upload.status = 'failed'
+                upload.status = "failed"
 
             upload.save()
 
         except Exception as e:
             logger.error(f"CSV processing error: {e}")
-            upload.status = 'failed'
-            upload.error_log = [{'error': self._sanitize_error_message(str(e))}]
+            upload.status = "failed"
+            upload.error_log = [{"error": self._sanitize_error_message(str(e))}]
             upload.completed_at = timezone.now()
             upload.save()
             raise ValueError(self._sanitize_error_message(str(e)))
@@ -283,28 +290,38 @@ class CSVProcessor:
         """Sanitize error log to remove sensitive data"""
         sanitized = []
         for error in self.errors[:100]:  # Limit to 100 errors
-            sanitized.append({
-                'row': error.get('row', 0),
-                'error': self._sanitize_error_message(error.get('error', 'Unknown error')),
-                # Don't include raw data in error log
-            })
+            sanitized.append(
+                {
+                    "row": error.get("row", 0),
+                    "error": self._sanitize_error_message(
+                        error.get("error", "Unknown error")
+                    ),
+                    # Don't include raw data in error log
+                }
+            )
         return sanitized
 
     def _sanitize_error_message(self, message: str) -> str:
         """Remove potentially sensitive information from error messages"""
         sensitive_patterns = [
-            'DETAIL:', 'SQL', 'psycopg2', 'postgresql',
-            '/app/', '/home/', 'Traceback', 'File "'
+            "DETAIL:",
+            "SQL",
+            "psycopg2",
+            "postgresql",
+            "/app/",
+            "/home/",
+            "Traceback",
+            'File "',
         ]
 
         message_lower = message.lower()
         for pattern in sensitive_patterns:
             if pattern.lower() in message_lower:
-                return 'An error occurred while processing this row.'
+                return "An error occurred while processing this row."
 
         # Truncate long messages
         if len(message) > 200:
-            return message[:200] + '...'
+            return message[:200] + "..."
 
         return message
 
@@ -314,7 +331,9 @@ class CSVProcessor:
         if missing:
             raise ValueError(f"Missing required columns: {', '.join(missing)}")
 
-    def _resolve_organization(self, org_identifier: str, row_index: int) -> Organization:
+    def _resolve_organization(
+        self, org_identifier: str, row_index: int
+    ) -> Organization:
         """
         Resolve organization by name or slug.
 
@@ -338,20 +357,22 @@ class CSVProcessor:
             return self._org_cache[org_identifier]
 
         # Try to find by name (case-insensitive) or slug
-        org = Organization.objects.filter(
-            is_active=True
-        ).filter(
-            Q(name__iexact=org_identifier) | Q(slug__iexact=org_identifier)
-        ).first()
+        org = (
+            Organization.objects.filter(is_active=True)
+            .filter(Q(name__iexact=org_identifier) | Q(slug__iexact=org_identifier))
+            .first()
+        )
 
         if not org:
             # Get list of valid organizations for helpful error message
-            valid_orgs = list(Organization.objects.filter(
-                is_active=True
-            ).values_list('name', flat=True)[:10])
-            valid_list = ', '.join(valid_orgs)
+            valid_orgs = list(
+                Organization.objects.filter(is_active=True).values_list(
+                    "name", flat=True
+                )[:10]
+            )
+            valid_list = ", ".join(valid_orgs)
             if len(valid_orgs) == 10:
-                valid_list += ', ...'
+                valid_list += ", ..."
 
             raise ValueError(
                 f"Row {row_index + 2}: Organization '{org_identifier}' not found. "
@@ -367,21 +388,37 @@ class CSVProcessor:
         for index, row in df.iterrows():
             try:
                 self._process_row(row, index)
-                self.stats['successful'] += 1
+                self.stats["successful"] += 1
             except Exception as e:
-                self.stats['failed'] += 1
-                self.errors.append({
-                    'row': index + 2,  # +2 for header and 0-indexing
-                    'error': str(e),
-                    # Don't store raw data for security
-                })
+                self.stats["failed"] += 1
+                self.errors.append(
+                    {
+                        "row": index + 2,  # +2 for header and 0-indexing
+                        "error": str(e),
+                        # Don't store raw data for security
+                    }
+                )
 
-    @transaction.atomic
     def _process_row(self, row, index):
-        """Process a single row with formula injection prevention"""
+        """Process a single row with formula injection prevention.
+
+        v3.1 Phase 1 (P-C1): @transaction.atomic decorator removed. The
+        decorator wrapped each row in a savepoint, but combined with the
+        IntegrityError catch below it could abort the outer connection's
+        transaction state on duplicate-FK violations and cascade to a
+        TransactionAborted on subsequent ORM calls — collapsing a partial-
+        success upload to a full failure with miscounted stats. The race-
+        safe `get_or_create_supplier`/`get_or_create_category` helpers
+        already manage their own savepoints internally, so per-row atomic
+        wrapping was redundant.
+        """
         # Resolve organization for this row
-        if self.allow_multi_org and 'organization' in row and pd.notna(row['organization']):
-            organization = self._resolve_organization(str(row['organization']), index)
+        if (
+            self.allow_multi_org
+            and "organization" in row
+            and pd.notna(row["organization"])
+        ):
+            organization = self._resolve_organization(str(row["organization"]), index)
         else:
             organization = self.default_organization
 
@@ -389,47 +426,43 @@ class CSVProcessor:
         self.orgs_affected.add(organization.name)
 
         # Get or create supplier (sanitize name, canonical-case race-safe)
-        supplier_name = sanitize_csv_value(str(row['supplier']).strip())
+        supplier_name = sanitize_csv_value(str(row["supplier"]).strip())
         if not supplier_name or supplier_name == "'":
             raise ValueError("Supplier name is required")
 
         supplier, _ = get_or_create_supplier(
-            organization=organization,
-            name=supplier_name,
-            defaults={'is_active': True}
+            organization=organization, name=supplier_name, defaults={"is_active": True}
         )
 
         # Get or create category (sanitize name, canonical-case race-safe)
-        category_name = sanitize_csv_value(str(row['category']).strip())
+        category_name = sanitize_csv_value(str(row["category"]).strip())
         if not category_name or category_name == "'":
             raise ValueError("Category name is required")
 
         category, _ = get_or_create_category(
-            organization=organization,
-            name=category_name,
-            defaults={'is_active': True}
+            organization=organization, name=category_name, defaults={"is_active": True}
         )
 
         # Parse date
         try:
-            date = pd.to_datetime(row['date']).date()
+            date = pd.to_datetime(row["date"]).date()
         except Exception:
             raise ValueError(f"Invalid date format: {row['date']}")
 
         # Parse and validate amount
         try:
-            amount_str = str(row['amount']).replace(',', '').replace('$', '').strip()
+            amount_str = str(row["amount"]).replace(",", "").replace("$", "").strip()
             amount = Decimal(amount_str)
             if amount < 0:
                 raise ValueError("Amount cannot be negative")
-            if amount > Decimal('999999999999.99'):
+            if amount > Decimal("999999999999.99"):
                 raise ValueError("Amount exceeds maximum allowed value")
         except (InvalidOperation, ValueError) as e:
             raise ValueError(f"Invalid amount value: {row['amount']}")
 
         # Build optional fields with sanitization (exclude 'organization' - handled separately)
         optional_data = {}
-        excluded_optional = {'invoice_number', 'organization'}
+        excluded_optional = {"invoice_number", "organization"}
         for col in self.OPTIONAL_COLUMNS:
             if col in excluded_optional:
                 continue
@@ -439,9 +472,9 @@ class CSVProcessor:
                 optional_data[col] = sanitize_csv_value(value)
 
         # Get invoice number for uniqueness check
-        invoice_number = ''
-        if 'invoice_number' in row and pd.notna(row['invoice_number']):
-            invoice_number = sanitize_csv_value(str(row['invoice_number']).strip())
+        invoice_number = ""
+        if "invoice_number" in row and pd.notna(row["invoice_number"]):
+            invoice_number = sanitize_csv_value(str(row["invoice_number"]).strip())
 
         # Application-level duplicate detection on (org, supplier, date, invoice_number).
         # The DB-level unique constraint was removed in migration 0008 to support the
@@ -455,8 +488,10 @@ class CSVProcessor:
                 date=date,
                 invoice_number=invoice_number,
             ).exists():
-                self.stats['duplicates'] += 1
-                self.stats['successful'] -= 1  # Will be incremented in caller, so offset
+                self.stats["duplicates"] += 1
+                self.stats[
+                    "successful"
+                ] -= 1  # Will be incremented in caller, so offset
                 return
 
         try:
@@ -469,12 +504,12 @@ class CSVProcessor:
                 date=date,
                 upload_batch=self.batch_id,
                 invoice_number=invoice_number,
-                **optional_data
+                **optional_data,
             )
         except IntegrityError:
             if self.skip_duplicates:
-                self.stats['duplicates'] += 1
-                self.stats['successful'] -= 1
+                self.stats["duplicates"] += 1
+                self.stats["successful"] -= 1
                 return
             raise ValueError("Duplicate transaction detected")
 
@@ -483,19 +518,18 @@ def get_duplicate_transactions(organization, days=30):
     """
     Find potential duplicate transactions
     """
-    from django.db.models import Count
     from datetime import timedelta
+
+    from django.db.models import Count
 
     cutoff_date = timezone.now().date() - timedelta(days=days)
 
-    duplicates = Transaction.objects.filter(
-        organization=organization,
-        date__gte=cutoff_date
-    ).values(
-        'supplier', 'category', 'amount', 'date'
-    ).annotate(
-        count=Count('id')
-    ).filter(count__gt=1)
+    duplicates = (
+        Transaction.objects.filter(organization=organization, date__gte=cutoff_date)
+        .values("supplier", "category", "amount", "date")
+        .annotate(count=Count("id"))
+        .filter(count__gt=1)
+    )
 
     return duplicates
 
@@ -505,8 +539,7 @@ def bulk_delete_transactions(organization, transaction_ids):
     Bulk delete transactions for an organization
     """
     return Transaction.objects.filter(
-        organization=organization,
-        id__in=transaction_ids
+        organization=organization, id__in=transaction_ids
     ).delete()
 
 
@@ -517,36 +550,62 @@ def export_transactions_to_csv(organization, filters=None):
     queryset = Transaction.objects.filter(organization=organization)
 
     if filters:
-        if 'start_date' in filters and filters['start_date']:
-            queryset = queryset.filter(date__gte=filters['start_date'])
-        if 'end_date' in filters and filters['end_date']:
-            queryset = queryset.filter(date__lte=filters['end_date'])
-        if 'supplier' in filters and filters['supplier']:
-            queryset = queryset.filter(supplier_id=filters['supplier'])
-        if 'category' in filters and filters['category']:
-            queryset = queryset.filter(category_id=filters['category'])
+        if "start_date" in filters and filters["start_date"]:
+            queryset = queryset.filter(date__gte=filters["start_date"])
+        if "end_date" in filters and filters["end_date"]:
+            queryset = queryset.filter(date__lte=filters["end_date"])
+        if "supplier" in filters and filters["supplier"]:
+            queryset = queryset.filter(supplier_id=filters["supplier"])
+        if "category" in filters and filters["category"]:
+            queryset = queryset.filter(category_id=filters["category"])
 
     # Convert to dataframe
     data = queryset.values(
-        'supplier__name', 'category__name', 'amount', 'date',
-        'description', 'subcategory', 'location', 'fiscal_year',
-        'spend_band', 'payment_method', 'invoice_number'
+        "supplier__name",
+        "category__name",
+        "amount",
+        "date",
+        "description",
+        "subcategory",
+        "location",
+        "fiscal_year",
+        "spend_band",
+        "payment_method",
+        "invoice_number",
     )
 
     df = pd.DataFrame(data)
 
     # Rename columns
     df.columns = [
-        'Supplier', 'Category', 'Amount', 'Date',
-        'Description', 'Subcategory', 'Location', 'Fiscal Year',
-        'Spend Band', 'Payment Method', 'Invoice Number'
+        "Supplier",
+        "Category",
+        "Amount",
+        "Date",
+        "Description",
+        "Subcategory",
+        "Location",
+        "Fiscal Year",
+        "Spend Band",
+        "Payment Method",
+        "Invoice Number",
     ]
 
     # Sanitize all string columns to prevent formula injection in exported CSV
-    string_columns = ['Supplier', 'Category', 'Description', 'Subcategory',
-                      'Location', 'Spend Band', 'Payment Method', 'Invoice Number']
+    string_columns = [
+        "Supplier",
+        "Category",
+        "Description",
+        "Subcategory",
+        "Location",
+        "Spend Band",
+        "Payment Method",
+        "Invoice Number",
+    ]
     for col in string_columns:
         if col in df.columns:
-            df[col] = df[col].apply(lambda x: sanitize_csv_value(str(x)) if pd.notna(x) else '')
+            df[col] = df[col].apply(
+                lambda x: sanitize_csv_value(str(x)) if pd.notna(x) else ""
+            )
 
     return df

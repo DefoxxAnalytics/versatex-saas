@@ -7,10 +7,12 @@ Combined with the residual 'unsafe-inline' CSP (Phase 5 Task 5.2) that
 keeps an XSS attack viable, this fallback would let a single XSS payload
 exfiltrate an access token via fetch() with a Bearer header.
 """
+
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
 from rest_framework_simplejwt.tokens import AccessToken
-from django.contrib.auth import get_user_model
+
 from apps.authentication.backends import CookieJWTAuthentication
 
 User = get_user_model()

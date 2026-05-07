@@ -66,7 +66,10 @@ export function useContractDetail(contractId: number | null) {
     queryKey: queryKeys.contracts.detail(contractId ?? 0, orgId, filters),
     queryFn: async () => {
       if (!contractId) return null;
-      const response = await analyticsAPI.getContractDetail(contractId, filters);
+      const response = await analyticsAPI.getContractDetail(
+        contractId,
+        filters,
+      );
       return response.data;
     },
     staleTime: 5 * 60 * 1000,
@@ -100,7 +103,10 @@ export function useContractPerformance(contractId: number | null) {
     queryKey: queryKeys.contracts.performance(contractId ?? 0, orgId, filters),
     queryFn: async () => {
       if (!contractId) return null;
-      const response = await analyticsAPI.getContractPerformance(contractId, filters);
+      const response = await analyticsAPI.getContractPerformance(
+        contractId,
+        filters,
+      );
       return response.data;
     },
     staleTime: 5 * 60 * 1000,
@@ -149,7 +155,10 @@ export function useContractVsActual(contractId?: number) {
   return useQuery({
     queryKey: queryKeys.contracts.vsActual(contractId, orgId, filters),
     queryFn: async () => {
-      const response = await analyticsAPI.getContractVsActual(contractId, filters);
+      const response = await analyticsAPI.getContractVsActual(
+        contractId,
+        filters,
+      );
       return response.data;
     },
     staleTime: 5 * 60 * 1000,

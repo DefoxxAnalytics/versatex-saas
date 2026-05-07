@@ -23,12 +23,13 @@ from django.db import migrations
 def create_materialized_views(apps, schema_editor):
     """Create materialized views (PostgreSQL only)."""
     # Skip for non-PostgreSQL databases (e.g., SQLite in tests)
-    if schema_editor.connection.vendor != 'postgresql':
+    if schema_editor.connection.vendor != "postgresql":
         return
 
     with schema_editor.connection.cursor() as cursor:
         # Monthly spend aggregated by category
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE MATERIALIZED VIEW IF NOT EXISTS mv_monthly_category_spend AS
             SELECT
                 organization_id,
@@ -41,20 +42,26 @@ def create_materialized_views(apps, schema_editor):
                 MAX(amount) AS max_amount
             FROM procurement_transaction
             GROUP BY organization_id, category_id, DATE_TRUNC('month', date);
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE UNIQUE INDEX IF NOT EXISTS mv_monthly_category_spend_idx
             ON mv_monthly_category_spend (organization_id, category_id, month);
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS mv_monthly_category_spend_org_idx
             ON mv_monthly_category_spend (organization_id);
-        """)
+        """
+        )
 
         # Monthly spend aggregated by supplier
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE MATERIALIZED VIEW IF NOT EXISTS mv_monthly_supplier_spend AS
             SELECT
                 organization_id,
@@ -67,20 +74,26 @@ def create_materialized_views(apps, schema_editor):
                 MAX(amount) AS max_amount
             FROM procurement_transaction
             GROUP BY organization_id, supplier_id, DATE_TRUNC('month', date);
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE UNIQUE INDEX IF NOT EXISTS mv_monthly_supplier_spend_idx
             ON mv_monthly_supplier_spend (organization_id, supplier_id, month);
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS mv_monthly_supplier_spend_org_idx
             ON mv_monthly_supplier_spend (organization_id);
-        """)
+        """
+        )
 
         # Daily transaction summary for trend analysis
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE MATERIALIZED VIEW IF NOT EXISTS mv_daily_transaction_summary AS
             SELECT
                 organization_id,
@@ -92,29 +105,38 @@ def create_materialized_views(apps, schema_editor):
                 COUNT(DISTINCT category_id) AS unique_categories
             FROM procurement_transaction
             GROUP BY organization_id, DATE(date);
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE UNIQUE INDEX IF NOT EXISTS mv_daily_transaction_summary_idx
             ON mv_daily_transaction_summary (organization_id, transaction_date);
-        """)
+        """
+        )
 
 
 def drop_materialized_views(apps, schema_editor):
     """Drop materialized views (PostgreSQL only)."""
-    if schema_editor.connection.vendor != 'postgresql':
+    if schema_editor.connection.vendor != "postgresql":
         return
 
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute("DROP MATERIALIZED VIEW IF EXISTS mv_monthly_category_spend CASCADE;")
-        cursor.execute("DROP MATERIALIZED VIEW IF EXISTS mv_monthly_supplier_spend CASCADE;")
-        cursor.execute("DROP MATERIALIZED VIEW IF EXISTS mv_daily_transaction_summary CASCADE;")
+        cursor.execute(
+            "DROP MATERIALIZED VIEW IF EXISTS mv_monthly_category_spend CASCADE;"
+        )
+        cursor.execute(
+            "DROP MATERIALIZED VIEW IF EXISTS mv_monthly_supplier_spend CASCADE;"
+        )
+        cursor.execute(
+            "DROP MATERIALIZED VIEW IF EXISTS mv_daily_transaction_summary CASCADE;"
+        )
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('procurement', '0007_add_analytics_composite_indexes'),
+        ("procurement", "0007_add_analytics_composite_indexes"),
     ]
 
     operations = [

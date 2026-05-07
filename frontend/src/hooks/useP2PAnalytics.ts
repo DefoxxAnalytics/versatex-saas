@@ -165,7 +165,10 @@ export function useMatchingExceptions(params?: {
   return useQuery({
     queryKey: queryKeys.p2p.matchingExceptions(orgId, filters),
     queryFn: async () => {
-      const response = await p2pAnalyticsAPI.getMatchingExceptions(params, filters);
+      const response = await p2pAnalyticsAPI.getMatchingExceptions(
+        params,
+        filters,
+      );
       return response.data;
     },
   });
@@ -225,7 +228,8 @@ export function useQuantityVarianceAnalysis() {
   return useQuery({
     queryKey: queryKeys.p2p.quantityVariance(orgId, filters),
     queryFn: async () => {
-      const response = await p2pAnalyticsAPI.getQuantityVarianceAnalysis(filters);
+      const response =
+        await p2pAnalyticsAPI.getQuantityVarianceAnalysis(filters);
       return response.data;
     },
   });
@@ -241,7 +245,10 @@ export function useInvoiceMatchDetail(invoiceId: number | null) {
     queryKey: queryKeys.p2p.invoiceMatchDetail(invoiceId || 0, orgId, filters),
     queryFn: async () => {
       if (!invoiceId) return null;
-      const response = await p2pAnalyticsAPI.getInvoiceMatchDetail(invoiceId, filters);
+      const response = await p2pAnalyticsAPI.getInvoiceMatchDetail(
+        invoiceId,
+        filters,
+      );
       return response.data;
     },
     enabled: !!invoiceId,
@@ -274,7 +281,9 @@ export function useResolveException() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.p2p.matchingOverview(orgId),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.p2p.matchingExceptions(orgId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.p2p.matchingExceptions(orgId),
+      });
       queryClient.invalidateQueries({
         queryKey: queryKeys.p2p.exceptionsByType(orgId),
       });
@@ -311,7 +320,9 @@ export function useBulkResolveExceptions() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.p2p.matchingOverview(orgId),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.p2p.matchingExceptions(orgId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.p2p.matchingExceptions(orgId),
+      });
       queryClient.invalidateQueries({
         queryKey: queryKeys.p2p.exceptionsByType(orgId),
       });
@@ -398,7 +409,10 @@ export function useCashFlowForecast(weeks: number = 4) {
   return useQuery({
     queryKey: queryKeys.p2p.cashForecast(weeks, orgId, filters),
     queryFn: async () => {
-      const response = await p2pAnalyticsAPI.getCashFlowForecast(weeks, filters);
+      const response = await p2pAnalyticsAPI.getCashFlowForecast(
+        weeks,
+        filters,
+      );
       return response.data;
     },
   });
@@ -579,7 +593,8 @@ export function useSupplierPaymentsOverview() {
   return useQuery({
     queryKey: queryKeys.p2p.supplierPaymentsOverview(orgId, filters),
     queryFn: async () => {
-      const response = await p2pAnalyticsAPI.getSupplierPaymentsOverview(filters);
+      const response =
+        await p2pAnalyticsAPI.getSupplierPaymentsOverview(filters);
       return response.data;
     },
   });
@@ -610,7 +625,11 @@ export function useSupplierPaymentDetail(supplierId: number | null) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.p2p.supplierPaymentDetail(supplierId ?? 0, orgId, filters),
+    queryKey: queryKeys.p2p.supplierPaymentDetail(
+      supplierId ?? 0,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
       if (!supplierId) return null;
       const response = await p2pAnalyticsAPI.getSupplierPaymentDetail(
@@ -633,7 +652,11 @@ export function useSupplierPaymentHistory(
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.p2p.supplierPaymentHistory(supplierId ?? 0, orgId, filters),
+    queryKey: queryKeys.p2p.supplierPaymentHistory(
+      supplierId ?? 0,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
       if (!supplierId) return null;
       const response = await p2pAnalyticsAPI.getSupplierPaymentHistory(

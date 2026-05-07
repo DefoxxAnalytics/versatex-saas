@@ -1,0 +1,7 @@
+dist
+node_modules
+coverage
+.vite
+.cache
+*.generated.ts
+pnpm-lock.yaml

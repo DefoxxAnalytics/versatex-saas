@@ -47,7 +47,12 @@ export function useCategoryForecast(categoryId: number, months: number = 6) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.predictions.categoryForecast(categoryId, months, orgId, filters),
+    queryKey: queryKeys.predictions.categoryForecast(
+      categoryId,
+      months,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
       const response = await analyticsAPI.getCategoryForecast(
         categoryId,
@@ -68,7 +73,12 @@ export function useSupplierForecast(supplierId: number, months: number = 6) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.predictions.supplierForecast(supplierId, months, orgId, filters),
+    queryKey: queryKeys.predictions.supplierForecast(
+      supplierId,
+      months,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
       const response = await analyticsAPI.getSupplierForecast(
         supplierId,
@@ -105,9 +115,16 @@ export function useBudgetProjection(annualBudget: number) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.predictions.budgetProjection(annualBudget, orgId, filters),
+    queryKey: queryKeys.predictions.budgetProjection(
+      annualBudget,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
-      const response = await analyticsAPI.getBudgetProjection(annualBudget, filters);
+      const response = await analyticsAPI.getBudgetProjection(
+        annualBudget,
+        filters,
+      );
       return response.data;
     },
     staleTime: 5 * 60 * 1000,

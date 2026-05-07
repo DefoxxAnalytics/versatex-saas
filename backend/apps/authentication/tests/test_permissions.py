@@ -1,16 +1,19 @@
 """
 Tests for authentication permission classes.
 """
-import pytest
+
 from unittest.mock import Mock
+
+import pytest
+
+from apps.authentication.models import Organization
 from apps.authentication.permissions import (
+    CanDeleteData,
+    CanUploadData,
     IsAdmin,
     IsManager,
-    CanUploadData,
-    CanDeleteData,
-    IsSameOrganization
+    IsSameOrganization,
 )
-from apps.authentication.models import Organization
 
 
 @pytest.mark.django_db
@@ -215,7 +218,7 @@ class TestIsSameOrganization:
         permission = IsSameOrganization()
         request = Mock()
         # Use spec to explicitly exclude 'profile' attribute
-        request.user = Mock(spec=['is_authenticated', 'is_superuser'])
+        request.user = Mock(spec=["is_authenticated", "is_superuser"])
         request.user.is_authenticated = True
         request.user.is_superuser = False
 

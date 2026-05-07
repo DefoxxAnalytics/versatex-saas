@@ -498,7 +498,12 @@ function InsightCard({
                       <ul className="space-y-2">
                         {insight.recommended_actions.map((action, index) => (
                           <li
-                            key={index}
+                            // v3.1 Phase 3 (F-TD1): content-derived key
+                            // (insight id + action text) so reorderable
+                            // recommended_actions don't tear list state.
+                            // Action strings are user-visible recommendations
+                            // and stable enough for use as keys.
+                            key={`${insight.id}-action-${index}-${action}`}
                             className="flex items-start gap-2 text-sm text-gray-600"
                           >
                             <Target className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
@@ -518,7 +523,8 @@ function InsightCard({
                       <div className="flex flex-wrap gap-2">
                         {insight.affected_entities.map((entity, index) => (
                           <Badge
-                            key={index}
+                            // v3.1 Phase 3 (F-TD1): content-derived key.
+                            key={`${insight.id}-entity-${index}-${entity}`}
                             variant="outline"
                             className="text-xs"
                           >
@@ -1632,7 +1638,9 @@ export default function AIInsightsPage() {
   const refreshMutation = useRefreshAIInsights();
   const feedbackMutation = useRecordInsightFeedback();
   const { data: settings } = useSettings();
-  const [mainView, setMainView] = useState<"insights" | "roi" | "chat" | "usage">("insights");
+  const [mainView, setMainView] = useState<
+    "insights" | "roi" | "chat" | "usage"
+  >("insights");
   const [activeTab, setActiveTab] = useState<AIInsightType | "all">("all");
   const [sortBy, setSortBy] = useState<SortOption>("severity");
 

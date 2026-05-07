@@ -36,7 +36,7 @@ class AIInsightsCache:
     @classmethod
     def _get_ttl(cls) -> int:
         """Get cache TTL from settings or use default."""
-        return getattr(settings, 'AI_INSIGHTS_CACHE_TTL', cls.DEFAULT_TTL)
+        return getattr(settings, "AI_INSIGHTS_CACHE_TTL", cls.DEFAULT_TTL)
 
     @classmethod
     def _generate_cache_key(cls, organization_id: int, insights: list) -> str:
@@ -55,7 +55,7 @@ class AIInsightsCache:
         """
         insight_signatures = [
             f"{i['type']}:{i['title']}:{i.get('potential_savings', 0)}"
-            for i in sorted(insights, key=lambda x: x['id'])
+            for i in sorted(insights, key=lambda x: x["id"])
         ]
         content_hash = hashlib.sha256(
             json.dumps(insight_signatures).encode()
@@ -70,9 +70,7 @@ class AIInsightsCache:
 
     @classmethod
     def get_cached_enhancement(
-        cls,
-        organization_id: int,
-        insights: list
+        cls, organization_id: int, insights: list
     ) -> Optional[dict]:
         """
         Retrieve cached AI enhancement if available.
@@ -98,11 +96,7 @@ class AIInsightsCache:
 
     @classmethod
     def cache_enhancement(
-        cls,
-        organization_id: int,
-        insights: list,
-        enhancement: dict,
-        ttl: int = None
+        cls, organization_id: int, insights: list, enhancement: dict, ttl: int = None
     ) -> None:
         """
         Store AI enhancement in cache.
@@ -127,13 +121,45 @@ class AIInsightsCache:
 
     @classmethod
     def _track_org_key(cls, organization_id: int, cache_key: str) -> None:
-        """Track cache keys by organization for invalidation."""
-        pattern_key = cls._get_org_pattern_key(organization_id)
-        existing_keys = cache.get(pattern_key) or []
+        """Track cache keys by organization for invalidation.
 
+        v3.1 Phase 2 (AN-H5): tries to use the Redis SADD primitive (atomic
+        set-add) when the backend exposes it; falls back to a documented
+        best-effort list write otherwise. The race the read-modify-write
+        path can lose is:
+          - Two concurrent cache_enhancement calls both ``cache.get(pattern_key)``
+            and see the same list ``[k1, k2]``.
+          - First writer appends ``k3`` and ``cache.set([k1, k2, k3])``.
+          - Second writer appends ``k4`` and ``cache.set([k1, k2, k4])``.
+          - ``k3`` is silently dropped from the tracking set.
+        Impact is bounded: the dropped key still has its own TTL (1 hour
+        by default) and naturally expires; ``invalidate_org_cache`` may
+        miss a single stale entry for at most that TTL window. AI insights
+        are non-authoritative and stale-window-tolerant, so SADD is a
+        belt-and-suspenders, not a correctness requirement.
+        """
+        pattern_key = cls._get_org_pattern_key(organization_id)
+        ttl = cls._get_ttl() * 2
+
+        # Best path: Redis-backed SADD (atomic). django-redis exposes the
+        # raw client via cache.client.get_client() / cache.client. We probe
+        # defensively because locmem and database backends don't have it.
+        try:
+            client = getattr(cache, "client", None)
+            if client is not None and hasattr(client, "sadd"):
+                # django-redis exposes sadd directly on the client wrapper.
+                client.sadd(pattern_key, cache_key)
+                client.expire(pattern_key, ttl)
+                return
+        except Exception:
+            # Fall through to the list-based path below.
+            pass
+
+        # Fallback: best-effort list write. See docstring for race details.
+        existing_keys = cache.get(pattern_key) or []
         if cache_key not in existing_keys:
             existing_keys.append(cache_key)
-            cache.set(pattern_key, existing_keys, cls._get_ttl() * 2)
+            cache.set(pattern_key, existing_keys, ttl)
 
     @classmethod
     def invalidate_org_cache(cls, organization_id: int) -> int:
@@ -149,7 +175,22 @@ class AIInsightsCache:
             Number of cache entries invalidated
         """
         pattern_key = cls._get_org_pattern_key(organization_id)
-        cached_keys = cache.get(pattern_key) or []
+
+        # v3.1 Phase 2 (AN-H5): read tracking via SADD's smembers (Redis
+        # path) when available, list-based otherwise — symmetric with the
+        # _track_org_key write path.
+        cached_keys = []
+        try:
+            client = getattr(cache, "client", None)
+            if client is not None and hasattr(client, "smembers"):
+                members = client.smembers(pattern_key) or set()
+                cached_keys = [
+                    m.decode() if isinstance(m, bytes) else m for m in members
+                ]
+        except Exception:
+            cached_keys = []
+        if not cached_keys:
+            cached_keys = cache.get(pattern_key) or []
 
         invalidated = 0
         for key in cached_keys:
@@ -167,7 +208,9 @@ class AIInsightsCache:
         return invalidated
 
     @classmethod
-    def _increment_stat(cls, organization_id: int, stat_name: str, delta: int = 1) -> None:
+    def _increment_stat(
+        cls, organization_id: int, stat_name: str, delta: int = 1
+    ) -> None:
         """
         Atomically increment a cache statistics counter.
 
@@ -211,15 +254,12 @@ class AIInsightsCache:
             "hits": hits,
             "misses": misses,
             "hit_rate": round(hits / total * 100, 1) if total > 0 else 0,
-            "total_requests": total
+            "total_requests": total,
         }
 
     @classmethod
     def warm_cache(
-        cls,
-        organization_id: int,
-        insights: list,
-        enhancement: dict
+        cls, organization_id: int, insights: list, enhancement: dict
     ) -> None:
         """
         Pre-warm cache with enhancement data.

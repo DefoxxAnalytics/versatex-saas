@@ -15,6 +15,7 @@ to tell *which* batches survived. These tests assert that:
     and remaining batches are left unprocessed.
   - Status reflects partial success when at least one batch committed.
 """
+
 import json
 import uuid
 from unittest.mock import patch
@@ -45,7 +46,9 @@ def _row(idx, *, bad_date=False):
     return f"Acme Co,Office,{100 + idx}.00,{date},desc-{idx}\n"
 
 
-def _build_csv(rows_per_batch, *, batch_count, fail_in_batch=None, fail_at_row_in_batch=None):
+def _build_csv(
+    rows_per_batch, *, batch_count, fail_in_batch=None, fail_at_row_in_batch=None
+):
     """Build a CSV with ``batch_count`` batches of ``rows_per_batch`` rows.
 
     If ``fail_in_batch`` is supplied (0-indexed), the row at
@@ -81,9 +84,7 @@ class _BasePartialBatchTest(TestCase):
         self._batch_size_patcher.start()
         self.addCleanup(self._batch_size_patcher.stop)
 
-        self.organization = Organization.objects.create(
-            name="C2 Org", slug="c2-org"
-        )
+        self.organization = Organization.objects.create(name="C2 Org", slug="c2-org")
         self.user = User.objects.create_user(
             username="c2_uploader",
             email="c2@example.com",
@@ -106,9 +107,7 @@ class _BasePartialBatchTest(TestCase):
             batch_id=f"batch-{uuid.uuid4().hex[:12]}",
             status="pending",
         )
-        upload.stored_file.save(
-            "partial.csv", ContentFile(csv_payload.encode("utf-8"))
-        )
+        upload.stored_file.save("partial.csv", ContentFile(csv_payload.encode("utf-8")))
         return upload
 
     @staticmethod

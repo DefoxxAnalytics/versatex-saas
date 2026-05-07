@@ -19,10 +19,10 @@ update the second assertion below.
 See `frontend/nginx/nginx.conf` lines 48-87 for the full rationale, and
 `docs/codebase-review-2026-05-06-second-pass.md` for the second-pass review.
 """
+
 from pathlib import Path
 
 import pytest
-
 
 # Repo root: backend/apps/analytics/tests/ -> ../../../..
 _REPO_ROOT = Path(__file__).resolve().parents[4]

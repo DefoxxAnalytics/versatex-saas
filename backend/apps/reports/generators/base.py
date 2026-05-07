@@ -2,9 +2,12 @@
 Base report generator class.
 All report generators inherit from this class.
 """
+
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
+
 from django.utils import timezone
+
 from apps.analytics.services import AnalyticsService
 
 
@@ -62,19 +65,19 @@ class BaseReportGenerator(ABC):
         Returns:
             tuple: (start_date, end_date)
         """
-        date_range = self.filters.get('date_range', {})
-        end_date = date_range.get('end')
-        start_date = date_range.get('start')
+        date_range = self.filters.get("date_range", {})
+        end_date = date_range.get("end")
+        start_date = date_range.get("start")
 
         if not end_date:
             end_date = timezone.now().date()
         elif isinstance(end_date, str):
-            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
 
         if not start_date:
             start_date = end_date - timedelta(days=30)
         elif isinstance(start_date, str):
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
 
         return start_date, end_date
 
@@ -87,11 +90,11 @@ class BaseReportGenerator(ABC):
         """
         start_date, end_date = self.get_date_range()
         return {
-            'report_type': self.report_type,
-            'report_title': self.report_title,
-            'organization': self.organization.name,
-            'period_start': str(start_date),
-            'period_end': str(end_date),
-            'generated_at': timezone.now().isoformat(),
-            'filters_applied': self.filters,
+            "report_type": self.report_type,
+            "report_title": self.report_title,
+            "organization": self.organization.name,
+            "period_start": str(start_date),
+            "period_end": str(end_date),
+            "generated_at": timezone.now().isoformat(),
+            "filters_applied": self.filters,
         }

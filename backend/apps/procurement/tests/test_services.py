@@ -1,24 +1,28 @@
 """
 Tests for procurement services.
 """
-import pytest
+
 import io
-from decimal import Decimal
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import Mock, patch
+
+import pytest
+
+from apps.authentication.tests.factories import OrganizationFactory, UserFactory
+from apps.procurement.models import Category, DataUpload, Supplier, Transaction
 from apps.procurement.services import (
-    sanitize_csv_value,
-    validate_csv_file,
+    FORMULA_CHARS,
+    MAX_ROWS_PER_UPLOAD,
     CSVProcessor,
-    get_duplicate_transactions,
     bulk_delete_transactions,
     export_transactions_to_csv,
-    FORMULA_CHARS,
-    MAX_ROWS_PER_UPLOAD
+    get_duplicate_transactions,
+    sanitize_csv_value,
+    validate_csv_file,
 )
-from apps.procurement.models import Transaction, Supplier, Category, DataUpload
-from .factories import TransactionFactory, SupplierFactory, CategoryFactory
-from apps.authentication.tests.factories import OrganizationFactory, UserFactory
+
+from .factories import CategoryFactory, SupplierFactory, TransactionFactory
 
 
 class TestSanitizeCSVValue:
@@ -26,50 +30,50 @@ class TestSanitizeCSVValue:
 
     def test_normal_values_unchanged(self):
         """Test that normal values are not modified."""
-        assert sanitize_csv_value('Hello World') == 'Hello World'
-        assert sanitize_csv_value('123.45') == '123.45'
-        assert sanitize_csv_value('Invoice #12345') == 'Invoice #12345'
+        assert sanitize_csv_value("Hello World") == "Hello World"
+        assert sanitize_csv_value("123.45") == "123.45"
+        assert sanitize_csv_value("Invoice #12345") == "Invoice #12345"
 
     def test_equals_prefix_sanitized(self):
         """Test that values starting with = are sanitized."""
-        assert sanitize_csv_value('=SUM(A1:A10)') == "'=SUM(A1:A10)"
-        assert sanitize_csv_value('=CMD|calc!A0') == "'=CMD|calc!A0"
+        assert sanitize_csv_value("=SUM(A1:A10)") == "'=SUM(A1:A10)"
+        assert sanitize_csv_value("=CMD|calc!A0") == "'=CMD|calc!A0"
 
     def test_plus_prefix_sanitized(self):
         """Test that values starting with + are sanitized."""
-        assert sanitize_csv_value('+1-800-123-4567') == "'+1-800-123-4567"
-        assert sanitize_csv_value('+cmd|calc') == "'+cmd|calc"
+        assert sanitize_csv_value("+1-800-123-4567") == "'+1-800-123-4567"
+        assert sanitize_csv_value("+cmd|calc") == "'+cmd|calc"
 
     def test_minus_prefix_sanitized(self):
         """Test that values starting with - are sanitized."""
-        assert sanitize_csv_value('-100') == "'-100"
-        assert sanitize_csv_value('-2+3+cmd|calc') == "'-2+3+cmd|calc"
+        assert sanitize_csv_value("-100") == "'-100"
+        assert sanitize_csv_value("-2+3+cmd|calc") == "'-2+3+cmd|calc"
 
     def test_at_prefix_sanitized(self):
         """Test that values starting with @ are sanitized."""
-        assert sanitize_csv_value('@SUM(A1:A10)') == "'@SUM(A1:A10)"
+        assert sanitize_csv_value("@SUM(A1:A10)") == "'@SUM(A1:A10)"
 
     def test_tab_prefix_sanitized(self):
         """Test that values with tab prefix are stripped then sanitized."""
         # Tabs are stripped, then formula char detected
-        assert sanitize_csv_value('\t=formula') == "'=formula"
+        assert sanitize_csv_value("\t=formula") == "'=formula"
 
     def test_newline_prefix_sanitized(self):
         """Test that values with newline prefix are stripped then sanitized."""
         # Newlines are stripped, then formula char detected
-        assert sanitize_csv_value('\n=formula') == "'=formula"
-        assert sanitize_csv_value('\r=formula') == "'=formula"
+        assert sanitize_csv_value("\n=formula") == "'=formula"
+        assert sanitize_csv_value("\r=formula") == "'=formula"
 
     def test_empty_values_handled(self):
         """Test that empty values are handled."""
-        assert sanitize_csv_value('') == ''
+        assert sanitize_csv_value("") == ""
         assert sanitize_csv_value(None) is None
-        assert sanitize_csv_value('   ') == ''
+        assert sanitize_csv_value("   ") == ""
 
     def test_whitespace_stripped(self):
         """Test that whitespace is stripped."""
-        assert sanitize_csv_value('  Hello  ') == 'Hello'
-        assert sanitize_csv_value('  =formula  ') == "'=formula"
+        assert sanitize_csv_value("  Hello  ") == "Hello"
+        assert sanitize_csv_value("  =formula  ") == "'=formula"
 
     def test_non_string_returned_as_is(self):
         """Test that non-strings are returned unchanged."""
@@ -78,11 +82,11 @@ class TestSanitizeCSVValue:
 
     def test_formula_chars_constant(self):
         """Test that FORMULA_CHARS contains expected characters."""
-        assert '=' in FORMULA_CHARS
-        assert '+' in FORMULA_CHARS
-        assert '-' in FORMULA_CHARS
-        assert '@' in FORMULA_CHARS
-        assert '\t' in FORMULA_CHARS
+        assert "=" in FORMULA_CHARS
+        assert "+" in FORMULA_CHARS
+        assert "-" in FORMULA_CHARS
+        assert "@" in FORMULA_CHARS
+        assert "\t" in FORMULA_CHARS
 
 
 class TestValidateCSVFile:
@@ -90,56 +94,56 @@ class TestValidateCSVFile:
 
     def test_valid_csv_file(self):
         """Test that valid CSV files pass validation."""
-        content = b'name,value\ntest,123'
+        content = b"name,value\ntest,123"
         file = Mock()
-        file.name = 'test.csv'
+        file.name = "test.csv"
         file.size = len(content)
         file.seek = Mock()
         file.read = Mock(return_value=content)
 
         is_valid, error = validate_csv_file(file)
         assert is_valid
-        assert error == ''
+        assert error == ""
 
     def test_non_csv_extension_rejected(self):
         """Test that non-CSV extensions are rejected."""
         file = Mock()
-        file.name = 'test.xlsx'
+        file.name = "test.xlsx"
         file.size = 1024
 
         is_valid, error = validate_csv_file(file)
         assert not is_valid
-        assert 'csv extension' in error.lower()
+        assert "csv extension" in error.lower()
 
     def test_large_file_rejected(self):
         """Test that files over 50MB are rejected."""
         file = Mock()
-        file.name = 'large.csv'
+        file.name = "large.csv"
         file.size = 51 * 1024 * 1024  # 51MB
 
         is_valid, error = validate_csv_file(file)
         assert not is_valid
-        assert '50MB' in error
+        assert "50MB" in error
 
     def test_binary_file_rejected(self):
         """Test that binary files are rejected."""
         # Binary content with null bytes
-        content = b'test\x00binary\x00content'
+        content = b"test\x00binary\x00content"
         file = Mock()
-        file.name = 'test.csv'
+        file.name = "test.csv"
         file.size = len(content)
         file.seek = Mock()
         file.read = Mock(return_value=content)
 
         is_valid, error = validate_csv_file(file)
         assert not is_valid
-        assert 'binary' in error.lower()
+        assert "binary" in error.lower()
 
     def test_utf8_file_accepted(self):
         """Test that UTF-8 files are accepted."""
-        content = 'name,value\ntest,日本語'.encode('utf-8')
+        content = "name,value\ntest,日本語".encode("utf-8")
         file = Mock()
-        file.name = 'test.csv'
+        file.name = "test.csv"
         file.size = len(content)
         file.seek = Mock()
         file.read = Mock(return_value=content)
@@ -149,9 +153,9 @@ class TestValidateCSVFile:
 
     def test_latin1_file_accepted(self):
         """Test that Latin-1 encoded files are accepted."""
-        content = 'name,value\ntest,café'.encode('latin-1')
+        content = "name,value\ntest,café".encode("latin-1")
         file = Mock()
-        file.name = 'test.csv'
+        file.name = "test.csv"
         file.size = len(content)
         file.seek = Mock()
         file.read = Mock(return_value=content)
@@ -170,18 +174,14 @@ class TestCSVProcessor:
 Test Supplier,Test Category,1000.00,2024-01-15,Test transaction 1
 Another Supplier,Another Category,2000.00,2024-01-16,Test transaction 2"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
         upload = processor.process()
 
-        assert upload.status == 'completed'
+        assert upload.status == "completed"
         assert upload.total_rows == 2
         assert upload.successful_rows == 2
         assert upload.failed_rows == 0
@@ -192,35 +192,27 @@ Another Supplier,Another Category,2000.00,2024-01-16,Test transaction 2"""
         csv_content = """supplier,amount
 Test,1000.00"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
 
         with pytest.raises(ValueError) as exc_info:
             processor.process()
 
-        assert 'Missing required columns' in str(exc_info.value)
+        assert "Missing required columns" in str(exc_info.value)
 
     def test_process_with_invalid_date(self, organization, admin_user):
         """Test that invalid dates cause row failure."""
         csv_content = """supplier,category,amount,date
 Test Supplier,Test Category,1000.00,invalid-date"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
         upload = processor.process()
 
         assert upload.failed_rows == 1
@@ -231,15 +223,11 @@ Test Supplier,Test Category,1000.00,invalid-date"""
         csv_content = """supplier,category,amount,date
 Test Supplier,Test Category,not-a-number,2024-01-15"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
         upload = processor.process()
 
         assert upload.failed_rows == 1
@@ -249,15 +237,11 @@ Test Supplier,Test Category,not-a-number,2024-01-15"""
         csv_content = """supplier,category,amount,date
 Test Supplier,Test Category,-500.00,2024-01-15"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
         upload = processor.process()
 
         assert upload.failed_rows == 1
@@ -267,22 +251,17 @@ Test Supplier,Test Category,-500.00,2024-01-15"""
         csv_content = """supplier,category,amount,date,description
 =CMD|calc,Test Category,1000.00,2024-01-15,Test"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
         upload = processor.process()
 
         # The transaction should be created with sanitized supplier name
         assert upload.successful_rows == 1
         supplier = Supplier.objects.filter(
-            organization=organization,
-            name__startswith="'"
+            organization=organization, name__startswith="'"
         ).first()
         assert supplier is not None
 
@@ -291,48 +270,47 @@ Test Supplier,Test Category,-500.00,2024-01-15"""
         csv_content = """supplier,category,amount,date
 New Supplier,New Category,1500.00,2024-02-01"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
         processor.process()
 
         # Names are canonicalized to lowercase + collapsed whitespace
         # to eliminate the case-collision race in concurrent CSV uploads.
-        assert Supplier.objects.filter(organization=organization, name='new supplier').exists()
-        assert Category.objects.filter(organization=organization, name='new category').exists()
+        assert Supplier.objects.filter(
+            organization=organization, name="new supplier"
+        ).exists()
+        assert Category.objects.filter(
+            organization=organization, name="new category"
+        ).exists()
 
-    def test_process_skip_duplicates(self, organization, admin_user, supplier, category):
+    def test_process_skip_duplicates(
+        self, organization, admin_user, supplier, category
+    ):
         """Test that duplicates are skipped when skip_duplicates=True."""
         # Create an existing transaction
         Transaction.objects.create(
             organization=organization,
             supplier=supplier,
             category=category,
-            amount=Decimal('1000.00'),
+            amount=Decimal("1000.00"),
             date=date(2024, 1, 15),
             uploaded_by=admin_user,
-            invoice_number='DUP-001'
+            invoice_number="DUP-001",
         )
 
         csv_content = f"""supplier,category,amount,date,invoice_number
 {supplier.name},{category.name},1000.00,2024-01-15,DUP-001
 {supplier.name},{category.name},2000.00,2024-01-16,NEW-001"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
         processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file,
-            skip_duplicates=True
+            organization=organization, user=admin_user, file=file, skip_duplicates=True
         )
         upload = processor.process()
 
@@ -345,15 +323,11 @@ New Supplier,New Category,1500.00,2024-02-01"""
         csv_content = """supplier,category,amount,date
 Test,Test,100.00,2024-01-01"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
 
         # Batch ID should be a secure token
         assert len(processor.batch_id) >= 32
@@ -363,22 +337,18 @@ Test,Test,100.00,2024-01-01"""
         csv_content = """supplier,category,amount,date
 ,Test Category,1000.00,2024-01-15"""
 
-        file = io.BytesIO(csv_content.encode('utf-8'))
-        file.name = 'test.csv'
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        file.name = "test.csv"
         file.size = len(csv_content)
 
-        processor = CSVProcessor(
-            organization=organization,
-            user=admin_user,
-            file=file
-        )
+        processor = CSVProcessor(organization=organization, user=admin_user, file=file)
         upload = processor.process()
 
         # Error log should not contain sensitive info
         for error in upload.error_log:
-            assert 'SQL' not in str(error)
-            assert 'psycopg2' not in str(error)
-            assert 'Traceback' not in str(error)
+            assert "SQL" not in str(error)
+            assert "psycopg2" not in str(error)
+            assert "Traceback" not in str(error)
 
 
 @pytest.mark.django_db
@@ -393,10 +363,10 @@ class TestGetDuplicateTransactions:
                 organization=organization,
                 supplier=supplier,
                 category=category,
-                amount=Decimal('1000.00'),
+                amount=Decimal("1000.00"),
                 date=date.today(),
                 uploaded_by=admin_user,
-                invoice_number=f'DUP-TEST-{i}'  # Different invoice numbers
+                invoice_number=f"DUP-TEST-{i}",  # Different invoice numbers
             )
 
         duplicates = get_duplicate_transactions(organization)
@@ -413,10 +383,10 @@ class TestGetDuplicateTransactions:
                 organization=organization,
                 supplier=supplier,
                 category=category,
-                amount=Decimal('500.00'),
+                amount=Decimal("500.00"),
                 date=old_date,
                 uploaded_by=admin_user,
-                invoice_number=f'OLD-DUP-{i}'  # Different invoice numbers
+                invoice_number=f"OLD-DUP-{i}",  # Different invoice numbers
             )
 
         duplicates = get_duplicate_transactions(organization, days=30)
@@ -435,14 +405,14 @@ class TestBulkDeleteTransactions:
             supplier=supplier,
             category=category,
             uploaded_by=admin_user,
-            invoice_number='BULK-1'
+            invoice_number="BULK-1",
         )
         tx2 = TransactionFactory(
             organization=organization,
             supplier=supplier,
             category=category,
             uploaded_by=admin_user,
-            invoice_number='BULK-2'
+            invoice_number="BULK-2",
         )
 
         count, _ = bulk_delete_transactions(organization, [tx1.id, tx2.id])
@@ -450,14 +420,22 @@ class TestBulkDeleteTransactions:
         assert count == 2
         assert not Transaction.objects.filter(id__in=[tx1.id, tx2.id]).exists()
 
-    def test_bulk_delete_respects_organization(self, organization, other_organization, supplier, category, admin_user, other_org_user):
+    def test_bulk_delete_respects_organization(
+        self,
+        organization,
+        other_organization,
+        supplier,
+        category,
+        admin_user,
+        other_org_user,
+    ):
         """Test that bulk delete only affects org's transactions."""
         own_tx = TransactionFactory(
             organization=organization,
             supplier=supplier,
             category=category,
             uploaded_by=admin_user,
-            invoice_number='OWN-1'
+            invoice_number="OWN-1",
         )
 
         other_supplier = SupplierFactory(organization=other_organization)
@@ -466,7 +444,7 @@ class TestBulkDeleteTransactions:
             organization=other_organization,
             supplier=other_supplier,
             category=other_category,
-            uploaded_by=other_org_user
+            uploaded_by=other_org_user,
         )
 
         count, _ = bulk_delete_transactions(organization, [own_tx.id, other_tx.id])
@@ -485,11 +463,13 @@ class TestExportTransactionsToCSV:
         df = export_transactions_to_csv(organization)
 
         assert len(df) >= 1
-        assert 'Supplier' in df.columns
-        assert 'Category' in df.columns
-        assert 'Amount' in df.columns
+        assert "Supplier" in df.columns
+        assert "Category" in df.columns
+        assert "Amount" in df.columns
 
-    def test_export_with_date_filter(self, organization, supplier, category, admin_user):
+    def test_export_with_date_filter(
+        self, organization, supplier, category, admin_user
+    ):
         """Test exporting with date filters."""
         TransactionFactory(
             organization=organization,
@@ -497,7 +477,7 @@ class TestExportTransactionsToCSV:
             category=category,
             uploaded_by=admin_user,
             date=date(2024, 1, 15),
-            invoice_number='JAN-1'
+            invoice_number="JAN-1",
         )
         TransactionFactory(
             organization=organization,
@@ -505,13 +485,10 @@ class TestExportTransactionsToCSV:
             category=category,
             uploaded_by=admin_user,
             date=date(2024, 6, 15),
-            invoice_number='JUN-1'
+            invoice_number="JUN-1",
         )
 
-        filters = {
-            'start_date': date(2024, 1, 1),
-            'end_date': date(2024, 3, 31)
-        }
+        filters = {"start_date": date(2024, 1, 1), "end_date": date(2024, 3, 31)}
         df = export_transactions_to_csv(organization, filters)
 
         # Only January transaction should be included
@@ -520,33 +497,29 @@ class TestExportTransactionsToCSV:
     def test_export_sanitizes_formulas(self, organization, admin_user):
         """Test that exported data sanitizes formula characters."""
         supplier = Supplier.objects.create(
-            organization=organization,
-            name="=CMD|calc",
-            is_active=True
+            organization=organization, name="=CMD|calc", is_active=True
         )
         category = Category.objects.create(
-            organization=organization,
-            name="Test",
-            is_active=True
+            organization=organization, name="Test", is_active=True
         )
         Transaction.objects.create(
             organization=organization,
             supplier=supplier,
             category=category,
-            amount=Decimal('1000.00'),
+            amount=Decimal("1000.00"),
             date=date.today(),
             description="+formula",
-            uploaded_by=admin_user
+            uploaded_by=admin_user,
         )
 
         df = export_transactions_to_csv(organization)
 
         # Check that values are sanitized
-        for col in ['Supplier', 'Description']:
+        for col in ["Supplier", "Description"]:
             if col in df.columns:
                 for val in df[col]:
                     if val:
-                        assert not str(val).startswith('=')
+                        assert not str(val).startswith("=")
                         # Sanitized values should start with '
-                        if 'CMD' in str(val) or 'formula' in str(val):
+                        if "CMD" in str(val) or "formula" in str(val):
                             assert str(val).startswith("'")

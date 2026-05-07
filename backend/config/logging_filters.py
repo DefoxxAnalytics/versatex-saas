@@ -10,19 +10,18 @@ Authorization headers, etc.). Without redaction these values land in
 import logging
 import re
 
-
 _SENSITIVE_KEYS = {
-    'aiApiKey',
-    'password',
-    'Authorization',
-    'authorization',
-    'token',
-    'access_token',
-    'refresh_token',
-    'api_key',
-    'apiKey',
-    'secret',
-    'SECRET_KEY',
+    "aiApiKey",
+    "password",
+    "Authorization",
+    "authorization",
+    "token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "apiKey",
+    "secret",
+    "SECRET_KEY",
 }
 
 
@@ -51,9 +50,9 @@ class RedactSensitiveFilter(logging.Filter):
 
     def filter(self, record):
         msg = record.getMessage()
-        msg = _AUTH_SCHEME_PATTERN.sub(r'\1***REDACTED***', msg)
+        msg = _AUTH_SCHEME_PATTERN.sub(r"\1***REDACTED***", msg)
         for pattern in _PATTERNS:
-            msg = pattern.sub(r'\1***REDACTED***', msg)
+            msg = pattern.sub(r"\1***REDACTED***", msg)
         record.msg = msg
         record.args = ()
         return True

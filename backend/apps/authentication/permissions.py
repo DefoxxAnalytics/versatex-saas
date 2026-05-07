@@ -3,14 +3,17 @@ Custom permissions for role-based access control.
 
 Supports both single-org users (legacy) and multi-org users (via UserOrganizationMembership).
 """
+
 from rest_framework import permissions
 
 from .organization_utils import (
     get_target_organization,
+    get_user_role_in_org,
     user_can_access_org,
+    user_can_delete_in_org,
+    user_can_upload_in_org,
     user_is_admin_in_org,
     user_is_manager_in_org,
-    get_user_role_in_org,
 )
 
 
@@ -29,12 +32,12 @@ def _resolve_target_org(request, view, obj=None):
     membership helpers (user_is_admin_in_org / user_is_manager_in_org)
     accept both shapes.
     """
-    if obj is not None and hasattr(obj, 'organization'):
+    if obj is not None and hasattr(obj, "organization"):
         return obj.organization
 
-    kwargs = getattr(view, 'kwargs', None)
+    kwargs = getattr(view, "kwargs", None)
     if isinstance(kwargs, dict):
-        for key in ('org_id', 'organization_id', 'organization'):
+        for key in ("org_id", "organization_id", "organization"):
             if key in kwargs:
                 return kwargs[key]
 
@@ -48,28 +51,28 @@ def _resolve_target_org(request, view, obj=None):
     # APIRequestFactory (which produces raw HttpRequest) and production DRF
     # views see the same resolution.
     for source in (
-        getattr(request, 'query_params', None),
-        getattr(request, 'GET', None),
+        getattr(request, "query_params", None),
+        getattr(request, "GET", None),
     ):
         # Restrict to real dicts (QueryDict subclasses dict) so unit-test
         # Mock objects don't leak a Mock value here.
         if isinstance(source, dict):
-            for key in ('organization_id', 'org_id'):
+            for key in ("organization_id", "org_id"):
                 org_from_qp = source.get(key)
                 if org_from_qp is not None:
                     return org_from_qp
 
     # Restrict to real dicts so unit-test Mock objects don't leak a Mock value here.
-    data = getattr(request, 'data', None)
+    data = getattr(request, "data", None)
     if isinstance(data, dict):
-        org_from_body = data.get('organization')
+        org_from_body = data.get("organization")
         if org_from_body is not None:
             return org_from_body
 
-    user = getattr(request, 'user', None)
-    profile = getattr(user, 'profile', None)
+    user = getattr(request, "user", None)
+    profile = getattr(user, "profile", None)
     if profile is not None:
-        return getattr(profile, 'organization', None)
+        return getattr(profile, "organization", None)
 
     return None
 
@@ -80,6 +83,7 @@ class IsAdmin(permissions.BasePermission):
     Uses membership-aware role lookup (Findings A1 + B9). Multi-org users
     get correct role evaluation per target org.
     """
+
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
@@ -103,6 +107,7 @@ class IsManager(permissions.BasePermission):
     Uses membership-aware role lookup (Findings A1 + B9). Multi-org users
     get correct role evaluation per target org.
     """
+
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
@@ -122,28 +127,63 @@ class IsManager(permissions.BasePermission):
 
 class CanUploadData(permissions.BasePermission):
     """
-    Permission class for users who can upload data
+    Membership-aware upload permission (v3.1 Phase 1 / X-2).
+
+    Resolves target org from ``_resolve_target_org`` and checks the user's
+    role *in that org* via ``user_can_upload_in_org``. The previous
+    delegation to ``profile.can_upload_data()`` consulted the legacy
+    single-org ``profile.role`` field, so a multi-org user with mixed
+    roles (admin in A, viewer in B) got the wrong gate decision when
+    switching orgs.
     """
+
     def has_permission(self, request, view):
-        return (
-            request.user and
-            request.user.is_authenticated and
-            hasattr(request.user, 'profile') and
-            request.user.profile.can_upload_data()
-        )
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_superuser:
+            return True
+        target_org = _resolve_target_org(request, view)
+        if target_org is None:
+            return False
+        return user_can_upload_in_org(request.user, target_org)
+
+    def has_object_permission(self, request, view, obj):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_superuser:
+            return True
+        target_org = _resolve_target_org(request, view, obj)
+        if target_org is None:
+            return False
+        return user_can_upload_in_org(request.user, target_org)
 
 
 class CanDeleteData(permissions.BasePermission):
     """
-    Permission class for users who can delete data
+    Membership-aware delete permission (v3.1 Phase 1 / X-2). Same migration
+    rationale as CanUploadData above; deletes require admin role in the
+    target org via ``user_can_delete_in_org``.
     """
+
     def has_permission(self, request, view):
-        return (
-            request.user and
-            request.user.is_authenticated and
-            hasattr(request.user, 'profile') and
-            request.user.profile.can_delete_data()
-        )
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_superuser:
+            return True
+        target_org = _resolve_target_org(request, view)
+        if target_org is None:
+            return False
+        return user_can_delete_in_org(request.user, target_org)
+
+    def has_object_permission(self, request, view, obj):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_superuser:
+            return True
+        target_org = _resolve_target_org(request, view, obj)
+        if target_org is None:
+            return False
+        return user_can_delete_in_org(request.user, target_org)
 
 
 class IsSuperAdmin(permissions.BasePermission):
@@ -153,11 +193,10 @@ class IsSuperAdmin(permissions.BasePermission):
     Super admins have platform-level privileges that transcend organization
     boundaries, such as uploading data for multiple organizations at once.
     """
+
     def has_permission(self, request, view):
         return (
-            request.user and
-            request.user.is_authenticated and
-            request.user.is_superuser
+            request.user and request.user.is_authenticated and request.user.is_superuser
         )
 
 
@@ -169,6 +208,7 @@ class IsSameOrganization(permissions.BasePermission):
     Super admins (Django superusers) bypass this check and can access data
     from any organization.
     """
+
     def has_object_permission(self, request, view, obj):
         if not request.user.is_authenticated:
             return False
@@ -177,14 +217,14 @@ class IsSameOrganization(permissions.BasePermission):
         if request.user.is_superuser:
             return True
 
-        if not hasattr(request.user, 'profile'):
+        if not hasattr(request.user, "profile"):
             return False
 
         # Get the object's organization
         obj_org = None
-        if hasattr(obj, 'organization'):
+        if hasattr(obj, "organization"):
             obj_org = obj.organization
-        elif hasattr(obj, 'user') and hasattr(obj.user, 'profile'):
+        elif hasattr(obj, "user") and hasattr(obj.user, "profile"):
             obj_org = obj.user.profile.organization
 
         if not obj_org:
@@ -198,13 +238,15 @@ class IsSameOrganization(permissions.BasePermission):
 # P2P (Procure-to-Pay) Permissions
 # =============================================================================
 
+
 class HasP2PAccess(permissions.BasePermission):
     """
     Check if user has access to P2P Analytics module.
     All authenticated users with a profile can access P2P data by default.
     Can be extended to check organization-level feature flags.
     """
-    message = 'P2P Analytics module access required.'
+
+    message = "P2P Analytics module access required."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
@@ -214,13 +256,13 @@ class HasP2PAccess(permissions.BasePermission):
         if request.user.is_superuser:
             return True
 
-        if not hasattr(request.user, 'profile'):
+        if not hasattr(request.user, "profile"):
             return False
 
         # Check organization-level P2P module flag if it exists
         # (can be added to Organization model later)
         org = request.user.profile.organization
-        if hasattr(org, 'p2p_module_enabled'):
+        if hasattr(org, "p2p_module_enabled"):
             return org.p2p_module_enabled
 
         # Default: all users can access P2P if they have a profile
@@ -232,7 +274,8 @@ class CanResolveExceptions(permissions.BasePermission):
     Only managers and admins of the target organization can resolve invoice
     exceptions. Uses membership-aware role lookup (Findings A1 + B9).
     """
-    message = 'Only managers and admins can resolve invoice exceptions.'
+
+    message = "Only managers and admins can resolve invoice exceptions."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
@@ -260,7 +303,8 @@ class CanViewPaymentData(permissions.BasePermission):
     Only managers and admins of the target organization can view sensitive
     payment data. Uses membership-aware role lookup (Findings A1 + B9).
     """
-    message = 'Only managers and admins can view payment data.'
+
+    message = "Only managers and admins can view payment data."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
@@ -288,7 +332,8 @@ class CanApprovePO(permissions.BasePermission):
     Only managers and admins of the target organization can approve purchase
     orders. Uses membership-aware role lookup (Findings A1 + B9).
     """
-    message = 'Only managers and admins can approve purchase orders.'
+
+    message = "Only managers and admins can approve purchase orders."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
@@ -316,7 +361,8 @@ class CanApprovePR(permissions.BasePermission):
     Only managers and admins of the target organization can approve purchase
     requisitions. Uses membership-aware role lookup (Findings A1 + B9).
     """
-    message = 'Only managers and admins can approve purchase requisitions.'
+
+    message = "Only managers and admins can approve purchase requisitions."
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
@@ -348,7 +394,8 @@ class CanViewOwnRequisitions(permissions.BasePermission):
     resolved against obj.organization, not the user's legacy
     profile.organization. Multi-org users get correct evaluation per PR.
     """
-    message = 'You can only view your own requisitions.'
+
+    message = "You can only view your own requisitions."
 
     def has_object_permission(self, request, view, obj):
         if not request.user or not request.user.is_authenticated:

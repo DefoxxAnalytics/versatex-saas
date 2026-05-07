@@ -1,9 +1,12 @@
 """
 Tests for Report model.
 """
-import pytest
+
 from datetime import timedelta
+
+import pytest
 from django.utils import timezone
+
 from apps.reports.models import Report
 
 
@@ -16,13 +19,13 @@ class TestReportModel:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            report_format='pdf',
-            name='Test Spend Analysis',
-            description='Test report description'
+            report_type="spend_analysis",
+            report_format="pdf",
+            name="Test Spend Analysis",
+            description="Test report description",
         )
         assert report.id is not None
-        assert report.status == 'draft'
+        assert report.status == "draft"
         assert report.organization == organization
         assert report.created_by == admin_user
 
@@ -31,50 +34,60 @@ class TestReportModel:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='executive_summary'
+            report_type="executive_summary",
         )
         # Name should contain report type display name
-        assert 'Executive Summary' in report.name
+        assert "Executive Summary" in report.name
 
     def test_report_type_choices(self, organization, admin_user):
         """Test all valid report type choices."""
         report_types = [
-            'spend_analysis', 'supplier_performance', 'savings_opportunities',
-            'price_trends', 'contract_compliance', 'executive_summary',
-            'pareto_analysis', 'stratification', 'seasonality',
-            'year_over_year', 'tail_spend', 'custom',
-            'p2p_pr_status', 'p2p_po_compliance', 'p2p_ap_aging'
+            "spend_analysis",
+            "supplier_performance",
+            "savings_opportunities",
+            "price_trends",
+            "contract_compliance",
+            "executive_summary",
+            "pareto_analysis",
+            "stratification",
+            "seasonality",
+            "year_over_year",
+            "tail_spend",
+            "custom",
+            "p2p_pr_status",
+            "p2p_po_compliance",
+            "p2p_ap_aging",
         ]
         for rt in report_types:
             report = Report.objects.create(
                 organization=organization,
                 created_by=admin_user,
                 report_type=rt,
-                name=f'Test {rt}'
+                name=f"Test {rt}",
             )
             assert report.report_type == rt
 
     def test_report_format_choices(self, organization, admin_user):
         """Test all valid report format choices."""
-        for fmt in ['pdf', 'xlsx', 'csv']:
+        for fmt in ["pdf", "xlsx", "csv"]:
             report = Report.objects.create(
                 organization=organization,
                 created_by=admin_user,
-                report_type='spend_analysis',
+                report_type="spend_analysis",
                 report_format=fmt,
-                name=f'Test {fmt}'
+                name=f"Test {fmt}",
             )
             assert report.report_format == fmt
 
     def test_report_status_choices(self, organization, admin_user):
         """Test all valid status choices."""
-        for status in ['draft', 'generating', 'completed', 'failed', 'scheduled']:
+        for status in ["draft", "generating", "completed", "failed", "scheduled"]:
             report = Report.objects.create(
                 organization=organization,
                 created_by=admin_user,
-                report_type='spend_analysis',
+                report_type="spend_analysis",
                 status=status,
-                name=f'Test {status}'
+                name=f"Test {status}",
             )
             assert report.status == status
 
@@ -88,8 +101,8 @@ class TestReportIsExpired:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            generated_at=timezone.now()
+            report_type="spend_analysis",
+            generated_at=timezone.now(),
         )
         assert report.is_expired is False
 
@@ -98,8 +111,8 @@ class TestReportIsExpired:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            generated_at=timezone.now() - timedelta(days=31)
+            report_type="spend_analysis",
+            generated_at=timezone.now() - timedelta(days=31),
         )
         assert report.is_expired is True
 
@@ -109,8 +122,8 @@ class TestReportIsExpired:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            generated_at=timezone.now() - timedelta(days=30, seconds=-1)
+            report_type="spend_analysis",
+            generated_at=timezone.now() - timedelta(days=30, seconds=-1),
         )
         # Should not be expired at exactly 30 days
         assert report.is_expired is False
@@ -120,8 +133,8 @@ class TestReportIsExpired:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            generated_at=None
+            report_type="spend_analysis",
+            generated_at=None,
         )
         assert report.is_expired is False
 
@@ -135,9 +148,9 @@ class TestReportCalculateNextRun:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='daily'
+            schedule_frequency="daily",
         )
         before = timezone.now()
         next_run = report.calculate_next_run()
@@ -153,9 +166,9 @@ class TestReportCalculateNextRun:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='weekly'
+            schedule_frequency="weekly",
         )
         before = timezone.now()
         next_run = report.calculate_next_run()
@@ -168,9 +181,9 @@ class TestReportCalculateNextRun:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='monthly'
+            schedule_frequency="monthly",
         )
         before = timezone.now()
         next_run = report.calculate_next_run()
@@ -183,9 +196,9 @@ class TestReportCalculateNextRun:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='quarterly'
+            schedule_frequency="quarterly",
         )
         before = timezone.now()
         next_run = report.calculate_next_run()
@@ -203,14 +216,14 @@ class TestReportStatusMethods:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            status='generating'
+            report_type="spend_analysis",
+            status="generating",
         )
-        summary_data = {'total_spend': 100000, 'supplier_count': 10}
+        summary_data = {"total_spend": 100000, "supplier_count": 10}
         report.mark_completed(summary_data)
 
         report.refresh_from_db()
-        assert report.status == 'completed'
+        assert report.status == "completed"
         assert report.generated_at is not None
         assert report.summary_data == summary_data
 
@@ -219,13 +232,13 @@ class TestReportStatusMethods:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            status='generating'
+            report_type="spend_analysis",
+            status="generating",
         )
         report.mark_completed()
 
         report.refresh_from_db()
-        assert report.status == 'completed'
+        assert report.status == "completed"
         assert report.generated_at is not None
 
     def test_mark_failed(self, organization, admin_user):
@@ -233,14 +246,14 @@ class TestReportStatusMethods:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            status='generating'
+            report_type="spend_analysis",
+            status="generating",
         )
-        error_msg = 'Database connection failed'
+        error_msg = "Database connection failed"
         report.mark_failed(error_msg)
 
         report.refresh_from_db()
-        assert report.status == 'failed'
+        assert report.status == "failed"
         assert report.error_message == error_msg
 
 
@@ -253,22 +266,21 @@ class TestReportCanAccess:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         assert report.can_access(admin_user) is True
 
     def test_can_access_superuser(self, organization, admin_user, other_org_user, db):
         """Test that superuser can access any report."""
         from django.contrib.auth.models import User
+
         superuser = User.objects.create_superuser(
-            username='superadmin',
-            email='super@example.com',
-            password='SuperPass123!'
+            username="superadmin", email="super@example.com", password="SuperPass123!"
         )
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         assert report.can_access(superuser) is True
 
@@ -277,8 +289,8 @@ class TestReportCanAccess:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            is_public=True
+            report_type="spend_analysis",
+            is_public=True,
         )
         assert report.can_access(user) is True
 
@@ -287,17 +299,19 @@ class TestReportCanAccess:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         report.shared_with.add(user)
         assert report.can_access(user) is True
 
-    def test_cannot_access_other_org(self, organization, other_organization, admin_user, other_org_user):
+    def test_cannot_access_other_org(
+        self, organization, other_organization, admin_user, other_org_user
+    ):
         """Test that users from other org cannot access report."""
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         assert report.can_access(other_org_user) is False
 
@@ -306,7 +320,7 @@ class TestReportCanAccess:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         # User is in same organization, should have access via org membership
         assert report.can_access(user) is True
@@ -319,33 +333,29 @@ class TestReportFiltersAndParameters:
     def test_filters_json_field(self, organization, admin_user):
         """Test storing filters as JSON."""
         filters = {
-            'supplier_ids': [1, 2, 3],
-            'category_ids': [4, 5],
-            'min_amount': 1000,
-            'max_amount': 50000
+            "supplier_ids": [1, 2, 3],
+            "category_ids": [4, 5],
+            "min_amount": 1000,
+            "max_amount": 50000,
         }
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            filters=filters
+            report_type="spend_analysis",
+            filters=filters,
         )
         report.refresh_from_db()
         assert report.filters == filters
-        assert report.filters['supplier_ids'] == [1, 2, 3]
+        assert report.filters["supplier_ids"] == [1, 2, 3]
 
     def test_parameters_json_field(self, organization, admin_user):
         """Test storing parameters as JSON."""
-        parameters = {
-            'top_n': 20,
-            'include_charts': True,
-            'use_fiscal_year': True
-        }
+        parameters = {"top_n": 20, "include_charts": True, "use_fiscal_year": True}
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='supplier_performance',
-            parameters=parameters
+            report_type="supplier_performance",
+            parameters=parameters,
         )
         report.refresh_from_db()
         assert report.parameters == parameters
@@ -353,22 +363,22 @@ class TestReportFiltersAndParameters:
     def test_summary_data_json_field(self, organization, admin_user):
         """Test storing summary data as JSON."""
         summary_data = {
-            'total_spend': 1500000.50,
-            'supplier_count': 45,
-            'top_suppliers': [
-                {'name': 'Supplier A', 'spend': 500000},
-                {'name': 'Supplier B', 'spend': 300000}
-            ]
+            "total_spend": 1500000.50,
+            "supplier_count": 45,
+            "top_suppliers": [
+                {"name": "Supplier A", "spend": 500000},
+                {"name": "Supplier B", "spend": 300000},
+            ],
         }
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            summary_data=summary_data
+            report_type="spend_analysis",
+            summary_data=summary_data,
         )
         report.refresh_from_db()
         assert report.summary_data == summary_data
-        assert len(report.summary_data['top_suppliers']) == 2
+        assert len(report.summary_data["top_suppliers"]) == 2
 
 
 @pytest.mark.django_db
@@ -380,12 +390,12 @@ class TestReportStringRepresentation:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            name='Q4 2024 Analysis'
+            report_type="spend_analysis",
+            name="Q4 2024 Analysis",
         )
         str_repr = str(report)
-        assert 'Q4 2024 Analysis' in str_repr
-        assert 'Spend Analysis' in str_repr
+        assert "Q4 2024 Analysis" in str_repr
+        assert "Spend Analysis" in str_repr
 
 
 @pytest.mark.django_db
@@ -395,12 +405,13 @@ class TestReportDateRange:
     def test_period_dates(self, organization, admin_user):
         """Test setting period start and end dates."""
         from datetime import date
+
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             period_start=date(2024, 1, 1),
-            period_end=date(2024, 12, 31)
+            period_end=date(2024, 12, 31),
         )
         report.refresh_from_db()
         assert report.period_start == date(2024, 1, 1)
@@ -411,7 +422,7 @@ class TestReportDateRange:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         assert report.period_start is None
         assert report.period_end is None

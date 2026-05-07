@@ -31,9 +31,7 @@ import {
   Building2,
   Loader2,
 } from "lucide-react";
-import {
-  useFilteredProcurementData,
-} from "@/hooks/useProcurementData";
+import { useFilteredProcurementData } from "@/hooks/useProcurementData";
 import {
   useOverviewStats,
   useSpendByCategory,
@@ -134,9 +132,8 @@ function CategoryDrilldownModal({
     };
   }, [data?.suppliers]);
 
-  const percentage = totalSpend > 0 && data
-    ? (data.total_spend / totalSpend) * 100
-    : 0;
+  const percentage =
+    totalSpend > 0 && data ? (data.total_spend / totalSpend) * 100 : 0;
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
@@ -162,27 +159,45 @@ function CategoryDrilldownModal({
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Total Spend</div>
-                    <div className="text-2xl font-bold">{formatCurrency(data.total_spend)}</div>
-                    <div className="text-xs text-muted-foreground">{percentage.toFixed(1)}% of total</div>
+                    <div className="text-sm text-muted-foreground">
+                      Total Spend
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(data.total_spend)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {percentage.toFixed(1)}% of total
+                    </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Transactions</div>
-                    <div className="text-2xl font-bold">{data.transaction_count.toLocaleString()}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Transactions
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {data.transaction_count.toLocaleString()}
+                    </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Avg Transaction</div>
-                    <div className="text-2xl font-bold">{formatCurrency(data.avg_transaction)}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Avg Transaction
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(data.avg_transaction)}
+                    </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Suppliers</div>
-                    <div className="text-2xl font-bold">{data.supplier_count}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Suppliers
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {data.supplier_count}
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -191,11 +206,18 @@ function CategoryDrilldownModal({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Breakdown by Supplier</CardTitle>
+                      <CardTitle className="text-base">
+                        Breakdown by Supplier
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       {pieChartConfig && (
-                        <Chart title="" option={pieChartConfig} height={250} className="border-0 shadow-none" />
+                        <Chart
+                          title=""
+                          option={pieChartConfig}
+                          height={250}
+                          className="border-0 shadow-none"
+                        />
                       )}
                     </CardContent>
                   </Card>
@@ -206,14 +228,31 @@ function CategoryDrilldownModal({
                     <CardContent>
                       <div className="space-y-2">
                         {data.suppliers.map((item, index) => (
-                          <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between py-2 border-b last:border-0"
+                          >
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="w-6 h-6 justify-center p-0">{index + 1}</Badge>
-                              <span className="text-sm truncate max-w-[150px]" title={item.name}>{item.name}</span>
+                              <Badge
+                                variant="outline"
+                                className="w-6 h-6 justify-center p-0"
+                              >
+                                {index + 1}
+                              </Badge>
+                              <span
+                                className="text-sm truncate max-w-[150px]"
+                                title={item.name}
+                              >
+                                {item.name}
+                              </span>
                             </div>
                             <div className="text-right">
-                              <div className="text-sm font-medium">{formatCurrency(item.spend)}</div>
-                              <div className="text-xs text-muted-foreground">{item.percent_of_total.toFixed(1)}%</div>
+                              <div className="text-sm font-medium">
+                                {formatCurrency(item.spend)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {item.percent_of_total.toFixed(1)}%
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -225,23 +264,35 @@ function CategoryDrilldownModal({
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Recent Transactions</CardTitle>
+                  <CardTitle className="text-base">
+                    Recent Transactions
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     {data.recent_transactions.map((tx) => (
-                      <div key={tx.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between py-2 border-b last:border-0"
+                      >
                         <div>
-                          <div className="text-sm font-medium">{tx.supplier_name}</div>
+                          <div className="text-sm font-medium">
+                            {tx.supplier_name}
+                          </div>
                           <div className="text-xs text-muted-foreground">
-                            {formatDate(tx.date)} {tx.description && `• ${tx.description}`}
+                            {formatDate(tx.date)}{" "}
+                            {tx.description && `• ${tx.description}`}
                           </div>
                         </div>
-                        <div className="text-sm font-medium">{formatCurrency(tx.amount)}</div>
+                        <div className="text-sm font-medium">
+                          {formatCurrency(tx.amount)}
+                        </div>
                       </div>
                     ))}
                     {data.recent_transactions.length === 0 && (
-                      <div className="text-center py-4 text-muted-foreground">No transactions found</div>
+                      <div className="text-center py-4 text-muted-foreground">
+                        No transactions found
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -299,9 +350,8 @@ function SupplierDrilldownModal({
     };
   }, [data?.categories]);
 
-  const percentage = totalSpend > 0 && data
-    ? (data.total_spend / totalSpend) * 100
-    : 0;
+  const percentage =
+    totalSpend > 0 && data ? (data.total_spend / totalSpend) * 100 : 0;
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
@@ -327,27 +377,45 @@ function SupplierDrilldownModal({
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Total Spend</div>
-                    <div className="text-2xl font-bold">{formatCurrency(data.total_spend)}</div>
-                    <div className="text-xs text-muted-foreground">{percentage.toFixed(1)}% of total</div>
+                    <div className="text-sm text-muted-foreground">
+                      Total Spend
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(data.total_spend)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {percentage.toFixed(1)}% of total
+                    </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Transactions</div>
-                    <div className="text-2xl font-bold">{data.transaction_count.toLocaleString()}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Transactions
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {data.transaction_count.toLocaleString()}
+                    </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Avg Transaction</div>
-                    <div className="text-2xl font-bold">{formatCurrency(data.avg_transaction)}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Avg Transaction
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(data.avg_transaction)}
+                    </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4">
-                    <div className="text-sm text-muted-foreground">Categories</div>
-                    <div className="text-2xl font-bold">{data.categories.length}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Categories
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {data.categories.length}
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -356,29 +424,55 @@ function SupplierDrilldownModal({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Breakdown by Category</CardTitle>
+                      <CardTitle className="text-base">
+                        Breakdown by Category
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       {pieChartConfig && (
-                        <Chart title="" option={pieChartConfig} height={250} className="border-0 shadow-none" />
+                        <Chart
+                          title=""
+                          option={pieChartConfig}
+                          height={250}
+                          className="border-0 shadow-none"
+                        />
                       )}
                     </CardContent>
                   </Card>
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Top Categories</CardTitle>
+                      <CardTitle className="text-base">
+                        Top Categories
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
                         {data.categories.map((item, index) => (
-                          <div key={item.name} className="flex items-center justify-between py-2 border-b last:border-0">
+                          <div
+                            key={item.name}
+                            className="flex items-center justify-between py-2 border-b last:border-0"
+                          >
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="w-6 h-6 justify-center p-0">{index + 1}</Badge>
-                              <span className="text-sm truncate max-w-[150px]" title={item.name}>{item.name}</span>
+                              <Badge
+                                variant="outline"
+                                className="w-6 h-6 justify-center p-0"
+                              >
+                                {index + 1}
+                              </Badge>
+                              <span
+                                className="text-sm truncate max-w-[150px]"
+                                title={item.name}
+                              >
+                                {item.name}
+                              </span>
                             </div>
                             <div className="text-right">
-                              <div className="text-sm font-medium">{formatCurrency(item.spend)}</div>
-                              <div className="text-xs text-muted-foreground">{item.percent_of_total.toFixed(1)}%</div>
+                              <div className="text-sm font-medium">
+                                {formatCurrency(item.spend)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {item.percent_of_total.toFixed(1)}%
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -396,14 +490,31 @@ function SupplierDrilldownModal({
                   <CardContent>
                     <div className="space-y-2">
                       {data.subcategories.slice(0, 10).map((item, index) => (
-                        <div key={item.name} className="flex items-center justify-between py-2 border-b last:border-0">
+                        <div
+                          key={item.name}
+                          className="flex items-center justify-between py-2 border-b last:border-0"
+                        >
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="w-6 h-6 justify-center p-0">{index + 1}</Badge>
-                            <span className="text-sm truncate max-w-[200px]" title={item.name}>{item.name}</span>
+                            <Badge
+                              variant="outline"
+                              className="w-6 h-6 justify-center p-0"
+                            >
+                              {index + 1}
+                            </Badge>
+                            <span
+                              className="text-sm truncate max-w-[200px]"
+                              title={item.name}
+                            >
+                              {item.name}
+                            </span>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm font-medium">{formatCurrency(item.spend)}</div>
-                            <div className="text-xs text-muted-foreground">{item.percent_of_total.toFixed(1)}%</div>
+                            <div className="text-sm font-medium">
+                              {formatCurrency(item.spend)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {item.percent_of_total.toFixed(1)}%
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -421,25 +532,32 @@ function SupplierDrilldownModal({
 
 export default function Overview() {
   const { data: overviewStats, isLoading: statsLoading } = useOverviewStats();
-  const { data: categoryData = [], isLoading: categoryLoading } = useSpendByCategory();
-  const { data: supplierData = [], isLoading: supplierLoading } = useSpendBySupplier();
+  const { data: categoryData = [], isLoading: categoryLoading } =
+    useSpendByCategory();
+  const { data: supplierData = [], isLoading: supplierLoading } =
+    useSpendBySupplier();
   const { data: trendData = [], isLoading: trendLoading } = useMonthlyTrend(12);
   const { data: filteredData = [] } = useFilteredProcurementData();
 
   const { hasPermission } = usePermissions();
   const canAccessAdmin = hasPermission("admin_panel");
 
-  const [selectedEntity, setSelectedEntity] = useState<SelectedEntity | null>(null);
-
-  const { data: categoryDrilldownData, isLoading: categoryDrilldownLoading } = useCategoryDrilldown(
-    selectedEntity?.type === "category" ? selectedEntity.id : null
+  const [selectedEntity, setSelectedEntity] = useState<SelectedEntity | null>(
+    null,
   );
 
-  const { data: supplierDrilldownData, isLoading: supplierDrilldownLoading } = useSupplierDrilldown(
-    selectedEntity?.type === "supplier" ? selectedEntity.id : null
-  );
+  const { data: categoryDrilldownData, isLoading: categoryDrilldownLoading } =
+    useCategoryDrilldown(
+      selectedEntity?.type === "category" ? selectedEntity.id : null,
+    );
 
-  const isLoading = statsLoading || categoryLoading || supplierLoading || trendLoading;
+  const { data: supplierDrilldownData, isLoading: supplierDrilldownLoading } =
+    useSupplierDrilldown(
+      selectedEntity?.type === "supplier" ? selectedEntity.id : null,
+    );
+
+  const isLoading =
+    statsLoading || categoryLoading || supplierLoading || trendLoading;
   const adminUploadUrl = "/admin/login/";
 
   const totalSpend = overviewStats?.total_spend ?? 0;
@@ -478,7 +596,9 @@ export default function Overview() {
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
-          <p className="text-gray-600 mt-2">Key metrics and insights from your procurement data</p>
+          <p className="text-gray-600 mt-2">
+            Key metrics and insights from your procurement data
+          </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <SkeletonCard />
@@ -496,13 +616,16 @@ export default function Overview() {
     );
   }
 
-  const hasNoData = overviewStats !== undefined && overviewStats.transaction_count === 0;
+  const hasNoData =
+    overviewStats !== undefined && overviewStats.transaction_count === 0;
   if (hasNoData) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center max-w-md">
           <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">No Data Available</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            No Data Available
+          </h2>
           <p className="text-gray-600 mb-6">
             {canAccessAdmin
               ? "Upload your procurement data via the Admin Panel to see analytics and insights."
@@ -533,14 +656,36 @@ export default function Overview() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
-        <p className="text-gray-600 mt-2">Key metrics and insights from your procurement data</p>
+        <p className="text-gray-600 mt-2">
+          Key metrics and insights from your procurement data
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <StatCard title="Total Spend" value={formatCurrency(totalSpend)} description="Across all categories" icon={DollarSign} />
-        <StatCard title="Suppliers" value={supplierCount} description="Unique vendors" icon={Users} />
-        <StatCard title="Categories" value={categoryCount} description="Spend categories" icon={Package} />
-        <StatCard title="Avg Transaction" value={formatCurrency(avgTransaction)} description="Per purchase" icon={TrendingUp} />
+        <StatCard
+          title="Total Spend"
+          value={formatCurrency(totalSpend)}
+          description="Across all categories"
+          icon={DollarSign}
+        />
+        <StatCard
+          title="Suppliers"
+          value={supplierCount}
+          description="Unique vendors"
+          icon={Users}
+        />
+        <StatCard
+          title="Categories"
+          value={categoryCount}
+          description="Spend categories"
+          icon={Package}
+        />
+        <StatCard
+          title="Avg Transaction"
+          value={formatCurrency(avgTransaction)}
+          description="Per purchase"
+          icon={TrendingUp}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

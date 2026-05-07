@@ -6,6 +6,7 @@ Optimized for query efficiency:
 - Annotated counts to eliminate N+1 queries in list_display
 - select_related/prefetch_related for foreign key optimization
 """
+
 import io
 import json
 import zipfile
@@ -19,47 +20,47 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .admin_export import build_org_zip
-from .models import Organization, UserProfile, AuditLog, UserOrganizationMembership
+from .models import AuditLog, Organization, UserOrganizationMembership, UserProfile
 from .utils import log_action
 
 
-@admin.action(description='Export seeded dataset as ZIP (demo orgs only)')
+@admin.action(description="Export seeded dataset as ZIP (demo orgs only)")
 def export_demo_datasets(modeladmin, request, queryset):
     """Bundle selected demo orgs into a single ZIP of per-slug folders."""
     if not request.user.is_superuser:
-        messages.error(request, 'Exporting datasets requires superuser privileges.')
+        messages.error(request, "Exporting datasets requires superuser privileges.")
         return
 
-    non_demo = list(queryset.filter(is_demo=False).values_list('name', flat=True))
+    non_demo = list(queryset.filter(is_demo=False).values_list("name", flat=True))
     if non_demo:
         messages.error(
             request,
             f'Cannot export non-demo organization(s): {", ".join(non_demo)}. '
-            f'Toggle is_demo=True on the org first, or remove from selection.',
+            f"Toggle is_demo=True on the org first, or remove from selection.",
         )
         return
 
     outer = io.BytesIO()
-    with zipfile.ZipFile(outer, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(outer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for org in queryset:
             payload, counts = build_org_zip(org)
-            zf.writestr(f'{org.slug}-dataset.zip', payload)
+            zf.writestr(f"{org.slug}-dataset.zip", payload)
             log_action(
                 user=request.user,
-                action='export',
-                resource='organization_dataset',
+                action="export",
+                resource="organization_dataset",
                 resource_id=org.slug,
                 details={
-                    'organization_name': org.name,
-                    'is_demo': org.is_demo,
-                    'row_counts': json.dumps(counts, sort_keys=True),
-                    'zip_bytes': len(payload),
+                    "organization_name": org.name,
+                    "is_demo": org.is_demo,
+                    "row_counts": json.dumps(counts, sort_keys=True),
+                    "zip_bytes": len(payload),
                 },
                 request=request,
             )
 
-    response = HttpResponse(outer.getvalue(), content_type='application/zip')
-    response['Content-Disposition'] = (
+    response = HttpResponse(outer.getvalue(), content_type="application/zip")
+    response["Content-Disposition"] = (
         f'attachment; filename="seeded-datasets-{timezone.now():%Y%m%d-%H%M%S}.zip"'
     )
     return response
@@ -68,6 +69,7 @@ def export_demo_datasets(modeladmin, request, queryset):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def get_admin_org_ids(request):
     """
@@ -78,16 +80,14 @@ def get_admin_org_ids(request):
         list: List of organization IDs where user is admin
         []: Empty list if user has no admin access
     """
-    if not hasattr(request, '_admin_org_ids_cache'):
+    if not hasattr(request, "_admin_org_ids_cache"):
         if request.user.is_superuser:
             request._admin_org_ids_cache = None  # No filtering needed
-        elif hasattr(request.user, 'profile'):
+        elif hasattr(request.user, "profile"):
             request._admin_org_ids_cache = list(
                 UserOrganizationMembership.objects.filter(
-                    user=request.user,
-                    role='admin',
-                    is_active=True
-                ).values_list('organization_id', flat=True)
+                    user=request.user, role="admin", is_active=True
+                ).values_list("organization_id", flat=True)
             )
         else:
             request._admin_org_ids_cache = []
@@ -97,6 +97,7 @@ def get_admin_org_ids(request):
 # =============================================================================
 # Bulk Actions
 # =============================================================================
+
 
 @admin.action(description="Activate selected memberships")
 def activate_memberships(modeladmin, request, queryset):
@@ -122,7 +123,7 @@ def set_role_admin(modeladmin, request, queryset):
     admin_org_ids = get_admin_org_ids(request)
     if admin_org_ids is not None:  # Non-superuser
         queryset = queryset.filter(organization_id__in=admin_org_ids)
-    queryset.update(role='admin')
+    queryset.update(role="admin")
 
 
 @admin.action(description="Set role to Manager")
@@ -131,7 +132,7 @@ def set_role_manager(modeladmin, request, queryset):
     admin_org_ids = get_admin_org_ids(request)
     if admin_org_ids is not None:  # Non-superuser
         queryset = queryset.filter(organization_id__in=admin_org_ids)
-    queryset.update(role='manager')
+    queryset.update(role="manager")
 
 
 @admin.action(description="Set role to Viewer")
@@ -140,12 +141,13 @@ def set_role_viewer(modeladmin, request, queryset):
     admin_org_ids = get_admin_org_ids(request)
     if admin_org_ids is not None:  # Non-superuser
         queryset = queryset.filter(organization_id__in=admin_org_ids)
-    queryset.update(role='viewer')
+    queryset.update(role="viewer")
 
 
 # =============================================================================
 # Inline Admin Classes
 # =============================================================================
+
 
 class UserOrganizationMembershipInline(admin.TabularInline):
     """
@@ -155,15 +157,16 @@ class UserOrganizationMembershipInline(admin.TabularInline):
     - Uses cached get_admin_org_ids() to avoid repeated permission queries
     - select_related('organization') for FK optimization
     """
+
     model = UserOrganizationMembership
-    fk_name = 'user'
+    fk_name = "user"
     extra = 0
-    fields = ['organization', 'role', 'is_primary', 'is_active', 'created_at']
-    readonly_fields = ['created_at']
-    autocomplete_fields = ['organization']
+    fields = ["organization", "role", "is_primary", "is_active", "created_at"]
+    readonly_fields = ["created_at"]
+    autocomplete_fields = ["organization"]
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request).select_related('organization')
+        qs = super().get_queryset(request).select_related("organization")
         admin_org_ids = get_admin_org_ids(request)
 
         if admin_org_ids is None:  # Superuser
@@ -175,10 +178,11 @@ class UserOrganizationMembershipInline(admin.TabularInline):
 
 class UserProfileInline(admin.StackedInline):
     """Inline for UserProfile on User admin."""
+
     model = UserProfile
     can_delete = False
-    verbose_name_plural = 'Profile'
-    fields = ['organization', 'role', 'phone', 'department', 'is_active']
+    verbose_name_plural = "Profile"
+    fields = ["organization", "role", "phone", "department", "is_active"]
 
 
 # =============================================================================
@@ -198,40 +202,52 @@ class UserAdmin(BaseUserAdmin):
     - select_related for profile and organization to avoid N+1 on get_organization
     - Annotated membership count to avoid N+1 query per row
     """
+
     inlines = [UserProfileInline, UserOrganizationMembershipInline]
-    list_display = ['username', 'email', 'first_name', 'last_name', 'is_staff', 'get_organization', 'membership_count']
+    list_display = [
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "is_staff",
+        "get_organization",
+        "membership_count",
+    ]
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # Optimize: prefetch profile and organization in single query
-        qs = qs.select_related('profile', 'profile__organization')
+        qs = qs.select_related("profile", "profile__organization")
         # Annotate membership count to avoid N+1
         qs = qs.annotate(
             _membership_count=Count(
-                'organization_memberships',
-                filter=Q(organization_memberships__is_active=True)
+                "organization_memberships",
+                filter=Q(organization_memberships__is_active=True),
             )
         )
         return qs
 
     def get_organization(self, obj):
         """Get user's primary organization (optimized via select_related)."""
-        if hasattr(obj, 'profile') and obj.profile:
-            return obj.profile.organization.name if obj.profile.organization else '-'
-        return '-'
-    get_organization.short_description = 'Organization'
-    get_organization.admin_order_field = 'profile__organization__name'
+        if hasattr(obj, "profile") and obj.profile:
+            return obj.profile.organization.name if obj.profile.organization else "-"
+        return "-"
+
+    get_organization.short_description = "Organization"
+    get_organization.admin_order_field = "profile__organization__name"
 
     def membership_count(self, obj):
         """Get count of organizations user belongs to (optimized via annotation)."""
-        return getattr(obj, '_membership_count', 0)
-    membership_count.short_description = 'Orgs'
-    membership_count.admin_order_field = '_membership_count'
+        return getattr(obj, "_membership_count", 0)
+
+    membership_count.short_description = "Orgs"
+    membership_count.admin_order_field = "_membership_count"
 
 
 # =============================================================================
 # Organization Admin
 # =============================================================================
+
 
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
@@ -241,37 +257,55 @@ class OrganizationAdmin(admin.ModelAdmin):
     Optimizations:
     - Annotated member_count to avoid N+1 query per row
     """
-    list_display = ['name', 'slug', 'is_active', 'demo_badge', 'member_count', 'created_at']
-    list_filter = ['is_active', 'is_demo', 'created_at']
-    search_fields = ['name', 'slug']
-    prepopulated_fields = {'slug': ('name',)}
-    readonly_fields = ['created_at', 'updated_at']
+
+    list_display = [
+        "name",
+        "slug",
+        "is_active",
+        "demo_badge",
+        "member_count",
+        "created_at",
+    ]
+    list_filter = ["is_active", "is_demo", "created_at"]
+    search_fields = ["name", "slug"]
+    prepopulated_fields = {"slug": ("name",)}
+    readonly_fields = ["created_at", "updated_at"]
     actions = [export_demo_datasets]
 
     def get_actions(self, request):
         actions = super().get_actions(request)
         if not request.user.is_superuser:
-            actions.pop('export_demo_datasets', None)
+            actions.pop("export_demo_datasets", None)
         return actions
 
     fieldsets = (
-        (None, {
-            'fields': ('name', 'slug', 'description', 'is_active', 'is_demo')
-        }),
-        ('Branding', {
-            'fields': ('logo', 'primary_color', 'secondary_color', 'website', 'report_footer'),
-            'classes': ('collapse',)
-        }),
-        ('Savings Configuration', {
-            'fields': ('savings_config',),
-            'classes': ('collapse',),
-            'description': 'Configure industry-benchmark savings rates for AI Insights. '
-                          'Use benchmark_profile (conservative/moderate/aggressive) or set custom rates.'
-        }),
-        ('Metadata', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
+        (None, {"fields": ("name", "slug", "description", "is_active", "is_demo")}),
+        (
+            "Branding",
+            {
+                "fields": (
+                    "logo",
+                    "primary_color",
+                    "secondary_color",
+                    "website",
+                    "report_footer",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Savings Configuration",
+            {
+                "fields": ("savings_config",),
+                "classes": ("collapse",),
+                "description": "Configure industry-benchmark savings rates for AI Insights. "
+                "Use benchmark_profile (conservative/moderate/aggressive) or set custom rates.",
+            },
+        ),
+        (
+            "Metadata",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
     )
 
     def get_queryset(self, request):
@@ -279,34 +313,36 @@ class OrganizationAdmin(admin.ModelAdmin):
         # Annotate member count to avoid N+1
         qs = qs.annotate(
             _member_count=Count(
-                'user_memberships',
-                filter=Q(user_memberships__is_active=True)
+                "user_memberships", filter=Q(user_memberships__is_active=True)
             )
         )
         return qs
 
     def member_count(self, obj):
         """Return count of active members (optimized via annotation)."""
-        return getattr(obj, '_member_count', 0)
-    member_count.short_description = 'Members'
-    member_count.admin_order_field = '_member_count'
+        return getattr(obj, "_member_count", 0)
+
+    member_count.short_description = "Members"
+    member_count.admin_order_field = "_member_count"
 
     def demo_badge(self, obj):
         """Amber DEMO chip when the org holds synthetic data."""
         if obj.is_demo:
             return format_html(
                 '<span style="display:inline-block;padding:2px 8px;'
-                'background:#fef3c7;color:#92400e;border-radius:4px;'
+                "background:#fef3c7;color:#92400e;border-radius:4px;"
                 'font-size:11px;font-weight:600;letter-spacing:0.02em;">DEMO</span>'
             )
         return format_html('<span style="color:#9ca3af;">—</span>')
-    demo_badge.short_description = 'Demo'
-    demo_badge.admin_order_field = 'is_demo'
+
+    demo_badge.short_description = "Demo"
+    demo_badge.admin_order_field = "is_demo"
 
 
 # =============================================================================
 # User Profile Admin
 # =============================================================================
+
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
@@ -322,26 +358,34 @@ class UserProfileAdmin(admin.ModelAdmin):
     - select_related for user and organization
     - Annotated membership_count to avoid N+1 query per row
     """
-    list_display = ['user', 'organization', 'role', 'membership_count', 'is_active', 'created_at']
-    list_filter = ['role', 'is_active', 'organization', 'created_at']
-    search_fields = ['user__username', 'user__email', 'organization__name']
-    readonly_fields = ['created_at', 'updated_at', 'preferences_masked']
-    exclude = ['preferences']
+
+    list_display = [
+        "user",
+        "organization",
+        "role",
+        "membership_count",
+        "is_active",
+        "created_at",
+    ]
+    list_filter = ["role", "is_active", "organization", "created_at"]
+    search_fields = ["user__username", "user__email", "organization__name"]
+    readonly_fields = ["created_at", "updated_at", "preferences_masked"]
+    exclude = ["preferences"]
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         # Optimize: prefetch related objects
-        qs = qs.select_related('user', 'organization')
+        qs = qs.select_related("user", "organization")
         # Annotate membership count to avoid N+1
         qs = qs.annotate(
             _membership_count=Count(
-                'user__organization_memberships',
-                filter=Q(user__organization_memberships__is_active=True)
+                "user__organization_memberships",
+                filter=Q(user__organization_memberships__is_active=True),
             )
         )
         # Filter by organization for non-superusers
         if not request.user.is_superuser:
-            if hasattr(request.user, 'profile'):
+            if hasattr(request.user, "profile"):
                 qs = qs.filter(organization=request.user.profile.organization)
             else:
                 qs = qs.none()
@@ -349,39 +393,53 @@ class UserProfileAdmin(admin.ModelAdmin):
 
     def membership_count(self, obj):
         """Return count of organizations this user belongs to (optimized via annotation)."""
-        return getattr(obj, '_membership_count', 0)
-    membership_count.short_description = 'Orgs'
-    membership_count.admin_order_field = '_membership_count'
+        return getattr(obj, "_membership_count", 0)
+
+    membership_count.short_description = "Orgs"
+    membership_count.admin_order_field = "_membership_count"
 
     def preferences_masked(self, obj):
         """Masked, read-only view of preferences (hides aiApiKey / other secrets)."""
         import json
+
         masked = UserProfile.mask_preferences(obj.preferences or {})
         return format_html(
             '<pre style="margin:0;white-space:pre-wrap;font-family:monospace;">{}</pre>',
             json.dumps(masked, indent=2, sort_keys=True, default=str),
         )
-    preferences_masked.short_description = 'Preferences (masked)'
+
+    preferences_masked.short_description = "Preferences (masked)"
 
 
 # =============================================================================
 # Audit Log Admin
 # =============================================================================
 
+
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
     """Audit log admin (read-only except for superuser delete)."""
-    list_display = ['user', 'organization', 'action', 'resource', 'timestamp']
-    list_filter = ['action', 'organization', 'timestamp']
-    search_fields = ['user__username', 'resource', 'resource_id']
-    readonly_fields = ['user', 'organization', 'action', 'resource', 'resource_id',
-                      'details', 'ip_address', 'user_agent', 'timestamp']
+
+    list_display = ["user", "organization", "action", "resource", "timestamp"]
+    list_filter = ["action", "organization", "timestamp"]
+    search_fields = ["user__username", "resource", "resource_id"]
+    readonly_fields = [
+        "user",
+        "organization",
+        "action",
+        "resource",
+        "resource_id",
+        "details",
+        "ip_address",
+        "user_agent",
+        "timestamp",
+    ]
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request).select_related('user', 'organization')
+        qs = super().get_queryset(request).select_related("user", "organization")
         if request.user.is_superuser:
             return qs
-        if hasattr(request.user, 'profile'):
+        if hasattr(request.user, "profile"):
             return qs.filter(organization=request.user.profile.organization)
         return qs.none()
 
@@ -399,6 +457,7 @@ class AuditLogAdmin(admin.ModelAdmin):
 # User Organization Membership Admin
 # =============================================================================
 
+
 @admin.register(UserOrganizationMembership)
 class UserOrganizationMembershipAdmin(admin.ModelAdmin):
     """
@@ -409,30 +468,47 @@ class UserOrganizationMembershipAdmin(admin.ModelAdmin):
     - select_related for all FK fields
     - Bulk actions for common operations
     """
-    list_display = ['user', 'organization', 'role', 'is_primary', 'is_active', 'created_at']
-    list_filter = ['role', 'is_primary', 'is_active', 'organization', 'created_at']
-    search_fields = ['user__username', 'user__email', 'organization__name']
-    autocomplete_fields = ['user', 'organization']
-    readonly_fields = ['created_at', 'updated_at']
-    raw_id_fields = ['invited_by']
-    list_editable = ['role', 'is_primary', 'is_active']
-    actions = [activate_memberships, deactivate_memberships, set_role_admin, set_role_manager, set_role_viewer]
+
+    list_display = [
+        "user",
+        "organization",
+        "role",
+        "is_primary",
+        "is_active",
+        "created_at",
+    ]
+    list_filter = ["role", "is_primary", "is_active", "organization", "created_at"]
+    search_fields = ["user__username", "user__email", "organization__name"]
+    autocomplete_fields = ["user", "organization"]
+    readonly_fields = ["created_at", "updated_at"]
+    raw_id_fields = ["invited_by"]
+    list_editable = ["role", "is_primary", "is_active"]
+    actions = [
+        activate_memberships,
+        deactivate_memberships,
+        set_role_admin,
+        set_role_manager,
+        set_role_viewer,
+    ]
 
     fieldsets = (
-        (None, {
-            'fields': ('user', 'organization', 'role')
-        }),
-        ('Status', {
-            'fields': ('is_primary', 'is_active')
-        }),
-        ('Metadata', {
-            'fields': ('invited_by', 'created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
+        (None, {"fields": ("user", "organization", "role")}),
+        ("Status", {"fields": ("is_primary", "is_active")}),
+        (
+            "Metadata",
+            {
+                "fields": ("invited_by", "created_at", "updated_at"),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request).select_related('user', 'organization', 'invited_by')
+        qs = (
+            super()
+            .get_queryset(request)
+            .select_related("user", "organization", "invited_by")
+        )
         admin_org_ids = get_admin_org_ids(request)
 
         if admin_org_ids is None:  # Superuser
@@ -443,8 +519,8 @@ class UserOrganizationMembershipAdmin(admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Limit organization choices for non-superusers (uses cached org IDs)."""
-        if db_field.name == 'organization':
+        if db_field.name == "organization":
             admin_org_ids = get_admin_org_ids(request)
             if admin_org_ids is not None:  # Not superuser
-                kwargs['queryset'] = Organization.objects.filter(id__in=admin_org_ids)
+                kwargs["queryset"] = Organization.objects.filter(id__in=admin_org_ids)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)

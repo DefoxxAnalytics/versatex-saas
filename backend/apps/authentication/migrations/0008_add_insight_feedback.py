@@ -6,13 +6,31 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('authentication', '0007_security_protect_org_fk'),
+        ("authentication", "0007_security_protect_org_fk"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='auditlog',
-            name='action',
-            field=models.CharField(choices=[('login', 'Login'), ('logout', 'Logout'), ('create', 'Create'), ('update', 'Update'), ('delete', 'Delete'), ('upload', 'Upload'), ('export', 'Export'), ('download', 'Download'), ('view', 'View'), ('reset', 'Reset'), ('bulk_delete', 'Bulk Delete'), ('generate', 'Generate'), ('share', 'Share'), ('execute', 'Execute')], max_length=20),
+            model_name="auditlog",
+            name="action",
+            field=models.CharField(
+                choices=[
+                    ("login", "Login"),
+                    ("logout", "Logout"),
+                    ("create", "Create"),
+                    ("update", "Update"),
+                    ("delete", "Delete"),
+                    ("upload", "Upload"),
+                    ("export", "Export"),
+                    ("download", "Download"),
+                    ("view", "View"),
+                    ("reset", "Reset"),
+                    ("bulk_delete", "Bulk Delete"),
+                    ("generate", "Generate"),
+                    ("share", "Share"),
+                    ("execute", "Execute"),
+                ],
+                max_length=20,
+            ),
         ),
     ]

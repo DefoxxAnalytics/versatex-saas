@@ -129,7 +129,11 @@ export const BENCHMARK_RANGES: Record<
  */
 export const PROFILE_REALIZATION: Record<
   Exclude<BenchmarkProfile, "custom">,
-  { probability: number; range: string; variant: "default" | "secondary" | "destructive" }
+  {
+    probability: number;
+    range: string;
+    variant: "default" | "secondary" | "destructive";
+  }
 > = {
   conservative: { probability: 0.9, range: "85-95%", variant: "default" },
   moderate: { probability: 0.75, range: "70-85%", variant: "secondary" },
@@ -179,7 +183,9 @@ export function useExportSavingsConfigPdf() {
       if (!activeOrganization?.id) {
         throw new Error("No organization selected");
       }
-      const response = await authAPI.exportSavingsConfigPdf(activeOrganization.id);
+      const response = await authAPI.exportSavingsConfigPdf(
+        activeOrganization.id,
+      );
       const blob = response.data;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

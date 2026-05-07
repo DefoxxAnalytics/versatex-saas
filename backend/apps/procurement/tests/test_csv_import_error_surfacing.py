@@ -11,6 +11,7 @@ detail. These tests assert that:
     the first data row that fails is row 2.
   - The exception message is preserved on the entry.
 """
+
 from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
@@ -21,16 +22,16 @@ from django.test import TestCase
 
 from apps.authentication.models import Organization, UserProfile
 from apps.procurement.admin import (
-    PurchaseRequisitionAdmin,
-    PurchaseOrderAdmin,
     GoodsReceiptAdmin,
     InvoiceAdmin,
+    PurchaseOrderAdmin,
+    PurchaseRequisitionAdmin,
 )
 from apps.procurement.models import (
-    PurchaseRequisition,
-    PurchaseOrder,
     GoodsReceipt,
     Invoice,
+    PurchaseOrder,
+    PurchaseRequisition,
     Supplier,
 )
 
@@ -57,18 +58,12 @@ class _BaseImporterErrorSurfacingTest(TestCase):
             expected_row,
             f"Expected row={expected_row}, got {err}",
         )
-        self.assertIn(
-            "error_class", err, f"missing 'error_class' key: {err}"
-        )
+        self.assertIn("error_class", err, f"missing 'error_class' key: {err}")
         self.assertIn("message", err, f"missing 'message' key: {err}")
-        self.assertTrue(
-            err["message"], f"empty message in error entry: {err}"
-        )
+        self.assertTrue(err["message"], f"empty message in error entry: {err}")
 
 
-class TestPurchaseRequisitionImporterErrorSurfacing(
-    _BaseImporterErrorSurfacingTest
-):
+class TestPurchaseRequisitionImporterErrorSurfacing(_BaseImporterErrorSurfacingTest):
     def test_pr_importer_captures_row_failure(self):
         """When a PR row raises during create(), errors list must capture it."""
         admin_instance = PurchaseRequisitionAdmin(

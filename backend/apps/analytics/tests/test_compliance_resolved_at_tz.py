@@ -5,16 +5,14 @@ datetime.now() (naive) emits a RuntimeWarning and stores a value treated as if
 in TIME_ZONE but with the server's local clock — causing off-by-N-hours errors
 when the host clock differs from the project TZ.
 """
-import pytest
-from decimal import Decimal
+
 from datetime import date
+from decimal import Decimal
+
+import pytest
 
 from apps.analytics.compliance_services import ComplianceService
-from apps.procurement.models import (
-    PolicyViolation,
-    SpendingPolicy,
-    Transaction,
-)
+from apps.procurement.models import PolicyViolation, SpendingPolicy, Transaction
 
 
 @pytest.mark.django_db
@@ -28,16 +26,16 @@ class TestComplianceResolvedAtIsTzAware:
             organization=organization,
             supplier=supplier,
             category=category,
-            amount=Decimal('1500.00'),
+            amount=Decimal("1500.00"),
             date=date.today(),
-            description='Tx for tz-aware resolved_at test',
+            description="Tx for tz-aware resolved_at test",
             uploaded_by=admin_user,
-            upload_batch='tz-aware-test-batch',
+            upload_batch="tz-aware-test-batch",
         )
         policy = SpendingPolicy.objects.create(
             organization=organization,
-            name='TZ Test Policy',
-            description='Policy for tz-aware resolved_at test',
+            name="TZ Test Policy",
+            description="Policy for tz-aware resolved_at test",
             rules={},
             is_active=True,
         )
@@ -45,8 +43,8 @@ class TestComplianceResolvedAtIsTzAware:
             organization=organization,
             transaction=tx,
             policy=policy,
-            violation_type='amount_exceeded',
-            severity='medium',
+            violation_type="amount_exceeded",
+            severity="medium",
             details={},
             is_resolved=False,
         )
@@ -55,13 +53,13 @@ class TestComplianceResolvedAtIsTzAware:
         result = service.resolve_violation(
             violation.id,
             admin_user,
-            'Resolved for tz-aware assertion',
+            "Resolved for tz-aware assertion",
         )
 
         assert result is not None
 
         violation.refresh_from_db()
         assert violation.resolved_at is not None
-        assert violation.resolved_at.tzinfo is not None, (
-            f'resolved_at must be timezone-aware. Got naive: {violation.resolved_at!r}'
-        )
+        assert (
+            violation.resolved_at.tzinfo is not None
+        ), f"resolved_at must be timezone-aware. Got naive: {violation.resolved_at!r}"

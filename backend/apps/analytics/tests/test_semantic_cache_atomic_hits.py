@@ -24,6 +24,7 @@ DB (CI Postgres exercises the row-level locking semantics in production).
 The drift-guard regex catches any future regression at static-analysis
 time, which is what matters for preventing the bug from shipping.
 """
+
 from __future__ import annotations
 
 import re
@@ -41,10 +42,10 @@ def cache_entry(db, organization):
     """Create a SemanticCache entry with hit_count=0."""
     return SemanticCache.objects.create(
         organization=organization,
-        request_type='enhance',
-        query_text='test query',
-        query_hash='a' * 64,
-        response_json={'result': 'cached'},
+        request_type="enhance",
+        query_text="test query",
+        query_hash="a" * 64,
+        response_json={"result": "cached"},
         expires_at=timezone.now() + timedelta(hours=1),
     )
 
@@ -99,13 +100,13 @@ def test_increment_hit_count_does_not_clobber_other_fields(cache_entry):
     between our load and increment, that modification must survive.
     """
     SemanticCache.objects.filter(pk=cache_entry.pk).update(
-        response_json={'updated_by_other_process': True}
+        response_json={"updated_by_other_process": True}
     )
 
     cache_entry.increment_hit_count()
 
     cache_entry.refresh_from_db()
-    assert cache_entry.response_json == {'updated_by_other_process': True}, (
+    assert cache_entry.response_json == {"updated_by_other_process": True}, (
         "increment_hit_count must scope its UPDATE to hit_count only, "
         "preserving concurrent modifications to other columns."
     )

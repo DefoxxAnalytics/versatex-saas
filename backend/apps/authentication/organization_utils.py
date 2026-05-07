@@ -7,6 +7,7 @@ and reports/views.py.
 
 Supports both single-org users (legacy) and multi-org users (new membership model).
 """
+
 from rest_framework.exceptions import ValidationError
 
 from .models import Organization, UserOrganizationMembership
@@ -28,15 +29,13 @@ def get_user_organizations(user):
     if user.is_superuser:
         return Organization.objects.filter(is_active=True)
 
-    if not hasattr(user, 'profile'):
+    if not hasattr(user, "profile"):
         return Organization.objects.none()
 
     # Get orgs from memberships
     membership_org_ids = UserOrganizationMembership.objects.filter(
-        user=user,
-        is_active=True,
-        organization__is_active=True
-    ).values_list('organization_id', flat=True)
+        user=user, is_active=True, organization__is_active=True
+    ).values_list("organization_id", flat=True)
 
     if membership_org_ids:
         return Organization.objects.filter(id__in=membership_org_ids)
@@ -58,15 +57,17 @@ def get_primary_organization(user):
     if not user or not user.is_authenticated:
         return None
 
-    if not hasattr(user, 'profile'):
+    if not hasattr(user, "profile"):
         return None
 
     # First check new membership model for primary
-    primary_membership = UserOrganizationMembership.objects.filter(
-        user=user,
-        is_primary=True,
-        is_active=True
-    ).select_related('organization').first()
+    primary_membership = (
+        UserOrganizationMembership.objects.filter(
+            user=user, is_primary=True, is_active=True
+        )
+        .select_related("organization")
+        .first()
+    )
 
     if primary_membership:
         return primary_membership.organization
@@ -94,25 +95,27 @@ def get_target_organization(request):
     """
     user = request.user
 
-    if not hasattr(user, 'profile'):
+    if not hasattr(user, "profile"):
         return None
 
     # Get user's primary organization as default
     primary_org = get_primary_organization(user)
 
     # Check for organization_id query param
-    org_id = request.query_params.get('organization_id')
+    org_id = request.query_params.get("organization_id")
 
     if org_id:
         try:
             org_id = int(org_id)
         except (ValueError, TypeError):
-            raise ValidationError({'organization_id': 'Must be a valid integer'})
+            raise ValidationError({"organization_id": "Must be a valid integer"})
 
         try:
             target_org = Organization.objects.get(id=org_id, is_active=True)
         except Organization.DoesNotExist:
-            raise ValidationError({'organization_id': 'Organization not found or inactive'})
+            raise ValidationError(
+                {"organization_id": "Organization not found or inactive"}
+            )
 
         # Superusers can access any org
         if user.is_superuser:
@@ -122,9 +125,9 @@ def get_target_organization(request):
         if user_can_access_org(user, target_org):
             return target_org
 
-        raise ValidationError({
-            'organization_id': 'You do not have access to this organization'
-        })
+        raise ValidationError(
+            {"organization_id": "You do not have access to this organization"}
+        )
 
     return primary_org
 
@@ -144,21 +147,19 @@ def get_user_role_in_org(user, organization):
         return None
 
     if user.is_superuser:
-        return 'admin'  # Superusers have admin access everywhere
+        return "admin"  # Superusers have admin access everywhere
 
-    org_id = organization.id if hasattr(organization, 'id') else organization
+    org_id = organization.id if hasattr(organization, "id") else organization
 
     membership = UserOrganizationMembership.objects.filter(
-        user=user,
-        organization_id=org_id,
-        is_active=True
+        user=user, organization_id=org_id, is_active=True
     ).first()
 
     if membership:
         return membership.role
 
     # Fall back to legacy profile if it matches
-    if hasattr(user, 'profile') and user.profile.organization_id == org_id:
+    if hasattr(user, "profile") and user.profile.organization_id == org_id:
         return user.profile.role
 
     return None
@@ -181,20 +182,18 @@ def user_can_access_org(user, organization):
     if user.is_superuser:
         return True
 
-    org_id = organization.id if hasattr(organization, 'id') else organization
+    org_id = organization.id if hasattr(organization, "id") else organization
 
     # Check memberships first
     has_membership = UserOrganizationMembership.objects.filter(
-        user=user,
-        organization_id=org_id,
-        is_active=True
+        user=user, organization_id=org_id, is_active=True
     ).exists()
 
     if has_membership:
         return True
 
     # Fall back to legacy profile check
-    if hasattr(user, 'profile') and user.profile.organization_id == org_id:
+    if hasattr(user, "profile") and user.profile.organization_id == org_id:
         return True
 
     return False
@@ -212,7 +211,7 @@ def user_is_admin_in_org(user, organization):
         Boolean
     """
     role = get_user_role_in_org(user, organization)
-    return role == 'admin'
+    return role == "admin"
 
 
 def user_is_manager_in_org(user, organization):
@@ -227,7 +226,7 @@ def user_is_manager_in_org(user, organization):
         Boolean
     """
     role = get_user_role_in_org(user, organization)
-    return role in ['admin', 'manager']
+    return role in ["admin", "manager"]
 
 
 def user_can_upload_in_org(user, organization):
@@ -242,7 +241,7 @@ def user_can_upload_in_org(user, organization):
         Boolean
     """
     role = get_user_role_in_org(user, organization)
-    return role in ['admin', 'manager']
+    return role in ["admin", "manager"]
 
 
 def user_can_delete_in_org(user, organization):
@@ -257,4 +256,4 @@ def user_can_delete_in_org(user, organization):
         Boolean
     """
     role = get_user_role_in_org(user, organization)
-    return role == 'admin'
+    return role == "admin"

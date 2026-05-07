@@ -1,13 +1,16 @@
 """
 Utility functions for authentication
 """
+
 import hashlib
 import logging
+
 from django.conf import settings
 from django.core.cache import cache
+
 from .models import AuditLog
 
-logger = logging.getLogger('authentication')
+logger = logging.getLogger("authentication")
 
 # Rate limiting settings for failed login attempts
 MAX_FAILED_ATTEMPTS = 5
@@ -30,18 +33,18 @@ def get_client_ip(request):
     the bridge subnet is). For production behind nginx, set it to the
     nginx loopback address.
     """
-    remote_addr = request.META.get('REMOTE_ADDR', '0.0.0.0')
-    trusted_proxies = getattr(settings, 'TRUSTED_PROXIES', []) or []
+    remote_addr = request.META.get("REMOTE_ADDR", "0.0.0.0")
+    trusted_proxies = getattr(settings, "TRUSTED_PROXIES", []) or []
 
     if remote_addr in trusted_proxies:
         # Honor forwarded headers from a trusted upstream proxy.
-        x_real_ip = request.META.get('HTTP_X_REAL_IP')
+        x_real_ip = request.META.get("HTTP_X_REAL_IP")
         if x_real_ip:
             return x_real_ip.strip()
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
         if x_forwarded_for:
             # First IP is closest to the client; rest are intermediate hops.
-            return x_forwarded_for.split(',')[0].strip()
+            return x_forwarded_for.split(",")[0].strip()
 
     # Untrusted (direct) connection or no forwarded headers — use REMOTE_ADDR.
     return remote_addr
@@ -49,7 +52,7 @@ def get_client_ip(request):
 
 def get_user_agent(request):
     """Get user agent from request"""
-    return request.META.get('HTTP_USER_AGENT', '')
+    return request.META.get("HTTP_USER_AGENT", "")
 
 
 def hash_user_agent(user_agent: str) -> str:
@@ -58,7 +61,7 @@ def hash_user_agent(user_agent: str) -> str:
     Uses full hash for better security (not truncated).
     """
     if not user_agent:
-        return ''
+        return ""
     return hashlib.sha256(user_agent.encode()).hexdigest()
 
 
@@ -72,7 +75,7 @@ def get_failed_login_key(username: str, ip: str) -> str:
     """
     # Hash username to prevent cache key injection
     username_hash = hashlib.sha256(username.lower().encode()).hexdigest()[:16]
-    return f'failed_login:{username_hash}:{ip}'
+    return f"failed_login:{username_hash}:{ip}"
 
 
 def record_failed_login(request, username: str):
@@ -158,26 +161,26 @@ def clear_failed_logins(request, username: str = None):
         cache.delete(key)
 
 
-def log_action(user, action, resource, resource_id='', details=None, request=None):
+def log_action(user, action, resource, resource_id="", details=None, request=None):
     """
     Log user action to audit log
     """
-    if not hasattr(user, 'profile'):
+    if not hasattr(user, "profile"):
         return None
 
     log_data = {
-        'user': user,
-        'organization': user.profile.organization,
-        'action': action,
-        'resource': resource,
-        'resource_id': resource_id,
-        'details': details or {},
+        "user": user,
+        "organization": user.profile.organization,
+        "action": action,
+        "resource": resource,
+        "resource_id": resource_id,
+        "details": details or {},
     }
 
     if request:
-        log_data['ip_address'] = get_client_ip(request)
+        log_data["ip_address"] = get_client_ip(request)
         # Hash user agent for privacy
-        log_data['user_agent'] = hash_user_agent(get_user_agent(request))
+        log_data["user_agent"] = hash_user_agent(get_user_agent(request))
 
     return AuditLog.objects.create(**log_data)
 

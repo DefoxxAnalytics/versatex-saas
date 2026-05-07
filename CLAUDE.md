@@ -264,7 +264,7 @@ See `.env.example` for the full list and the production security checklist.
 
 ## Security Features
 
-**Rate limiting:** Uploads 10/hr/user, exports 30/hr/user, bulk deletes 10/hr/user, login 5/min, anonymous 100/hr, authenticated 1000/hr.
+**Rate limiting:** Uploads 10/hr/user, exports 30/hr/user (analytics CSV/Excel exports — `exports` scope), report downloads 60/hr/user (generated Reports module — separate `report_download` scope; rationale: report downloads of an already-generated artifact are cheaper than ad-hoc analytics exports), bulk deletes 10/hr/user, login 5/min, anonymous 100/hr, authenticated 1000/hr.
 
 **Production deployment:**
 ```bash

@@ -1,10 +1,12 @@
 """
 Serializers for authentication
 """
-from rest_framework import serializers
+
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
-from .models import Organization, UserProfile, AuditLog, UserOrganizationMembership
+from rest_framework import serializers
+
+from .models import AuditLog, Organization, UserOrganizationMembership, UserProfile
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -12,30 +14,60 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ['id', 'name', 'slug', 'description', 'is_active', 'is_demo', 'created_at']
-        read_only_fields = ['id', 'is_demo', 'created_at']
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "description",
+            "is_active",
+            "is_demo",
+            "created_at",
+        ]
+        read_only_fields = ["id", "is_demo", "created_at"]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
     """Serializer for UserProfile model with optional organizations list."""
-    organization_name = serializers.CharField(source='organization.name', read_only=True)
-    organization_is_demo = serializers.BooleanField(source='organization.is_demo', read_only=True)
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+    organization_is_demo = serializers.BooleanField(
+        source="organization.is_demo", read_only=True
+    )
     is_super_admin = serializers.SerializerMethodField()
     organizations = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
         fields = [
-            'id', 'organization', 'organization_name', 'organization_is_demo', 'role',
-            'phone', 'department', 'preferences', 'is_active',
-            'created_at', 'is_super_admin', 'organizations'
+            "id",
+            "organization",
+            "organization_name",
+            "organization_is_demo",
+            "role",
+            "phone",
+            "department",
+            "preferences",
+            "is_active",
+            "created_at",
+            "is_super_admin",
+            "organizations",
         ]
-        read_only_fields = ['id', 'organization_is_demo', 'created_at', 'is_super_admin', 'organizations']
+        read_only_fields = [
+            "id",
+            "organization_is_demo",
+            "created_at",
+            "is_super_admin",
+            "organizations",
+        ]
 
     def to_representation(self, instance):
         """Mask secret preference keys (e.g. aiApiKey) before serialization."""
         data = super().to_representation(instance)
-        data['preferences'] = UserProfile.mask_preferences(data.get('preferences') or {})
+        data["preferences"] = UserProfile.mask_preferences(
+            data.get("preferences") or {}
+        )
         return data
 
     def get_is_super_admin(self, obj):
@@ -45,19 +77,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def get_organizations(self, obj):
         """Return all active organization memberships for this user."""
         memberships = UserOrganizationMembership.objects.filter(
-            user=obj.user,
-            is_active=True
-        ).select_related('organization')
+            user=obj.user, is_active=True
+        ).select_related("organization")
         # Return simplified list for API response
         return [
             {
-                'id': m.id,
-                'organization': m.organization.id,
-                'organization_name': m.organization.name,
-                'organization_slug': m.organization.slug,
-                'organization_is_demo': m.organization.is_demo,
-                'role': m.role,
-                'is_primary': m.is_primary,
+                "id": m.id,
+                "organization": m.organization.id,
+                "organization_name": m.organization.name,
+                "organization_slug": m.organization.slug,
+                "organization_is_demo": m.organization.is_demo,
+                "role": m.role,
+                "is_primary": m.is_primary,
             }
             for m in memberships
         ]
@@ -65,28 +96,40 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class UserPreferencesSerializer(serializers.Serializer):
     """Serializer for user preferences update."""
-    theme = serializers.ChoiceField(choices=['light', 'dark', 'system'], required=False)
-    colorScheme = serializers.ChoiceField(choices=['navy', 'classic', 'versatex'], required=False)
+
+    theme = serializers.ChoiceField(choices=["light", "dark", "system"], required=False)
+    colorScheme = serializers.ChoiceField(
+        choices=["navy", "classic", "versatex"], required=False
+    )
     notifications = serializers.BooleanField(required=False)
-    exportFormat = serializers.ChoiceField(choices=['csv', 'xlsx', 'json'], required=False)
+    exportFormat = serializers.ChoiceField(
+        choices=["csv", "xlsx", "json"], required=False
+    )
     currency = serializers.CharField(max_length=10, required=False)
     dateFormat = serializers.ChoiceField(
-        choices=['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'],
-        required=False
+        choices=["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"], required=False
     )
     dashboardLayout = serializers.CharField(max_length=50, required=False)
     sidebarCollapsed = serializers.BooleanField(required=False)
 
     # AI / Predictive settings — must match UserProfile.ALLOWED_PREFERENCE_KEYS.
     useExternalAI = serializers.BooleanField(required=False)
-    aiProvider = serializers.ChoiceField(choices=['anthropic', 'openai'], required=False)
-    aiApiKey = serializers.CharField(required=False, allow_blank=True, max_length=300, trim_whitespace=True)
+    aiProvider = serializers.ChoiceField(
+        choices=["anthropic", "openai"], required=False
+    )
+    aiApiKey = serializers.CharField(
+        required=False, allow_blank=True, max_length=300, trim_whitespace=True
+    )
     forecastingModel = serializers.ChoiceField(
-        choices=['simple_average', 'linear', 'advanced'],
+        choices=["simple_average", "linear", "advanced"],
         required=False,
     )
-    forecastHorizonMonths = serializers.IntegerField(required=False, min_value=1, max_value=36)
-    anomalySensitivity = serializers.FloatField(required=False, min_value=0.5, max_value=5.0)
+    forecastHorizonMonths = serializers.IntegerField(
+        required=False, min_value=1, max_value=36
+    )
+    anomalySensitivity = serializers.FloatField(
+        required=False, min_value=0.5, max_value=5.0
+    )
 
     def validate_aiApiKey(self, value):
         """Finding A5: validate aiApiKey prefix matches aiProvider.
@@ -101,18 +144,18 @@ class UserPreferencesSerializer(serializers.Serializer):
         if not value:
             return value
 
-        provider = self.initial_data.get('aiProvider')
+        provider = self.initial_data.get("aiProvider")
         if not provider:
-            request = self.context.get('request')
-            if request is not None and hasattr(request.user, 'profile'):
-                provider = (request.user.profile.preferences or {}).get('aiProvider')
+            request = self.context.get("request")
+            if request is not None and hasattr(request.user, "profile"):
+                provider = (request.user.profile.preferences or {}).get("aiProvider")
 
         if not provider:
             return value
 
         expected_prefix = {
-            'anthropic': 'sk-ant-',
-            'openai': 'sk-',
+            "anthropic": "sk-ant-",
+            "openai": "sk-",
         }.get(provider)
 
         if expected_prefix and not value.startswith(expected_prefix):
@@ -130,26 +173,26 @@ class UserPreferencesSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model with profile"""
+
     profile = UserProfileSerializer(read_only=True)
-    
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'profile']
-        read_only_fields = ['id']
+        fields = ["id", "username", "email", "first_name", "last_name", "profile"]
+        read_only_fields = ["id"]
 
 
 class RegisterSerializer(serializers.ModelSerializer):
     """Serializer for user registration"""
+
     password = serializers.CharField(
         write_only=True,
         required=True,
         validators=[validate_password],
-        style={'input_type': 'password'}
+        style={"input_type": "password"},
     )
     password_confirm = serializers.CharField(
-        write_only=True,
-        required=True,
-        style={'input_type': 'password'}
+        write_only=True, required=True, style={"input_type": "password"}
     )
     organization = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.filter(is_active=True)
@@ -163,13 +206,20 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'username', 'email', 'password', 'password_confirm',
-            'first_name', 'last_name', 'organization'
+            "username",
+            "email",
+            "password",
+            "password_confirm",
+            "first_name",
+            "last_name",
+            "organization",
         ]
 
     def validate(self, attrs):
-        if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError(
+                {"password": "Password fields didn't match."}
+            )
         return attrs
 
     def validate_email(self, value):
@@ -179,110 +229,156 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         # Discard password_confirm and pop organization off the User payload.
-        validated_data.pop('password_confirm')
-        organization = validated_data.pop('organization')
+        validated_data.pop("password_confirm")
+        organization = validated_data.pop("organization")
 
         user = User.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data['email'],
-            password=validated_data['password'],
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', '')
+            username=validated_data["username"],
+            email=validated_data["email"],
+            password=validated_data["password"],
+            first_name=validated_data.get("first_name", ""),
+            last_name=validated_data.get("last_name", ""),
         )
 
         # Role is hardcoded to 'viewer' regardless of any caller input. See
         # Finding #1 - allowing role through registration enabled anonymous
         # admin minting in any active organization.
-        UserProfile.objects.create(
-            user=user,
-            organization=organization,
-            role='viewer'
-        )
+        UserProfile.objects.create(user=user, organization=organization, role="viewer")
 
         return user
 
 
 class LoginSerializer(serializers.Serializer):
     """Serializer for user login"""
+
     username = serializers.CharField(required=True)
     password = serializers.CharField(
-        required=True,
-        write_only=True,
-        style={'input_type': 'password'}
+        required=True, write_only=True, style={"input_type": "password"}
     )
 
 
 class ChangePasswordSerializer(serializers.Serializer):
     """Serializer for password change"""
+
     old_password = serializers.CharField(required=True, write_only=True)
     new_password = serializers.CharField(
-        required=True,
-        write_only=True,
-        validators=[validate_password]
+        required=True, write_only=True, validators=[validate_password]
     )
     new_password_confirm = serializers.CharField(required=True, write_only=True)
-    
+
     def validate(self, attrs):
-        if attrs['new_password'] != attrs['new_password_confirm']:
-            raise serializers.ValidationError({"new_password": "Password fields didn't match."})
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password": "Password fields didn't match."}
+            )
         return attrs
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
     """Serializer for AuditLog model"""
-    user_name = serializers.CharField(source='user.username', read_only=True)
-    organization_name = serializers.CharField(source='organization.name', read_only=True)
-    
+
+    user_name = serializers.CharField(source="user.username", read_only=True)
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+
     class Meta:
         model = AuditLog
         fields = [
-            'id', 'user', 'user_name', 'organization', 'organization_name',
-            'action', 'resource', 'resource_id', 'details',
-            'ip_address', 'user_agent', 'timestamp'
+            "id",
+            "user",
+            "user_name",
+            "organization",
+            "organization_name",
+            "action",
+            "resource",
+            "resource_id",
+            "details",
+            "ip_address",
+            "user_agent",
+            "timestamp",
         ]
-        read_only_fields = ['id', 'timestamp']
+        read_only_fields = ["id", "timestamp"]
 
 
 class UserOrganizationMembershipSerializer(serializers.ModelSerializer):
     """Serializer for organization memberships."""
-    organization_name = serializers.CharField(source='organization.name', read_only=True)
-    organization_slug = serializers.CharField(source='organization.slug', read_only=True)
-    organization_is_demo = serializers.BooleanField(source='organization.is_demo', read_only=True)
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    user_email = serializers.CharField(source='user.email', read_only=True)
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+    organization_slug = serializers.CharField(
+        source="organization.slug", read_only=True
+    )
+    organization_is_demo = serializers.BooleanField(
+        source="organization.is_demo", read_only=True
+    )
+    user_username = serializers.CharField(source="user.username", read_only=True)
+    user_email = serializers.CharField(source="user.email", read_only=True)
 
     class Meta:
         model = UserOrganizationMembership
         fields = [
-            'id', 'user', 'user_username', 'user_email',
-            'organization', 'organization_name', 'organization_slug', 'organization_is_demo',
-            'role', 'is_primary', 'is_active', 'created_at'
+            "id",
+            "user",
+            "user_username",
+            "user_email",
+            "organization",
+            "organization_name",
+            "organization_slug",
+            "organization_is_demo",
+            "role",
+            "is_primary",
+            "is_active",
+            "created_at",
         ]
-        read_only_fields = ['id', 'organization_is_demo', 'created_at']
+        read_only_fields = ["id", "organization_is_demo", "created_at"]
 
 
 class UserProfileWithOrgsSerializer(serializers.ModelSerializer):
     """Extended UserProfile serializer that includes all organization memberships."""
-    organization_name = serializers.CharField(source='organization.name', read_only=True)
-    organization_is_demo = serializers.BooleanField(source='organization.is_demo', read_only=True)
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+    organization_is_demo = serializers.BooleanField(
+        source="organization.is_demo", read_only=True
+    )
     is_super_admin = serializers.SerializerMethodField()
     organizations = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
         fields = [
-            'id', 'organization', 'organization_name', 'organization_is_demo', 'role',
-            'phone', 'department', 'preferences', 'is_active',
-            'created_at', 'is_super_admin', 'organizations'
+            "id",
+            "organization",
+            "organization_name",
+            "organization_is_demo",
+            "role",
+            "phone",
+            "department",
+            "preferences",
+            "is_active",
+            "created_at",
+            "is_super_admin",
+            "organizations",
         ]
-        read_only_fields = ['id', 'organization_is_demo', 'created_at', 'is_super_admin', 'organizations']
+        read_only_fields = [
+            "id",
+            "organization_is_demo",
+            "created_at",
+            "is_super_admin",
+            "organizations",
+        ]
 
     def to_representation(self, instance):
         # Finding #3 (Phase 5 task 5.1): masking parity with UserProfileSerializer.
         # Both serializer paths must apply mask_preferences so a future endpoint
         # binding this class can't silently leak plaintext aiApiKey.
         data = super().to_representation(instance)
-        data['preferences'] = UserProfile.mask_preferences(data.get('preferences') or {})
+        data["preferences"] = UserProfile.mask_preferences(
+            data.get("preferences") or {}
+        )
         return data
 
     def get_is_super_admin(self, obj):
@@ -292,24 +388,24 @@ class UserProfileWithOrgsSerializer(serializers.ModelSerializer):
     def get_organizations(self, obj):
         """Return all active organization memberships for this user."""
         memberships = UserOrganizationMembership.objects.filter(
-            user=obj.user,
-            is_active=True
-        ).select_related('organization')
+            user=obj.user, is_active=True
+        ).select_related("organization")
         return UserOrganizationMembershipSerializer(memberships, many=True).data
 
 
 class AddUserToOrgSerializer(serializers.Serializer):
     """Serializer for adding a user to an organization."""
+
     user_id = serializers.IntegerField()
     organization_id = serializers.IntegerField()
     role = serializers.ChoiceField(
-        choices=['admin', 'manager', 'viewer'],
-        default='viewer'
+        choices=["admin", "manager", "viewer"], default="viewer"
     )
     is_primary = serializers.BooleanField(default=False)
 
     def validate_user_id(self, value):
         from django.contrib.auth.models import User
+
         if not User.objects.filter(id=value).exists():
             raise serializers.ValidationError("User not found")
         return value
@@ -322,8 +418,7 @@ class AddUserToOrgSerializer(serializers.Serializer):
     def validate(self, attrs):
         # Check if membership already exists
         if UserOrganizationMembership.objects.filter(
-            user_id=attrs['user_id'],
-            organization_id=attrs['organization_id']
+            user_id=attrs["user_id"], organization_id=attrs["organization_id"]
         ).exists():
             raise serializers.ValidationError(
                 "User already has a membership in this organization"
@@ -333,9 +428,9 @@ class AddUserToOrgSerializer(serializers.Serializer):
 
 class UpdateMembershipSerializer(serializers.Serializer):
     """Serializer for updating a membership."""
+
     role = serializers.ChoiceField(
-        choices=['admin', 'manager', 'viewer'],
-        required=False
+        choices=["admin", "manager", "viewer"], required=False
     )
     is_primary = serializers.BooleanField(required=False)
     is_active = serializers.BooleanField(required=False)
@@ -348,52 +443,52 @@ class SavingsConfigSerializer(serializers.Serializer):
     Validates savings rate configuration based on industry benchmarks
     (FY2025 Procurement Savings Initiative).
     """
+
     benchmark_profile = serializers.ChoiceField(
-        choices=['conservative', 'moderate', 'aggressive', 'custom'],
-        required=False
+        choices=["conservative", "moderate", "aggressive", "custom"], required=False
     )
     consolidation_rate = serializers.FloatField(
         min_value=0.005,
         max_value=0.15,
         required=False,
-        help_text='Vendor consolidation rate (0.5-15%)'
+        help_text="Vendor consolidation rate (0.5-15%)",
     )
     anomaly_recovery_rate = serializers.FloatField(
         min_value=0.001,
         max_value=0.05,
         required=False,
-        help_text='Anomaly/invoice error recovery rate (0.1-5%)'
+        help_text="Anomaly/invoice error recovery rate (0.1-5%)",
     )
     price_variance_capture = serializers.FloatField(
         min_value=0.10,
         max_value=0.90,
         required=False,
-        help_text='Price variance negotiation capture rate (10-90%)'
+        help_text="Price variance negotiation capture rate (10-90%)",
     )
     specification_rate = serializers.FloatField(
         min_value=0.005,
         max_value=0.10,
         required=False,
-        help_text='Specification standardization rate (0.5-10%)'
+        help_text="Specification standardization rate (0.5-10%)",
     )
     payment_terms_rate = serializers.FloatField(
         min_value=0.001,
         max_value=0.03,
         required=False,
-        help_text='Payment terms optimization rate (0.1-3%)'
+        help_text="Payment terms optimization rate (0.1-3%)",
     )
     process_savings_per_txn = serializers.FloatField(
         min_value=10,
         max_value=100,
         required=False,
-        help_text='Process automation savings per transaction ($10-100)'
+        help_text="Process automation savings per transaction ($10-100)",
     )
     enabled_insights = serializers.ListField(
         child=serializers.ChoiceField(
-            choices=['consolidation', 'anomaly', 'cost_optimization', 'risk']
+            choices=["consolidation", "anomaly", "cost_optimization", "risk"]
         ),
         required=False,
-        help_text='List of enabled insight types'
+        help_text="List of enabled insight types",
     )
 
     def validate(self, attrs):

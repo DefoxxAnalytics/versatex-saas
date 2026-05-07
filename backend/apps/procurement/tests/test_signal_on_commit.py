@@ -16,6 +16,7 @@ fires after a successful commit. These tests assert:
 3. **Autocommit path:** outside an explicit transaction, the callback runs
    immediately (Django's documented behaviour for ``on_commit``).
 """
+
 from unittest.mock import patch
 
 from django.db import IntegrityError, transaction
@@ -24,11 +25,10 @@ from django.test import TestCase, TransactionTestCase
 from apps.authentication.models import Organization
 from apps.procurement.models import Transaction as TransactionModel
 from apps.procurement.tests.factories import (
-    SupplierFactory,
     CategoryFactory,
+    SupplierFactory,
     TransactionFactory,
 )
-
 
 SIGNAL_TARGET = "apps.procurement.signals._invalidate_ai_cache"
 
@@ -44,7 +44,9 @@ class TransactionSaveOnCommitTests(TransactionTestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org OnCommit", slug="org-on-commit")
+        self.org = Organization.objects.create(
+            name="Org OnCommit", slug="org-on-commit"
+        )
         self.supplier = SupplierFactory(organization=self.org)
         self.category = CategoryFactory(organization=self.org)
         # Seed a row we can mutate to fire the post_save (created=False) path
@@ -124,9 +126,7 @@ class TransactionDeleteOnCommitTests(TransactionTestCase):
             mock_invalidate.assert_not_called()
 
         # Row should still exist because the transaction rolled back.
-        self.assertTrue(
-            TransactionModel.objects.filter(pk=txn_pk).exists()
-        )
+        self.assertTrue(TransactionModel.objects.filter(pk=txn_pk).exists())
 
     def test_commit_of_delete_invalidates_cache(self):
         txn = TransactionFactory(

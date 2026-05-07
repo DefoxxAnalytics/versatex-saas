@@ -255,7 +255,8 @@ export default function Categories() {
             </div>
             <p className="text-xs text-red-600 mt-1 font-semibold">
               {getRiskLabel(highestRiskCategory?.risk_level || "low")} Risk •{" "}
-              {highestRiskCategory?.concentration.toFixed(0)}% top-subcategory share
+              {highestRiskCategory?.concentration.toFixed(0)}% top-subcategory
+              share
             </p>
           </CardContent>
         </Card>

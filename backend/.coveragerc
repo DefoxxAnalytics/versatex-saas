@@ -20,10 +20,15 @@ omit =
 
 [report]
 # Fail the run if overall line coverage is below this threshold.
-# Current baseline (April 2026): ~56% over ~10.8K source lines after
-# excluding tests, migrations, management commands, and Django boilerplate.
-# Raise this as the project adds tests.
-fail_under = 55
+# v3.1 Phase 3 (XC-M3): ratcheted from 55 → 62 after measuring 64.73%
+# baseline (May 2026, post-Phase-1 + Phase-2 fixes). The 2.7-point
+# buffer below the actual reading absorbs day-to-day variance from
+# Windows-flaky tests + skipped Postgres-only tests; routine CI runs
+# stay green while a real regression > ~3 points fails fast.
+# Ratchet up by ~5 points whenever the floor + buffer + new tests
+# leaves another 5-point gap. NEVER lower this — drop only via an
+# intentional revert with documented justification.
+fail_under = 62
 show_missing = True
 skip_covered = False
 exclude_lines =

@@ -26,7 +26,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List, Dict, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 from .llm_error_codes import classify_anthropic_error
 
@@ -80,6 +80,7 @@ WHEN UNCERTAIN:
 @dataclass
 class LLMRequestMetrics:
     """Metrics from an LLM API call for logging and cost tracking."""
+
     provider: str
     model: str
     model_tier: str
@@ -95,18 +96,34 @@ class LLMRequestMetrics:
     def cost_usd(self) -> Decimal:
         """Calculate cost based on model pricing."""
         pricing = {
-            'claude-sonnet-4-20250514': {'input': 3.0, 'output': 15.0, 'cache_read': 0.30},
-            'claude-3-5-haiku-20241022': {'input': 0.25, 'output': 1.25, 'cache_read': 0.025},
-            'claude-opus-4-20250514': {'input': 15.0, 'output': 75.0, 'cache_read': 1.50},
-            'gpt-4-turbo-preview': {'input': 10.0, 'output': 30.0, 'cache_read': 0},
-            'gpt-4o-mini': {'input': 0.15, 'output': 0.60, 'cache_read': 0},
+            "claude-sonnet-4-20250514": {
+                "input": 3.0,
+                "output": 15.0,
+                "cache_read": 0.30,
+            },
+            "claude-3-5-haiku-20241022": {
+                "input": 0.25,
+                "output": 1.25,
+                "cache_read": 0.025,
+            },
+            "claude-opus-4-20250514": {
+                "input": 15.0,
+                "output": 75.0,
+                "cache_read": 1.50,
+            },
+            "gpt-4-turbo-preview": {"input": 10.0, "output": 30.0, "cache_read": 0},
+            "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cache_read": 0},
         }
-        model_pricing = pricing.get(self.model, {'input': 3.0, 'output': 15.0, 'cache_read': 0.30})
+        model_pricing = pricing.get(
+            self.model, {"input": 3.0, "output": 15.0, "cache_read": 0.30}
+        )
 
         regular_input_tokens = self.tokens_input - self.prompt_cache_read_tokens
-        input_cost = (regular_input_tokens / 1_000_000) * model_pricing['input']
-        cache_cost = (self.prompt_cache_read_tokens / 1_000_000) * model_pricing['cache_read']
-        output_cost = (self.tokens_output / 1_000_000) * model_pricing['output']
+        input_cost = (regular_input_tokens / 1_000_000) * model_pricing["input"]
+        cache_cost = (self.prompt_cache_read_tokens / 1_000_000) * model_pricing[
+            "cache_read"
+        ]
+        output_cost = (self.tokens_output / 1_000_000) * model_pricing["output"]
 
         return Decimal(str(round(input_cost + cache_cost + output_cost, 6)))
 
@@ -118,10 +135,7 @@ class AIProvider(ABC):
 
     @abstractmethod
     def enhance_insights(
-        self,
-        insights: list,
-        context: dict,
-        tool_schema: dict
+        self, insights: list, context: dict, tool_schema: dict
     ) -> Optional[dict]:
         """
         Generate insight enhancements using the provider's API.
@@ -138,9 +152,7 @@ class AIProvider(ABC):
 
     @abstractmethod
     def analyze_single_insight(
-        self,
-        insight: dict,
-        tool_schema: dict
+        self, insight: dict, tool_schema: dict
     ) -> Optional[dict]:
         """
         Analyze a single insight (cost-efficient model).
@@ -156,10 +168,7 @@ class AIProvider(ABC):
 
     @abstractmethod
     def deep_analysis(
-        self,
-        insight_data: dict,
-        context: dict,
-        tool_schema: dict
+        self, insight_data: dict, context: dict, tool_schema: dict
     ) -> Optional[dict]:
         """
         Perform comprehensive deep analysis on an insight.
@@ -203,9 +212,9 @@ class AnthropicProvider(AIProvider):
     name = "anthropic"
 
     MODELS = {
-        'haiku': 'claude-3-5-haiku-20241022',
-        'sonnet': 'claude-sonnet-4-20250514',
-        'opus': 'claude-opus-4-20250514',
+        "haiku": "claude-3-5-haiku-20241022",
+        "sonnet": "claude-sonnet-4-20250514",
+        "opus": "claude-opus-4-20250514",
     }
 
     def __init__(self, api_key: str):
@@ -218,6 +227,7 @@ class AnthropicProvider(AIProvider):
         if not self._client and self.api_key:
             try:
                 import anthropic
+
                 self._client = anthropic.Anthropic(api_key=self.api_key)
             except ImportError:
                 logger.warning("anthropic package not installed")
@@ -237,9 +247,9 @@ class AnthropicProvider(AIProvider):
         start = time.time()
         try:
             self.client.messages.create(
-                model=self.MODELS['haiku'],
+                model=self.MODELS["haiku"],
                 max_tokens=10,
-                messages=[{"role": "user", "content": "ping"}]
+                messages=[{"role": "user", "content": "ping"}],
             )
             latency = int((time.time() - start) * 1000)
             return {"healthy": True, "latency_ms": latency, "error": None}
@@ -258,11 +268,11 @@ class AnthropicProvider(AIProvider):
             {
                 "type": "text",
                 "text": PROCUREMENT_SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"}
+                "cache_control": {"type": "ephemeral"},
             }
         ]
 
-        if context and context.get('organization'):
+        if context and context.get("organization"):
             org_context = f"""
 ORGANIZATION CONTEXT:
 - Name: {context['organization'].get('name', 'Unknown')}
@@ -280,54 +290,54 @@ TOP CATEGORIES:
 TOP SUPPLIERS:
 {json.dumps(context.get('top_suppliers', [])[:5], indent=2)}"""
 
-            blocks.append({
-                "type": "text",
-                "text": org_context,
-                "cache_control": {"type": "ephemeral"}
-            })
+            blocks.append(
+                {
+                    "type": "text",
+                    "text": org_context,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            )
 
         return blocks
 
     def _extract_metrics(
-        self,
-        response,
-        model: str,
-        request_type: str,
-        start_time: float
+        self, response, model: str, request_type: str, start_time: float
     ) -> LLMRequestMetrics:
         """Extract metrics from Anthropic API response including cache usage."""
-        model_tier = 'sonnet'
-        if 'haiku' in model:
-            model_tier = 'haiku'
-        elif 'opus' in model:
-            model_tier = 'opus'
+        model_tier = "sonnet"
+        if "haiku" in model:
+            model_tier = "haiku"
+        elif "opus" in model:
+            model_tier = "opus"
 
         metrics = LLMRequestMetrics(
-            provider='anthropic',
+            provider="anthropic",
             model=model,
             model_tier=model_tier,
             request_type=request_type,
             tokens_input=response.usage.input_tokens,
             tokens_output=response.usage.output_tokens,
             latency_ms=int((time.time() - start_time) * 1000),
-            prompt_cache_read_tokens=getattr(response.usage, 'cache_read_input_tokens', 0) or 0,
-            prompt_cache_write_tokens=getattr(response.usage, 'cache_creation_input_tokens', 0) or 0,
+            prompt_cache_read_tokens=getattr(
+                response.usage, "cache_read_input_tokens", 0
+            )
+            or 0,
+            prompt_cache_write_tokens=getattr(
+                response.usage, "cache_creation_input_tokens", 0
+            )
+            or 0,
         )
 
         self._last_metrics = metrics
         return metrics
 
     def enhance_insights(
-        self,
-        insights: list,
-        context: dict,
-        tool_schema: dict,
-        model: str = None
+        self, insights: list, context: dict, tool_schema: dict, model: str = None
     ) -> Optional[dict]:
         if not self.is_available():
             return None
 
-        model = model or self.MODELS['sonnet']
+        model = model or self.MODELS["sonnet"]
         start_time = time.time()
 
         try:
@@ -347,10 +357,10 @@ Focus on quick wins and high-impact actions that address the identified issues."
                 system=system_blocks,
                 tools=[tool_schema],
                 tool_choice={"type": "tool", "name": tool_schema["name"]},
-                messages=[{"role": "user", "content": user_content}]
+                messages=[{"role": "user", "content": user_content}],
             )
 
-            metrics = self._extract_metrics(message, model, 'enhance', start_time)
+            metrics = self._extract_metrics(message, model, "enhance", start_time)
             logger.info(
                 f"Anthropic enhance: {metrics.tokens_input} in, {metrics.tokens_output} out, "
                 f"cache read: {metrics.prompt_cache_read_tokens}, cost: ${metrics.cost_usd}"
@@ -359,15 +369,15 @@ Focus on quick wins and high-impact actions that address the identified issues."
             for block in message.content:
                 if block.type == "tool_use" and block.name == tool_schema["name"]:
                     result = block.input
-                    result['provider'] = 'anthropic'
-                    result['model'] = model
-                    result['generated_at'] = datetime.now().isoformat()
-                    result['_metrics'] = {
-                        'tokens_input': metrics.tokens_input,
-                        'tokens_output': metrics.tokens_output,
-                        'cache_read_tokens': metrics.prompt_cache_read_tokens,
-                        'cost_usd': float(metrics.cost_usd),
-                        'latency_ms': metrics.latency_ms,
+                    result["provider"] = "anthropic"
+                    result["model"] = model
+                    result["generated_at"] = datetime.now().isoformat()
+                    result["_metrics"] = {
+                        "tokens_input": metrics.tokens_input,
+                        "tokens_output": metrics.tokens_output,
+                        "cache_read_tokens": metrics.prompt_cache_read_tokens,
+                        "cost_usd": float(metrics.cost_usd),
+                        "latency_ms": metrics.latency_ms,
                     }
                     return result
 
@@ -376,26 +386,23 @@ Focus on quick wins and high-impact actions that address the identified issues."
 
         except Exception as e:
             self._last_metrics = LLMRequestMetrics(
-                provider='anthropic',
+                provider="anthropic",
                 model=model,
-                model_tier='sonnet',
-                request_type='enhance',
+                model_tier="sonnet",
+                request_type="enhance",
                 latency_ms=int((time.time() - start_time) * 1000),
-                error=str(e)
+                error=str(e),
             )
             logger.error(f"Anthropic enhancement failed: {e}")
             raise
 
     def analyze_single_insight(
-        self,
-        insight: dict,
-        tool_schema: dict,
-        model: str = None
+        self, insight: dict, tool_schema: dict, model: str = None
     ) -> Optional[dict]:
         if not self.is_available():
             return None
 
-        model = model or self.MODELS['haiku']
+        model = model or self.MODELS["haiku"]
         start_time = time.time()
 
         try:
@@ -403,7 +410,7 @@ Focus on quick wins and high-impact actions that address the identified issues."
                 {
                     "type": "text",
                     "text": PROCUREMENT_SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"}
+                    "cache_control": {"type": "ephemeral"},
                 }
             ]
 
@@ -415,23 +422,25 @@ Focus on quick wins and high-impact actions that address the identified issues."
                 system=system_blocks,
                 tools=[tool_schema],
                 tool_choice={"type": "tool", "name": tool_schema["name"]},
-                messages=[{"role": "user", "content": user_content}]
+                messages=[{"role": "user", "content": user_content}],
             )
 
-            metrics = self._extract_metrics(message, model, 'single_insight', start_time)
+            metrics = self._extract_metrics(
+                message, model, "single_insight", start_time
+            )
 
             for block in message.content:
                 if block.type == "tool_use" and block.name == tool_schema["name"]:
                     result = block.input
-                    result['provider'] = 'anthropic'
-                    result['model'] = model
-                    result['generated_at'] = datetime.now().isoformat()
-                    result['_metrics'] = {
-                        'tokens_input': metrics.tokens_input,
-                        'tokens_output': metrics.tokens_output,
-                        'cache_read_tokens': metrics.prompt_cache_read_tokens,
-                        'cost_usd': float(metrics.cost_usd),
-                        'latency_ms': metrics.latency_ms,
+                    result["provider"] = "anthropic"
+                    result["model"] = model
+                    result["generated_at"] = datetime.now().isoformat()
+                    result["_metrics"] = {
+                        "tokens_input": metrics.tokens_input,
+                        "tokens_output": metrics.tokens_output,
+                        "cache_read_tokens": metrics.prompt_cache_read_tokens,
+                        "cost_usd": float(metrics.cost_usd),
+                        "latency_ms": metrics.latency_ms,
                     }
                     return result
 
@@ -439,27 +448,23 @@ Focus on quick wins and high-impact actions that address the identified issues."
 
         except Exception as e:
             self._last_metrics = LLMRequestMetrics(
-                provider='anthropic',
+                provider="anthropic",
                 model=model,
-                model_tier='haiku',
-                request_type='single_insight',
+                model_tier="haiku",
+                request_type="single_insight",
                 latency_ms=int((time.time() - start_time) * 1000),
-                error=str(e)
+                error=str(e),
             )
             logger.error(f"Anthropic single insight analysis failed: {e}")
             raise
 
     def deep_analysis(
-        self,
-        insight_data: dict,
-        context: dict,
-        tool_schema: dict,
-        model: str = None
+        self, insight_data: dict, context: dict, tool_schema: dict, model: str = None
     ) -> Optional[dict]:
         if not self.is_available():
             return None
 
-        model = model or self.MODELS['sonnet']
+        model = model or self.MODELS["sonnet"]
         start_time = time.time()
 
         try:
@@ -473,10 +478,10 @@ Focus on quick wins and high-impact actions that address the identified issues."
                 system=system_blocks,
                 tools=[tool_schema],
                 tool_choice={"type": "tool", "name": tool_schema["name"]},
-                messages=[{"role": "user", "content": user_content}]
+                messages=[{"role": "user", "content": user_content}],
             )
 
-            metrics = self._extract_metrics(message, model, 'deep_analysis', start_time)
+            metrics = self._extract_metrics(message, model, "deep_analysis", start_time)
             logger.info(
                 f"Anthropic deep_analysis: {metrics.tokens_input} in, {metrics.tokens_output} out, "
                 f"cache read: {metrics.prompt_cache_read_tokens}, cost: ${metrics.cost_usd}"
@@ -485,16 +490,16 @@ Focus on quick wins and high-impact actions that address the identified issues."
             for block in message.content:
                 if block.type == "tool_use" and block.name == tool_schema["name"]:
                     result = block.input
-                    result['insight_id'] = insight_data.get('id')
-                    result['provider'] = 'anthropic'
-                    result['model'] = model
-                    result['generated_at'] = datetime.now().isoformat()
-                    result['_metrics'] = {
-                        'tokens_input': metrics.tokens_input,
-                        'tokens_output': metrics.tokens_output,
-                        'cache_read_tokens': metrics.prompt_cache_read_tokens,
-                        'cost_usd': float(metrics.cost_usd),
-                        'latency_ms': metrics.latency_ms,
+                    result["insight_id"] = insight_data.get("id")
+                    result["provider"] = "anthropic"
+                    result["model"] = model
+                    result["generated_at"] = datetime.now().isoformat()
+                    result["_metrics"] = {
+                        "tokens_input": metrics.tokens_input,
+                        "tokens_output": metrics.tokens_output,
+                        "cache_read_tokens": metrics.prompt_cache_read_tokens,
+                        "cost_usd": float(metrics.cost_usd),
+                        "latency_ms": metrics.latency_ms,
                     }
                     return result
 
@@ -502,12 +507,12 @@ Focus on quick wins and high-impact actions that address the identified issues."
 
         except Exception as e:
             self._last_metrics = LLMRequestMetrics(
-                provider='anthropic',
+                provider="anthropic",
                 model=model,
-                model_tier='sonnet',
-                request_type='deep_analysis',
+                model_tier="sonnet",
+                request_type="deep_analysis",
                 latency_ms=int((time.time() - start_time) * 1000),
-                error=str(e)
+                error=str(e),
             )
             logger.error(f"Anthropic deep analysis failed: {e}")
             raise
@@ -519,30 +524,32 @@ Focus on quick wins and high-impact actions that address the identified issues."
         Returns: 'simple', 'standard', or 'complex'
         """
         if not self.is_available():
-            return 'standard'
+            return "standard"
 
         try:
             message = self.client.messages.create(
-                model=self.MODELS['haiku'],
+                model=self.MODELS["haiku"],
                 max_tokens=20,
-                messages=[{
-                    "role": "user",
-                    "content": f"""Classify this procurement query complexity. Reply with exactly one word: simple, standard, or complex.
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""Classify this procurement query complexity. Reply with exactly one word: simple, standard, or complex.
 
 Query: {query[:500]}
 
-Classification:"""
-                }]
+Classification:""",
+                    }
+                ],
             )
 
             response_text = message.content[0].text.strip().lower()
-            if response_text in ['simple', 'standard', 'complex']:
+            if response_text in ["simple", "standard", "complex"]:
                 return response_text
-            return 'standard'
+            return "standard"
 
         except Exception as e:
             logger.warning(f"Query classification failed: {e}")
-            return 'standard'
+            return "standard"
 
     def select_model_for_task(self, task_type: str, complexity: str = None) -> str:
         """
@@ -555,18 +562,18 @@ Classification:"""
         Returns:
             Model identifier string
         """
-        if task_type == 'classify':
-            return self.MODELS['haiku']
+        if task_type == "classify":
+            return self.MODELS["haiku"]
 
-        if task_type == 'single_insight':
-            return self.MODELS['haiku']
+        if task_type == "single_insight":
+            return self.MODELS["haiku"]
 
-        if complexity == 'simple':
-            return self.MODELS['haiku']
-        elif complexity == 'complex':
-            return self.MODELS['opus']
+        if complexity == "simple":
+            return self.MODELS["haiku"]
+        elif complexity == "complex":
+            return self.MODELS["opus"]
 
-        return self.MODELS['sonnet']
+        return self.MODELS["sonnet"]
 
     def _build_single_insight_prompt(self, insight: dict) -> str:
         return f"""Analyze this procurement insight and provide detailed analysis:
@@ -624,8 +631,8 @@ class OpenAIProvider(AIProvider):
     name = "openai"
 
     MODELS = {
-        'mini': 'gpt-4o-mini',
-        'turbo': 'gpt-4-turbo-preview',
+        "mini": "gpt-4o-mini",
+        "turbo": "gpt-4-turbo-preview",
     }
 
     def __init__(self, api_key: str):
@@ -638,6 +645,7 @@ class OpenAIProvider(AIProvider):
         if not self._client and self.api_key:
             try:
                 import openai
+
                 self._client = openai.OpenAI(api_key=self.api_key)
             except ImportError:
                 logger.warning("openai package not installed")
@@ -657,9 +665,9 @@ class OpenAIProvider(AIProvider):
         start = time.time()
         try:
             self.client.chat.completions.create(
-                model=self.MODELS['mini'],
+                model=self.MODELS["mini"],
                 messages=[{"role": "user", "content": "ping"}],
-                max_tokens=5
+                max_tokens=5,
             )
             latency = int((time.time() - start) * 1000)
             return {"healthy": True, "latency_ms": latency, "error": None}
@@ -674,22 +682,18 @@ class OpenAIProvider(AIProvider):
             "function": {
                 "name": tool_schema["name"],
                 "description": tool_schema["description"],
-                "parameters": tool_schema["input_schema"]
-            }
+                "parameters": tool_schema["input_schema"],
+            },
         }
 
     def _extract_metrics(
-        self,
-        response,
-        model: str,
-        request_type: str,
-        start_time: float
+        self, response, model: str, request_type: str, start_time: float
     ) -> LLMRequestMetrics:
         """Extract metrics from OpenAI API response."""
-        model_tier = 'gpt4_turbo' if 'turbo' in model else 'gpt4o_mini'
+        model_tier = "gpt4_turbo" if "turbo" in model else "gpt4o_mini"
 
         metrics = LLMRequestMetrics(
-            provider='openai',
+            provider="openai",
             model=model,
             model_tier=model_tier,
             request_type=request_type,
@@ -702,16 +706,12 @@ class OpenAIProvider(AIProvider):
         return metrics
 
     def enhance_insights(
-        self,
-        insights: list,
-        context: dict,
-        tool_schema: dict,
-        model: str = None
+        self, insights: list, context: dict, tool_schema: dict, model: str = None
     ) -> Optional[dict]:
         if not self.is_available():
             return None
 
-        model = model or self.MODELS['turbo']
+        model = model or self.MODELS["turbo"]
         start_time = time.time()
 
         try:
@@ -720,21 +720,21 @@ class OpenAIProvider(AIProvider):
             response = self.client.chat.completions.create(
                 model=model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": PROCUREMENT_SYSTEM_PROMPT
-                    },
+                    {"role": "system", "content": PROCUREMENT_SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": self._build_enhancement_prompt(insights, context)
-                    }
+                        "content": self._build_enhancement_prompt(insights, context),
+                    },
                 ],
                 tools=[openai_tool],
-                tool_choice={"type": "function", "function": {"name": tool_schema["name"]}},
-                max_tokens=2048
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": tool_schema["name"]},
+                },
+                max_tokens=2048,
             )
 
-            metrics = self._extract_metrics(response, model, 'enhance', start_time)
+            metrics = self._extract_metrics(response, model, "enhance", start_time)
             logger.info(
                 f"OpenAI enhance: {metrics.tokens_input} in, {metrics.tokens_output} out, "
                 f"cost: ${metrics.cost_usd}"
@@ -743,14 +743,14 @@ class OpenAIProvider(AIProvider):
             if response.choices and response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
                 result = json.loads(tool_call.function.arguments)
-                result['provider'] = 'openai'
-                result['model'] = model
-                result['generated_at'] = datetime.now().isoformat()
-                result['_metrics'] = {
-                    'tokens_input': metrics.tokens_input,
-                    'tokens_output': metrics.tokens_output,
-                    'cost_usd': float(metrics.cost_usd),
-                    'latency_ms': metrics.latency_ms,
+                result["provider"] = "openai"
+                result["model"] = model
+                result["generated_at"] = datetime.now().isoformat()
+                result["_metrics"] = {
+                    "tokens_input": metrics.tokens_input,
+                    "tokens_output": metrics.tokens_output,
+                    "cost_usd": float(metrics.cost_usd),
+                    "latency_ms": metrics.latency_ms,
                 }
                 return result
 
@@ -759,26 +759,23 @@ class OpenAIProvider(AIProvider):
 
         except Exception as e:
             self._last_metrics = LLMRequestMetrics(
-                provider='openai',
+                provider="openai",
                 model=model,
-                model_tier='gpt4_turbo',
-                request_type='enhance',
+                model_tier="gpt4_turbo",
+                request_type="enhance",
                 latency_ms=int((time.time() - start_time) * 1000),
-                error=str(e)
+                error=str(e),
             )
             logger.error(f"OpenAI enhancement failed: {e}")
             raise
 
     def analyze_single_insight(
-        self,
-        insight: dict,
-        tool_schema: dict,
-        model: str = None
+        self, insight: dict, tool_schema: dict, model: str = None
     ) -> Optional[dict]:
         if not self.is_available():
             return None
 
-        model = model or self.MODELS['mini']
+        model = model or self.MODELS["mini"]
         start_time = time.time()
 
         try:
@@ -787,33 +784,35 @@ class OpenAIProvider(AIProvider):
             response = self.client.chat.completions.create(
                 model=model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": PROCUREMENT_SYSTEM_PROMPT
-                    },
+                    {"role": "system", "content": PROCUREMENT_SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": self._build_single_insight_prompt(insight)
-                    }
+                        "content": self._build_single_insight_prompt(insight),
+                    },
                 ],
                 tools=[openai_tool],
-                tool_choice={"type": "function", "function": {"name": tool_schema["name"]}},
-                max_tokens=500
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": tool_schema["name"]},
+                },
+                max_tokens=500,
             )
 
-            metrics = self._extract_metrics(response, model, 'single_insight', start_time)
+            metrics = self._extract_metrics(
+                response, model, "single_insight", start_time
+            )
 
             if response.choices and response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
                 result = json.loads(tool_call.function.arguments)
-                result['provider'] = 'openai'
-                result['model'] = model
-                result['generated_at'] = datetime.now().isoformat()
-                result['_metrics'] = {
-                    'tokens_input': metrics.tokens_input,
-                    'tokens_output': metrics.tokens_output,
-                    'cost_usd': float(metrics.cost_usd),
-                    'latency_ms': metrics.latency_ms,
+                result["provider"] = "openai"
+                result["model"] = model
+                result["generated_at"] = datetime.now().isoformat()
+                result["_metrics"] = {
+                    "tokens_input": metrics.tokens_input,
+                    "tokens_output": metrics.tokens_output,
+                    "cost_usd": float(metrics.cost_usd),
+                    "latency_ms": metrics.latency_ms,
                 }
                 return result
 
@@ -821,27 +820,23 @@ class OpenAIProvider(AIProvider):
 
         except Exception as e:
             self._last_metrics = LLMRequestMetrics(
-                provider='openai',
+                provider="openai",
                 model=model,
-                model_tier='gpt4o_mini',
-                request_type='single_insight',
+                model_tier="gpt4o_mini",
+                request_type="single_insight",
                 latency_ms=int((time.time() - start_time) * 1000),
-                error=str(e)
+                error=str(e),
             )
             logger.error(f"OpenAI single insight analysis failed: {e}")
             raise
 
     def deep_analysis(
-        self,
-        insight_data: dict,
-        context: dict,
-        tool_schema: dict,
-        model: str = None
+        self, insight_data: dict, context: dict, tool_schema: dict, model: str = None
     ) -> Optional[dict]:
         if not self.is_available():
             return None
 
-        model = model or self.MODELS['turbo']
+        model = model or self.MODELS["turbo"]
         start_time = time.time()
 
         try:
@@ -850,21 +845,25 @@ class OpenAIProvider(AIProvider):
             response = self.client.chat.completions.create(
                 model=model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": PROCUREMENT_SYSTEM_PROMPT
-                    },
+                    {"role": "system", "content": PROCUREMENT_SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": self._build_deep_analysis_prompt(insight_data, context)
-                    }
+                        "content": self._build_deep_analysis_prompt(
+                            insight_data, context
+                        ),
+                    },
                 ],
                 tools=[openai_tool],
-                tool_choice={"type": "function", "function": {"name": tool_schema["name"]}},
-                max_tokens=4096
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": tool_schema["name"]},
+                },
+                max_tokens=4096,
             )
 
-            metrics = self._extract_metrics(response, model, 'deep_analysis', start_time)
+            metrics = self._extract_metrics(
+                response, model, "deep_analysis", start_time
+            )
             logger.info(
                 f"OpenAI deep_analysis: {metrics.tokens_input} in, {metrics.tokens_output} out, "
                 f"cost: ${metrics.cost_usd}"
@@ -873,15 +872,15 @@ class OpenAIProvider(AIProvider):
             if response.choices and response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
                 result = json.loads(tool_call.function.arguments)
-                result['insight_id'] = insight_data.get('id')
-                result['provider'] = 'openai'
-                result['model'] = model
-                result['generated_at'] = datetime.now().isoformat()
-                result['_metrics'] = {
-                    'tokens_input': metrics.tokens_input,
-                    'tokens_output': metrics.tokens_output,
-                    'cost_usd': float(metrics.cost_usd),
-                    'latency_ms': metrics.latency_ms,
+                result["insight_id"] = insight_data.get("id")
+                result["provider"] = "openai"
+                result["model"] = model
+                result["generated_at"] = datetime.now().isoformat()
+                result["_metrics"] = {
+                    "tokens_input": metrics.tokens_input,
+                    "tokens_output": metrics.tokens_output,
+                    "cost_usd": float(metrics.cost_usd),
+                    "latency_ms": metrics.latency_ms,
                 }
                 return result
 
@@ -889,12 +888,12 @@ class OpenAIProvider(AIProvider):
 
         except Exception as e:
             self._last_metrics = LLMRequestMetrics(
-                provider='openai',
+                provider="openai",
                 model=model,
-                model_tier='gpt4_turbo',
-                request_type='deep_analysis',
+                model_tier="gpt4_turbo",
+                request_type="deep_analysis",
                 latency_ms=int((time.time() - start_time) * 1000),
-                error=str(e)
+                error=str(e),
             )
             logger.error(f"OpenAI deep analysis failed: {e}")
             raise
@@ -955,8 +954,8 @@ class AIProviderManager:
     """
 
     PROVIDER_CLASSES = {
-        'anthropic': AnthropicProvider,
-        'openai': OpenAIProvider,
+        "anthropic": AnthropicProvider,
+        "openai": OpenAIProvider,
     }
 
     def __init__(
@@ -969,7 +968,7 @@ class AIProviderManager:
         enable_logging: bool = True,
         enable_semantic_cache: bool = True,
         enable_rag: bool = True,
-        enable_validation: bool = True
+        enable_validation: bool = True,
     ):
         """
         Initialize the provider manager.
@@ -987,7 +986,7 @@ class AIProviderManager:
         """
         self.primary_provider = primary_provider
         self.api_keys = api_keys or {}
-        self.fallback_order = fallback_order or ['anthropic', 'openai']
+        self.fallback_order = fallback_order or ["anthropic", "openai"]
         self.enable_fallback = enable_fallback
         self.organization_id = organization_id
         self.enable_logging = enable_logging
@@ -1022,8 +1021,8 @@ class AIProviderManager:
                 except Exception as e:
                     logger.warning(f"Failed to initialize {name} provider: {e}")
                     self._provider_errors[name] = {
-                        'code': classify_anthropic_error(e),
-                        'message': str(e)[:300],
+                        "code": classify_anthropic_error(e),
+                        "message": str(e)[:300],
                     }
 
     def _initialize_semantic_cache(self) -> None:
@@ -1033,10 +1032,10 @@ class AIProviderManager:
 
         try:
             from .semantic_cache import SemanticCacheService
-            openai_key = self.api_keys.get('openai')
+
+            openai_key = self.api_keys.get("openai")
             self._semantic_cache = SemanticCacheService(
-                organization_id=self.organization_id,
-                openai_api_key=openai_key
+                organization_id=self.organization_id, openai_api_key=openai_key
             )
             logger.info("Initialized semantic cache service")
         except Exception as e:
@@ -1050,10 +1049,10 @@ class AIProviderManager:
 
         try:
             from .rag_service import RAGService
-            openai_key = self.api_keys.get('openai')
+
+            openai_key = self.api_keys.get("openai")
             self._rag_service = RAGService(
-                organization_id=self.organization_id,
-                openai_api_key=openai_key
+                organization_id=self.organization_id, openai_api_key=openai_key
             )
             logger.info("Initialized RAG service")
         except Exception as e:
@@ -1067,9 +1066,8 @@ class AIProviderManager:
 
         try:
             from .ai_validation import LLMResponseValidator
-            self._validator = LLMResponseValidator(
-                organization_id=self.organization_id
-            )
+
+            self._validator = LLMResponseValidator(organization_id=self.organization_id)
             logger.info("Initialized LLM response validator")
         except Exception as e:
             logger.warning(f"Failed to initialize validator: {e}")
@@ -1079,7 +1077,7 @@ class AIProviderManager:
         self,
         response: dict,
         source_data: Optional[dict] = None,
-        request_type: str = 'enhance'
+        request_type: str = "enhance",
     ) -> dict:
         """
         Validate LLM response and adjust confidence scores.
@@ -1102,26 +1100,26 @@ class AIProviderManager:
         # an absent _validation key would silently pass un-validated AI
         # output (potential hallucinations) as validated. The try/except
         # below overwrites this on success; a crash leaves it visible.
-        response['_validation'] = {
-            'validated': False,
-            'reason': 'validator_crashed',
+        response["_validation"] = {
+            "validated": False,
+            "reason": "validator_crashed",
         }
 
         try:
             validation = self._validator.validate(response, source_data)
 
-            response['_validation'] = {
-                'validated': validation['validated'],
-                'confidence_original': validation['confidence_original'],
-                'confidence_adjusted': validation['confidence_adjusted'],
-                'issues_count': validation['total_issues'],
-                'critical_count': validation['critical_count'],
+            response["_validation"] = {
+                "validated": validation["validated"],
+                "confidence_original": validation["confidence_original"],
+                "confidence_adjusted": validation["confidence_adjusted"],
+                "issues_count": validation["total_issues"],
+                "critical_count": validation["critical_count"],
             }
 
-            if validation['errors']:
-                response['_validation']['issues'] = validation['errors'][:5]
+            if validation["errors"]:
+                response["_validation"]["issues"] = validation["errors"][:5]
 
-            if not validation['validated']:
+            if not validation["validated"]:
                 logger.warning(
                     f"LLM response validation failed for {request_type}: "
                     f"{validation['critical_count']} critical, {validation['error_count']} errors"
@@ -1136,10 +1134,7 @@ class AIProviderManager:
         return response
 
     def _augment_context_with_rag(
-        self,
-        context: dict,
-        insights: list = None,
-        query: str = None
+        self, context: dict, insights: list = None, query: str = None
     ) -> dict:
         """
         Augment context with relevant documents from RAG.
@@ -1162,13 +1157,11 @@ class AIProviderManager:
                     query_parts.append(
                         f"{insight.get('type', '')} {insight.get('title', '')}"
                     )
-                query = ' '.join(query_parts)
+                query = " ".join(query_parts)
 
             if query:
                 context = self._rag_service.augment_context(
-                    query=query,
-                    base_context=context,
-                    max_content_length=400
+                    query=query, base_context=context, max_content_length=400
                 )
 
         except Exception as e:
@@ -1179,21 +1172,29 @@ class AIProviderManager:
     def _build_cache_key(self, insights: list, context: dict) -> str:
         """Build a cache key from insights and context."""
         key_parts = [
-            json.dumps([{
-                'type': i.get('type'),
-                'title': i.get('title'),
-                'severity': i.get('severity')
-            } for i in insights[:10]], sort_keys=True),
-            str(context.get('spending', {}).get('total_ytd', 0)),
-            str(context.get('spending', {}).get('supplier_count', 0)),
+            json.dumps(
+                [
+                    {
+                        "type": i.get("type"),
+                        "title": i.get("title"),
+                        "severity": i.get("severity"),
+                    }
+                    for i in insights[:10]
+                ],
+                sort_keys=True,
+            ),
+            str(context.get("spending", {}).get("total_ytd", 0)),
+            str(context.get("spending", {}).get("supplier_count", 0)),
         ]
-        return '|'.join(key_parts)
+        return "|".join(key_parts)
 
     def _get_providers_to_try(self) -> List[str]:
         """Get ordered list of providers to attempt."""
         providers = [self.primary_provider]
         if self.enable_fallback:
-            providers.extend(p for p in self.fallback_order if p != self.primary_provider)
+            providers.extend(
+                p for p in self.fallback_order if p != self.primary_provider
+            )
         return providers
 
     def _log_request(
@@ -1201,7 +1202,7 @@ class AIProviderManager:
         metrics: LLMRequestMetrics,
         cache_hit: bool = False,
         validation_passed: bool = True,
-        validation_errors: List = None
+        validation_errors: List = None,
     ) -> None:
         """
         Log LLM request to database for cost tracking.
@@ -1234,7 +1235,7 @@ class AIProviderManager:
                 validation_passed=validation_passed,
                 validation_errors=validation_errors or [],
                 error_occurred=bool(metrics.error),
-                error_message=metrics.error or '',
+                error_message=metrics.error or "",
             )
         except Exception as e:
             logger.warning(f"Failed to log LLM request: {e}")
@@ -1245,7 +1246,11 @@ class AIProviderManager:
 
     def get_available_providers(self) -> List[str]:
         """Get list of available (configured) providers."""
-        return [name for name, provider in self._providers.items() if provider.is_available()]
+        return [
+            name
+            for name, provider in self._providers.items()
+            if provider.is_available()
+        ]
 
     def get_last_error_code(self) -> Optional[str]:
         """Return the most recent failover error code (Finding B14).
@@ -1270,7 +1275,7 @@ class AIProviderManager:
         context: dict,
         tool_schema: dict,
         skip_cache: bool = False,
-        skip_rag: bool = False
+        skip_rag: bool = False,
     ) -> Optional[dict]:
         """
         Enhance insights with RAG, semantic caching, automatic failover, and logging.
@@ -1289,10 +1294,10 @@ class AIProviderManager:
         cache_key = self._build_cache_key(insights, context)
 
         if self._semantic_cache and not skip_cache:
-            cached = self._semantic_cache.lookup(cache_key, request_type='enhance')
+            cached = self._semantic_cache.lookup(cache_key, request_type="enhance")
             if cached:
                 logger.info("Semantic cache hit for enhance_insights")
-                cached['_cache_hit'] = True
+                cached["_cache_hit"] = True
                 return cached
 
         if not skip_rag:
@@ -1316,30 +1321,30 @@ class AIProviderManager:
                     logger.info(f"Enhancement succeeded with {provider_name}")
 
                     source_data = {
-                        'total_spend': context.get('spending', {}).get('total_ytd', 0),
-                        'insights': insights,
+                        "total_spend": context.get("spending", {}).get("total_ytd", 0),
+                        "insights": insights,
                     }
                     result = self._validate_and_adjust_response(
-                        result, source_data, request_type='enhance'
+                        result, source_data, request_type="enhance"
                     )
 
-                    validation_info = result.get('_validation', {})
-                    if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                    validation_info = result.get("_validation", {})
+                    if hasattr(provider, "last_metrics") and provider.last_metrics:
                         self._log_request(
                             provider.last_metrics,
                             cache_hit=False,
-                            validation_passed=validation_info.get('validated', True),
-                            validation_errors=validation_info.get('issues', [])
+                            validation_passed=validation_info.get("validated", True),
+                            validation_errors=validation_info.get("issues", []),
                         )
 
                     if self._semantic_cache:
                         self._semantic_cache.store(
-                            cache_key, result, request_type='enhance'
+                            cache_key, result, request_type="enhance"
                         )
 
                     return result
                 else:
-                    if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                    if hasattr(provider, "last_metrics") and provider.last_metrics:
                         self._log_request(provider.last_metrics, cache_hit=False)
             except Exception as e:
                 last_error = e
@@ -1348,13 +1353,13 @@ class AIProviderManager:
                 # can branch on auth vs rate-limit vs unknown.
                 error_code = classify_anthropic_error(e)
                 self._provider_errors[provider_name] = {
-                    'code': error_code,
-                    'message': str(e)[:300],
+                    "code": error_code,
+                    "message": str(e)[:300],
                 }
                 self._last_error_code = error_code
                 logger.warning(f"Provider {provider_name} failed: {e}")
 
-                if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                if hasattr(provider, "last_metrics") and provider.last_metrics:
                     self._log_request(provider.last_metrics)
 
                 if not self.enable_fallback:
@@ -1365,24 +1370,26 @@ class AIProviderManager:
         return None
 
     def analyze_single_insight(
-        self,
-        insight: dict,
-        tool_schema: dict,
-        skip_cache: bool = False
+        self, insight: dict, tool_schema: dict, skip_cache: bool = False
     ) -> Optional[dict]:
         """Analyze single insight with semantic caching, automatic failover, and logging."""
-        cache_key = json.dumps({
-            'type': insight.get('type'),
-            'title': insight.get('title'),
-            'severity': insight.get('severity'),
-            'savings': insight.get('potential_savings', 0)
-        }, sort_keys=True)
+        cache_key = json.dumps(
+            {
+                "type": insight.get("type"),
+                "title": insight.get("title"),
+                "severity": insight.get("severity"),
+                "savings": insight.get("potential_savings", 0),
+            },
+            sort_keys=True,
+        )
 
         if self._semantic_cache and not skip_cache:
-            cached = self._semantic_cache.lookup(cache_key, request_type='single_insight')
+            cached = self._semantic_cache.lookup(
+                cache_key, request_type="single_insight"
+            )
             if cached:
                 logger.info("Semantic cache hit for analyze_single_insight")
-                cached['_cache_hit'] = True
+                cached["_cache_hit"] = True
                 return cached
 
         providers_to_try = self._get_providers_to_try()
@@ -1400,47 +1407,51 @@ class AIProviderManager:
                 if result:
                     self._last_successful_provider = provider_name
 
-                    source_data = {'insights': [insight]}
+                    source_data = {"insights": [insight]}
                     result = self._validate_and_adjust_response(
-                        result, source_data, request_type='single_insight'
+                        result, source_data, request_type="single_insight"
                     )
 
-                    validation_info = result.get('_validation', {})
-                    if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                    validation_info = result.get("_validation", {})
+                    if hasattr(provider, "last_metrics") and provider.last_metrics:
                         self._log_request(
                             provider.last_metrics,
                             cache_hit=False,
-                            validation_passed=validation_info.get('validated', True),
-                            validation_errors=validation_info.get('issues', [])
+                            validation_passed=validation_info.get("validated", True),
+                            validation_errors=validation_info.get("issues", []),
                         )
 
                     if self._semantic_cache:
                         self._semantic_cache.store(
-                            cache_key, result, request_type='single_insight'
+                            cache_key, result, request_type="single_insight"
                         )
 
                     return result
                 else:
-                    if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                    if hasattr(provider, "last_metrics") and provider.last_metrics:
                         self._log_request(provider.last_metrics, cache_hit=False)
             except Exception as e:
                 last_error = e
                 error_code = classify_anthropic_error(e)
                 self._provider_errors[provider_name] = {
-                    'code': error_code,
-                    'message': str(e)[:300],
+                    "code": error_code,
+                    "message": str(e)[:300],
                 }
                 self._last_error_code = error_code
-                logger.warning(f"Provider {provider_name} failed for single insight: {e}")
+                logger.warning(
+                    f"Provider {provider_name} failed for single insight: {e}"
+                )
 
-                if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                if hasattr(provider, "last_metrics") and provider.last_metrics:
                     self._log_request(provider.last_metrics)
 
                 if not self.enable_fallback:
                     break
                 continue
 
-        logger.error(f"All providers failed for single insight. Last error: {last_error}")
+        logger.error(
+            f"All providers failed for single insight. Last error: {last_error}"
+        )
         return None
 
     def deep_analysis(
@@ -1459,19 +1470,24 @@ class AIProviderManager:
         insight ID would receive each other's analytical responses — a
         privacy leak in multi-user organizations.
         """
-        cache_key = json.dumps({
-            'id': insight_data.get('id'),
-            'type': insight_data.get('type'),
-            'title': insight_data.get('title'),
-            'total_ytd': context.get('spending', {}).get('total_ytd', 0),
-            'user_id': user_id,
-        }, sort_keys=True)
+        cache_key = json.dumps(
+            {
+                "id": insight_data.get("id"),
+                "type": insight_data.get("type"),
+                "title": insight_data.get("title"),
+                "total_ytd": context.get("spending", {}).get("total_ytd", 0),
+                "user_id": user_id,
+            },
+            sort_keys=True,
+        )
 
         if self._semantic_cache and not skip_cache:
-            cached = self._semantic_cache.lookup(cache_key, request_type='deep_analysis')
+            cached = self._semantic_cache.lookup(
+                cache_key, request_type="deep_analysis"
+            )
             if cached:
                 logger.info("Semantic cache hit for deep_analysis")
-                cached['_cache_hit'] = True
+                cached["_cache_hit"] = True
                 return cached
 
         if not skip_rag:
@@ -1495,49 +1511,53 @@ class AIProviderManager:
                     logger.info(f"Deep analysis succeeded with {provider_name}")
 
                     source_data = {
-                        'total_spend': context.get('spending', {}).get('total_ytd', 0),
-                        'insights': [insight_data],
+                        "total_spend": context.get("spending", {}).get("total_ytd", 0),
+                        "insights": [insight_data],
                     }
                     result = self._validate_and_adjust_response(
-                        result, source_data, request_type='deep_analysis'
+                        result, source_data, request_type="deep_analysis"
                     )
 
-                    validation_info = result.get('_validation', {})
-                    if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                    validation_info = result.get("_validation", {})
+                    if hasattr(provider, "last_metrics") and provider.last_metrics:
                         self._log_request(
                             provider.last_metrics,
                             cache_hit=False,
-                            validation_passed=validation_info.get('validated', True),
-                            validation_errors=validation_info.get('issues', [])
+                            validation_passed=validation_info.get("validated", True),
+                            validation_errors=validation_info.get("issues", []),
                         )
 
                     if self._semantic_cache:
                         self._semantic_cache.store(
-                            cache_key, result, request_type='deep_analysis', ttl_hours=2
+                            cache_key, result, request_type="deep_analysis", ttl_hours=2
                         )
 
                     return result
                 else:
-                    if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                    if hasattr(provider, "last_metrics") and provider.last_metrics:
                         self._log_request(provider.last_metrics, cache_hit=False)
             except Exception as e:
                 last_error = e
                 error_code = classify_anthropic_error(e)
                 self._provider_errors[provider_name] = {
-                    'code': error_code,
-                    'message': str(e)[:300],
+                    "code": error_code,
+                    "message": str(e)[:300],
                 }
                 self._last_error_code = error_code
-                logger.warning(f"Provider {provider_name} failed for deep analysis: {e}")
+                logger.warning(
+                    f"Provider {provider_name} failed for deep analysis: {e}"
+                )
 
-                if hasattr(provider, 'last_metrics') and provider.last_metrics:
+                if hasattr(provider, "last_metrics") and provider.last_metrics:
                     self._log_request(provider.last_metrics)
 
                 if not self.enable_fallback:
                     break
                 continue
 
-        logger.error(f"All providers failed for deep analysis. Last error: {last_error}")
+        logger.error(
+            f"All providers failed for deep analysis. Last error: {last_error}"
+        )
         return None
 
     def classify_query_complexity(self, query: str) -> str:
@@ -1546,10 +1566,10 @@ class AIProviderManager:
 
         Returns: 'simple', 'standard', or 'complex'
         """
-        anthropic_provider = self._providers.get('anthropic')
+        anthropic_provider = self._providers.get("anthropic")
         if anthropic_provider and isinstance(anthropic_provider, AnthropicProvider):
             return anthropic_provider.classify_query_complexity(query)
-        return 'standard'
+        return "standard"
 
     def select_model_for_task(self, task_type: str, complexity: str = None) -> str:
         """
@@ -1562,10 +1582,10 @@ class AIProviderManager:
         Returns:
             Model identifier string
         """
-        anthropic_provider = self._providers.get('anthropic')
+        anthropic_provider = self._providers.get("anthropic")
         if anthropic_provider and isinstance(anthropic_provider, AnthropicProvider):
             return anthropic_provider.select_model_for_task(task_type, complexity)
-        return 'claude-sonnet-4-20250514'
+        return "claude-sonnet-4-20250514"
 
     def get_status(self) -> dict:
         """
@@ -1584,7 +1604,7 @@ class AIProviderManager:
             "providers": {
                 name: {
                     "available": provider.is_available(),
-                    "last_error": self._provider_errors.get(name)
+                    "last_error": self._provider_errors.get(name),
                 }
                 for name, provider in self._providers.items()
             },
@@ -1599,7 +1619,7 @@ class AIProviderManager:
             "validation": {
                 "enabled": self.enable_validation,
                 "initialized": self._validator is not None,
-            }
+            },
         }
 
         if self._semantic_cache:

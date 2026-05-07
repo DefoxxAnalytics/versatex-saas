@@ -124,7 +124,7 @@ export function LLMUsageDashboard() {
 
   const estimatedSavings =
     usage.prompt_cache_tokens_saved * 0.000003 * 0.9 +
-    (usage.total_requests * usage.cache_hit_rate / 100) * 0.003;
+    ((usage.total_requests * usage.cache_hit_rate) / 100) * 0.003;
 
   return (
     <div className="space-y-6">
@@ -154,11 +154,7 @@ export function LLMUsageDashboard() {
               <SelectItem value="90">Last 90 days</SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => refetchUsage()}
-          >
+          <Button variant="outline" size="icon" onClick={() => refetchUsage()}>
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
@@ -235,7 +231,9 @@ export function LLMUsageDashboard() {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Cache Tokens Saved</p>
+                <p className="text-sm text-muted-foreground">
+                  Cache Tokens Saved
+                </p>
                 <p className="text-2xl font-bold">
                   {formatTokenCount(usage.prompt_cache_tokens_saved)}
                 </p>
@@ -346,7 +344,11 @@ export function LLMUsageDashboard() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis yAxisId="left" orientation="left" stroke="#3b82f6" />
-                    <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      stroke="#10b981"
+                    />
                     <Tooltip
                       formatter={(value: number, name: string) => [
                         name === "cost" ? formatCost(value) : value,
@@ -411,9 +413,7 @@ export function LLMUsageDashboard() {
         <Card className="border-0 shadow-lg">
           <CardHeader>
             <CardTitle className="text-base">Daily Usage Trend</CardTitle>
-            <CardDescription>
-              Requests and costs over time
-            </CardDescription>
+            <CardDescription>Requests and costs over time</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>

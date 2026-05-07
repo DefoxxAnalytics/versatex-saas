@@ -4,6 +4,7 @@ Generate synthetic P2P, Contract, and Policy demo data for a target organization
 Usage:
     python manage.py seed_demo_data --org <slug> [--wipe] [--seed 42]
 """
+
 import random
 import uuid
 from datetime import date, timedelta
@@ -38,18 +39,33 @@ N_INVOICES = 300
 N_VIOLATIONS = 150
 
 DEFAULT_DEPARTMENTS = [
-    "Operations", "Facilities", "IT", "Engineering", "Finance",
-    "Human Resources", "Marketing", "R&D", "Logistics", "Procurement",
+    "Operations",
+    "Facilities",
+    "IT",
+    "Engineering",
+    "Finance",
+    "Human Resources",
+    "Marketing",
+    "R&D",
+    "Logistics",
+    "Procurement",
 ]
 DEFAULT_COST_CENTER_PREFIX = "CC"
 DEFAULT_PAYMENT_TERMS = [
-    ("Net 30", 30), ("Net 45", 45), ("Net 60", 60), ("Net 15", 15), ("2/10 Net 30", 30),
+    ("Net 30", 30),
+    ("Net 45", 45),
+    ("Net 60", 60),
+    ("Net 15", 15),
+    ("2/10 Net 30", 30),
 ]
 DEFAULT_POLICIES = [
     {
         "name": "High-Value Transaction Approval",
         "description": "Transactions above $10,000 require documented approval.",
-        "rules": {"max_transaction_amount": 10000, "required_approval_threshold": 10000},
+        "rules": {
+            "max_transaction_amount": 10000,
+            "required_approval_threshold": 10000,
+        },
     },
     {
         "name": "Contract-Backed Spend for Facilities",
@@ -59,7 +75,10 @@ DEFAULT_POLICIES = [
     {
         "name": "IT Preferred Supplier Policy",
         "description": "IT category transactions should use preferred suppliers.",
-        "rules": {"restricted_categories": ["IT & Telecoms", "IT Equipment"], "preferred_suppliers_required": True},
+        "rules": {
+            "restricted_categories": ["IT & Telecoms", "IT Equipment"],
+            "preferred_suppliers_required": True,
+        },
     },
     {
         "name": "Travel Expense Cap",
@@ -74,10 +93,17 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--org", type=str, required=True, help="Organization slug")
-        parser.add_argument("--wipe", action="store_true", help="Delete existing P2P/Contract/Policy data before seeding")
-        parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
         parser.add_argument(
-            "--industry", choices=list(PROFILES.keys()),
+            "--wipe",
+            action="store_true",
+            help="Delete existing P2P/Contract/Policy data before seeding",
+        )
+        parser.add_argument(
+            "--seed", type=int, default=42, help="Random seed for reproducibility"
+        )
+        parser.add_argument(
+            "--industry",
+            choices=list(PROFILES.keys()),
             help="Use industry-specific departments, cost-center prefix, payment terms, and policies.",
         )
 
@@ -98,9 +124,13 @@ class Command(BaseCommand):
         industry = options.get("industry")
         profile = PROFILES[industry] if industry else None
         self.departments = profile["departments"] if profile else DEFAULT_DEPARTMENTS
-        cc_prefix = profile["cost_center_prefix"] if profile else DEFAULT_COST_CENTER_PREFIX
+        cc_prefix = (
+            profile["cost_center_prefix"] if profile else DEFAULT_COST_CENTER_PREFIX
+        )
         self.cost_centers = [f"{cc_prefix}-{n:04d}" for n in range(1000, 1030)]
-        self.payment_terms = profile["payment_terms"] if profile else DEFAULT_PAYMENT_TERMS
+        self.payment_terms = (
+            profile["payment_terms"] if profile else DEFAULT_PAYMENT_TERMS
+        )
         self.policies_spec = profile["policies"] if profile else DEFAULT_POLICIES
 
         suppliers = list(
@@ -114,9 +144,11 @@ class Command(BaseCommand):
                 f"Org '{org_slug}' has no suppliers/categories; seed transaction data first."
             )
 
-        self.stdout.write(self.style.NOTICE(
-            f"Seeding demo data for '{org.name}' (suppliers={len(suppliers)}, categories={len(categories)})"
-        ))
+        self.stdout.write(
+            self.style.NOTICE(
+                f"Seeding demo data for '{org.name}' (suppliers={len(suppliers)}, categories={len(categories)})"
+            )
+        )
 
         with transaction.atomic():
             if options["wipe"]:
@@ -137,10 +169,18 @@ class Command(BaseCommand):
         counts = {
             "Invoices": Invoice.objects.filter(organization=org).delete()[0],
             "GoodsReceipts": GoodsReceipt.objects.filter(organization=org).delete()[0],
-            "PurchaseOrders": PurchaseOrder.objects.filter(organization=org).delete()[0],
-            "PurchaseRequisitions": PurchaseRequisition.objects.filter(organization=org).delete()[0],
-            "PolicyViolations": PolicyViolation.objects.filter(organization=org).delete()[0],
-            "SpendingPolicies": SpendingPolicy.objects.filter(organization=org).delete()[0],
+            "PurchaseOrders": PurchaseOrder.objects.filter(organization=org).delete()[
+                0
+            ],
+            "PurchaseRequisitions": PurchaseRequisition.objects.filter(
+                organization=org
+            ).delete()[0],
+            "PolicyViolations": PolicyViolation.objects.filter(
+                organization=org
+            ).delete()[0],
+            "SpendingPolicies": SpendingPolicy.objects.filter(
+                organization=org
+            ).delete()[0],
             "Contracts": Contract.objects.filter(organization=org).delete()[0],
         }
         self.stdout.write(self.style.WARNING(f"Wiped: {counts}"))
@@ -156,15 +196,33 @@ class Command(BaseCommand):
         for i, sup in enumerate(top_suppliers_by_spend):
             roll = rng.random()
             if roll < 0.70:
-                status, start, end = "active", today - timedelta(days=rng.randint(90, 600)), today + timedelta(days=rng.randint(30, 540))
+                status, start, end = (
+                    "active",
+                    today - timedelta(days=rng.randint(90, 600)),
+                    today + timedelta(days=rng.randint(30, 540)),
+                )
             elif roll < 0.85:
-                status, start, end = "expiring", today - timedelta(days=rng.randint(300, 700)), today + timedelta(days=rng.randint(5, 60))
+                status, start, end = (
+                    "expiring",
+                    today - timedelta(days=rng.randint(300, 700)),
+                    today + timedelta(days=rng.randint(5, 60)),
+                )
             else:
-                status, start, end = "expired", today - timedelta(days=rng.randint(400, 900)), today - timedelta(days=rng.randint(10, 120))
+                status, start, end = (
+                    "expired",
+                    today - timedelta(days=rng.randint(400, 900)),
+                    today - timedelta(days=rng.randint(10, 120)),
+                )
 
             supplier_spend = float(sup.total or 0)
-            annual_value = Decimal(str(round(supplier_spend * rng.uniform(0.6, 1.1) / 2, 2))) if supplier_spend else Decimal("50000")
-            total_value = annual_value * Decimal(str(round((end - start).days / 365.0 or 1, 2)))
+            annual_value = (
+                Decimal(str(round(supplier_spend * rng.uniform(0.6, 1.1) / 2, 2)))
+                if supplier_spend
+                else Decimal("50000")
+            )
+            total_value = annual_value * Decimal(
+                str(round((end - start).days / 365.0 or 1, 2))
+            )
 
             contract = Contract.objects.create(
                 organization=org,
@@ -192,8 +250,13 @@ class Command(BaseCommand):
         created = []
         for spec in self.policies_spec:
             pol, _ = SpendingPolicy.objects.update_or_create(
-                organization=org, name=spec["name"],
-                defaults={"description": spec["description"], "rules": spec["rules"], "is_active": True},
+                organization=org,
+                name=spec["name"],
+                defaults={
+                    "description": spec["description"],
+                    "rules": spec["rules"],
+                    "is_active": True,
+                },
             )
             created.append(pol)
         self.stdout.write(f"  Policies: {len(created)}")
@@ -201,37 +264,64 @@ class Command(BaseCommand):
 
     def _seed_policy_violations(self, org, rng, policies):
         candidate_txns = list(
-            Transaction.objects.filter(organization=org, amount__gt=5000).order_by("-amount")[:N_VIOLATIONS * 3]
+            Transaction.objects.filter(organization=org, amount__gt=5000).order_by(
+                "-amount"
+            )[: N_VIOLATIONS * 3]
         )
         if not candidate_txns:
             self.stdout.write("  Policy violations: 0 (no high-value transactions)")
             return
 
         sampled = rng.sample(candidate_txns, min(N_VIOLATIONS, len(candidate_txns)))
-        violation_types = ["amount_exceeded", "no_contract", "non_preferred_supplier", "approval_missing"]
+        # v3.1 Phase 2 (P-M2): include 'restricted_category' so demo data
+        # exercises all 5 PolicyViolation.VIOLATION_TYPE_CHOICES values. Was
+        # previously absent, making the "Compliance by Violation Type"
+        # frontend chart always show 0 for that bucket in demo orgs.
+        violation_types = [
+            "amount_exceeded",
+            "no_contract",
+            "non_preferred_supplier",
+            "approval_missing",
+            "restricted_category",
+        ]
+        violation_weights = [0.35, 0.25, 0.15, 0.15, 0.10]
         severities = ["critical", "high", "medium", "low"]
         severity_weights = [0.10, 0.25, 0.45, 0.20]
 
         violations = []
         for txn in sampled:
-            violations.append(PolicyViolation(
-                organization=org,
-                transaction=txn,
-                policy=rng.choice(policies),
-                violation_type=rng.choices(violation_types, weights=[0.4, 0.3, 0.2, 0.1])[0],
-                severity=rng.choices(severities, weights=severity_weights)[0],
-                details={"amount": str(txn.amount), "supplier": txn.supplier.name, "flagged_at": str(txn.date)},
-                is_resolved=rng.random() < 0.25,
-            ))
+            violations.append(
+                PolicyViolation(
+                    organization=org,
+                    transaction=txn,
+                    policy=rng.choice(policies),
+                    violation_type=rng.choices(
+                        violation_types, weights=violation_weights
+                    )[0],
+                    severity=rng.choices(severities, weights=severity_weights)[0],
+                    details={
+                        "amount": str(txn.amount),
+                        "supplier": txn.supplier.name,
+                        "flagged_at": str(txn.date),
+                    },
+                    is_resolved=rng.random() < 0.25,
+                )
+            )
         PolicyViolation.objects.bulk_create(violations, batch_size=200)
         self.stdout.write(f"  Policy violations: {len(violations)}")
 
     def _seed_prs(self, org, rng, suppliers, categories):
         today = timezone.now().date()
-        weighted_suppliers = suppliers[:80] * 5 + suppliers[80:200] * 2 + suppliers[200:500]
+        weighted_suppliers = (
+            suppliers[:80] * 5 + suppliers[80:200] * 2 + suppliers[200:500]
+        )
         status_weights = [
-            ("approved", 0.55), ("converted_to_po", 0.20), ("pending_approval", 0.10),
-            ("rejected", 0.08), ("draft", 0.05), ("cancelled", 0.02),
+            ("approved", 0.55),
+            ("converted_to_po", 0.20),
+            ("pending_approval", 0.10),
+            ("rejected", 0.08),
+            ("draft", 0.05),
+            ("cancelled", 0.02),
         ]
         statuses, weights = zip(*status_weights)
         priorities = ["low", "normal", "high", "urgent"]
@@ -243,31 +333,49 @@ class Command(BaseCommand):
             status = rng.choices(statuses, weights=weights)[0]
             amount = Decimal(str(round(rng.uniform(500, 50000), 2)))
 
-            submitted = created + timedelta(days=rng.randint(0, 2)) if status != "draft" else None
-            approved = submitted + timedelta(days=rng.randint(0, 7)) if submitted and status in {"approved", "converted_to_po"} else None
-            rejected = submitted + timedelta(days=rng.randint(1, 5)) if submitted and status == "rejected" else None
+            submitted = (
+                created + timedelta(days=rng.randint(0, 2))
+                if status != "draft"
+                else None
+            )
+            approved = (
+                submitted + timedelta(days=rng.randint(0, 7))
+                if submitted and status in {"approved", "converted_to_po"}
+                else None
+            )
+            rejected = (
+                submitted + timedelta(days=rng.randint(1, 5))
+                if submitted and status == "rejected"
+                else None
+            )
 
-            prs.append(PurchaseRequisition(
-                organization=org,
-                pr_number=f"PR-{org.slug.upper()}-{created.year}-{i + 1:05d}",
-                department=rng.choice(self.departments),
-                cost_center=rng.choice(self.cost_centers),
-                supplier_suggested=rng.choice(weighted_suppliers),
-                category=rng.choice(categories),
-                description=f"Purchase request #{i + 1} for operational needs",
-                estimated_amount=amount,
-                status=status,
-                priority=rng.choices(priorities, weights=priority_weights)[0],
-                created_date=created,
-                submitted_date=submitted,
-                approval_date=approved,
-                rejection_date=rejected,
-                rejection_reason="Budget exceeded for period" if rejected else "",
-                upload_batch=self.batch_id,
-            ))
+            prs.append(
+                PurchaseRequisition(
+                    organization=org,
+                    pr_number=f"PR-{org.slug.upper()}-{created.year}-{i + 1:05d}",
+                    department=rng.choice(self.departments),
+                    cost_center=rng.choice(self.cost_centers),
+                    supplier_suggested=rng.choice(weighted_suppliers),
+                    category=rng.choice(categories),
+                    description=f"Purchase request #{i + 1} for operational needs",
+                    estimated_amount=amount,
+                    status=status,
+                    priority=rng.choices(priorities, weights=priority_weights)[0],
+                    created_date=created,
+                    submitted_date=submitted,
+                    approval_date=approved,
+                    rejection_date=rejected,
+                    rejection_reason="Budget exceeded for period" if rejected else "",
+                    upload_batch=self.batch_id,
+                )
+            )
         PurchaseRequisition.objects.bulk_create(prs, batch_size=200)
         self.stdout.write(f"  Purchase Requisitions: {len(prs)}")
-        return list(PurchaseRequisition.objects.filter(organization=org, upload_batch=self.batch_id))
+        return list(
+            PurchaseRequisition.objects.filter(
+                organization=org, upload_batch=self.batch_id
+            )
+        )
 
     def _seed_pos(self, org, rng, suppliers, categories, contracts, prs):
         today = timezone.now().date()
@@ -276,14 +384,22 @@ class Command(BaseCommand):
             contracts_by_supplier.setdefault(c.supplier_id, []).append(c)
         contract_suppliers = [s for s in suppliers if s.id in contracts_by_supplier]
 
-        convertible_prs = [pr for pr in prs if pr.status in {"approved", "converted_to_po"}]
+        convertible_prs = [
+            pr for pr in prs if pr.status in {"approved", "converted_to_po"}
+        ]
         rng.shuffle(convertible_prs)
         pr_pool = convertible_prs[: int(N_POS * 0.7)]
 
         status_weights = [
-            ("fully_received", 0.35), ("partially_received", 0.15), ("acknowledged", 0.15),
-            ("sent_to_supplier", 0.10), ("approved", 0.10), ("closed", 0.05),
-            ("pending_approval", 0.05), ("draft", 0.03), ("cancelled", 0.02),
+            ("fully_received", 0.35),
+            ("partially_received", 0.15),
+            ("acknowledged", 0.15),
+            ("sent_to_supplier", 0.10),
+            ("approved", 0.10),
+            ("closed", 0.05),
+            ("pending_approval", 0.05),
+            ("draft", 0.03),
+            ("cancelled", 0.02),
         ]
         statuses, weights = zip(*status_weights)
 
@@ -314,47 +430,86 @@ class Command(BaseCommand):
             contract = rng.choice(contract_pool) if contract_backed else None
 
             status = rng.choices(statuses, weights=weights)[0]
-            approval_date = created + timedelta(days=rng.randint(0, 3)) if status not in {"draft", "pending_approval"} else None
-            sent_date = approval_date + timedelta(days=rng.randint(0, 2)) if approval_date and status in {"sent_to_supplier", "acknowledged", "partially_received", "fully_received", "closed"} else None
+            approval_date = (
+                created + timedelta(days=rng.randint(0, 3))
+                if status not in {"draft", "pending_approval"}
+                else None
+            )
+            sent_date = (
+                approval_date + timedelta(days=rng.randint(0, 2))
+                if approval_date
+                and status
+                in {
+                    "sent_to_supplier",
+                    "acknowledged",
+                    "partially_received",
+                    "fully_received",
+                    "closed",
+                }
+                else None
+            )
             required_date = created + timedelta(days=rng.randint(14, 60))
-            promised_date = required_date + timedelta(days=rng.randint(-5, 10)) if sent_date else None
+            promised_date = (
+                required_date + timedelta(days=rng.randint(-5, 10))
+                if sent_date
+                else None
+            )
 
-            amendment_count = rng.choices([0, 1, 2, 3], weights=[0.75, 0.17, 0.06, 0.02])[0]
-            original_amount = total / Decimal(str(rng.uniform(1.0, 1.15))) if amendment_count > 0 else None
+            amendment_count = rng.choices(
+                [0, 1, 2, 3], weights=[0.75, 0.17, 0.06, 0.02]
+            )[0]
+            original_amount = (
+                total / Decimal(str(rng.uniform(1.0, 1.15)))
+                if amendment_count > 0
+                else None
+            )
 
-            pos_to_create.append(PurchaseOrder(
-                organization=org,
-                po_number=f"PO-{org.slug.upper()}-{created.year}-{i + 1:05d}",
-                supplier=supplier,
-                category=category,
-                total_amount=total,
-                tax_amount=tax,
-                freight_amount=freight,
-                contract=contract,
-                is_contract_backed=bool(contract),
-                status=status,
-                created_date=created,
-                approval_date=approval_date,
-                sent_date=sent_date,
-                required_date=required_date,
-                promised_date=promised_date,
-                original_amount=original_amount,
-                amendment_count=amendment_count,
-                requisition=linked_pr,
-                upload_batch=self.batch_id,
-            ))
+            pos_to_create.append(
+                PurchaseOrder(
+                    organization=org,
+                    po_number=f"PO-{org.slug.upper()}-{created.year}-{i + 1:05d}",
+                    supplier=supplier,
+                    category=category,
+                    total_amount=total,
+                    tax_amount=tax,
+                    freight_amount=freight,
+                    contract=contract,
+                    is_contract_backed=bool(contract),
+                    status=status,
+                    created_date=created,
+                    approval_date=approval_date,
+                    sent_date=sent_date,
+                    required_date=required_date,
+                    promised_date=promised_date,
+                    original_amount=original_amount,
+                    amendment_count=amendment_count,
+                    requisition=linked_pr,
+                    upload_batch=self.batch_id,
+                )
+            )
         PurchaseOrder.objects.bulk_create(pos_to_create, batch_size=200)
 
         for pr in pr_pool:
             if pr.status == "approved":
                 pr.status = "converted_to_po"
-        PurchaseRequisition.objects.bulk_update([pr for pr in pr_pool if pr.status == "converted_to_po"], ["status"])
+        PurchaseRequisition.objects.bulk_update(
+            [pr for pr in pr_pool if pr.status == "converted_to_po"], ["status"]
+        )
 
-        self.stdout.write(f"  Purchase Orders: {len(pos_to_create)} ({sum(1 for p in pos_to_create if p.contract_id)} contract-backed)")
-        return list(PurchaseOrder.objects.filter(organization=org, upload_batch=self.batch_id))
+        self.stdout.write(
+            f"  Purchase Orders: {len(pos_to_create)} ({sum(1 for p in pos_to_create if p.contract_id)} contract-backed)"
+        )
+        return list(
+            PurchaseOrder.objects.filter(organization=org, upload_batch=self.batch_id)
+        )
 
     def _seed_grs(self, org, rng, pos):
-        receivable_pos = [po for po in pos if po.status in {"partially_received", "fully_received", "acknowledged", "closed"}]
+        receivable_pos = [
+            po
+            for po in pos
+            if po.status
+            in {"partially_received", "fully_received", "acknowledged", "closed"}
+        ]
         rng.shuffle(receivable_pos)
         target_pos = receivable_pos[:N_GRS]
 
@@ -367,9 +522,13 @@ class Command(BaseCommand):
 
             qty_ordered = Decimal(str(rng.choice([1, 5, 10, 25, 50, 100, 250])))
             if po.status == "partially_received":
-                qty_received = qty_ordered * Decimal(str(round(rng.uniform(0.4, 0.85), 2)))
+                qty_received = qty_ordered * Decimal(
+                    str(round(rng.uniform(0.4, 0.85), 2))
+                )
             else:
-                qty_received = qty_ordered * Decimal(str(round(rng.uniform(0.95, 1.02), 2)))
+                qty_received = qty_ordered * Decimal(
+                    str(round(rng.uniform(0.95, 1.02), 2))
+                )
 
             accept_roll = rng.random()
             if accept_roll < 0.80:
@@ -383,22 +542,34 @@ class Command(BaseCommand):
 
             amount_received = po.total_amount * (qty_received / qty_ordered)
 
-            grs_to_create.append(GoodsReceipt(
-                organization=org,
-                gr_number=f"GR-{org.slug.upper()}-{received.year}-{i + 1:05d}",
-                purchase_order=po,
-                received_date=received,
-                quantity_ordered=qty_ordered,
-                quantity_received=qty_received,
-                quantity_accepted=qty_accepted,
-                amount_received=amount_received.quantize(Decimal("0.01")),
-                status=status,
-                inspection_notes="Quality acceptable" if status == "accepted" else ("Minor defects on partial lot" if status == "partial_accept" else ""),
-                upload_batch=self.batch_id,
-            ))
+            grs_to_create.append(
+                GoodsReceipt(
+                    organization=org,
+                    gr_number=f"GR-{org.slug.upper()}-{received.year}-{i + 1:05d}",
+                    purchase_order=po,
+                    received_date=received,
+                    quantity_ordered=qty_ordered,
+                    quantity_received=qty_received,
+                    quantity_accepted=qty_accepted,
+                    amount_received=amount_received.quantize(Decimal("0.01")),
+                    status=status,
+                    inspection_notes=(
+                        "Quality acceptable"
+                        if status == "accepted"
+                        else (
+                            "Minor defects on partial lot"
+                            if status == "partial_accept"
+                            else ""
+                        )
+                    ),
+                    upload_batch=self.batch_id,
+                )
+            )
         GoodsReceipt.objects.bulk_create(grs_to_create, batch_size=200)
         self.stdout.write(f"  Goods Receipts: {len(grs_to_create)}")
-        return list(GoodsReceipt.objects.filter(organization=org, upload_batch=self.batch_id))
+        return list(
+            GoodsReceipt.objects.filter(organization=org, upload_batch=self.batch_id)
+        )
 
     def _seed_invoices(self, org, rng, pos, grs):
         grs_by_po = {gr.purchase_order_id: gr for gr in grs}
@@ -408,8 +579,20 @@ class Command(BaseCommand):
         rng.shuffle(pos_with_grs)
         target_pos = pos_with_grs[:N_INVOICES]
 
-        match_status_weights = [("3way_matched", 0.55), ("2way_matched", 0.15), ("exception", 0.20), ("unmatched", 0.10)]
-        exception_types_weights = [("price_variance", 0.35), ("quantity_variance", 0.25), ("missing_gr", 0.15), ("no_po", 0.10), ("duplicate", 0.05), ("other", 0.10)]
+        match_status_weights = [
+            ("3way_matched", 0.55),
+            ("2way_matched", 0.15),
+            ("exception", 0.20),
+            ("unmatched", 0.10),
+        ]
+        exception_types_weights = [
+            ("price_variance", 0.35),
+            ("quantity_variance", 0.25),
+            ("missing_gr", 0.15),
+            ("no_po", 0.10),
+            ("duplicate", 0.05),
+            ("other", 0.10),
+        ]
 
         invoices = []
         for i, po in enumerate(target_pos):
@@ -426,20 +609,32 @@ class Command(BaseCommand):
             days_outstanding = (today - invoice_date).days
 
             variance_multiplier = Decimal(str(round(rng.uniform(0.97, 1.06), 4)))
-            invoice_amount = (po.total_amount * variance_multiplier).quantize(Decimal("0.01"))
+            invoice_amount = (po.total_amount * variance_multiplier).quantize(
+                Decimal("0.01")
+            )
             tax = (invoice_amount * Decimal("0.08")).quantize(Decimal("0.01"))
             net = (invoice_amount - tax).quantize(Decimal("0.01"))
 
             match_labels, match_weights = zip(*match_status_weights)
             match_status = rng.choices(match_labels, weights=match_weights)[0]
             has_exception = match_status == "exception"
-            exception_type = rng.choices(*zip(*exception_types_weights))[0] if has_exception else ""
-            exception_amount = (invoice_amount - po.total_amount).copy_abs() if has_exception else None
+            exception_type = (
+                rng.choices(*zip(*exception_types_weights))[0] if has_exception else ""
+            )
+            exception_amount = (
+                (invoice_amount - po.total_amount).copy_abs() if has_exception else None
+            )
             exception_resolved = has_exception and rng.random() < 0.25
 
             paid_date = None
-            if days_outstanding < 30 and rng.random() < 0.50 and match_status in {"3way_matched", "2way_matched"}:
-                paid_date = received_date + timedelta(days=rng.randint(5, min(term_days, max(days_outstanding, 6))))
+            if (
+                days_outstanding < 30
+                and rng.random() < 0.50
+                and match_status in {"3way_matched", "2way_matched"}
+            ):
+                paid_date = received_date + timedelta(
+                    days=rng.randint(5, min(term_days, max(days_outstanding, 6)))
+                )
             status_mapping = {
                 "3way_matched": "approved",
                 "2way_matched": "matched",
@@ -447,33 +642,41 @@ class Command(BaseCommand):
                 "unmatched": "pending_match",
             }
             status = "paid" if paid_date else status_mapping[match_status]
-            approved_date = received_date + timedelta(days=rng.randint(1, 10)) if status in {"approved", "paid"} else None
+            approved_date = (
+                received_date + timedelta(days=rng.randint(1, 10))
+                if status in {"approved", "paid"}
+                else None
+            )
 
-            invoices.append(Invoice(
-                organization=org,
-                invoice_number=f"INV-{org.slug.upper()}-{invoice_date.year}-{i + 1:06d}",
-                supplier=po.supplier,
-                purchase_order=po,
-                goods_receipt=gr,
-                invoice_amount=invoice_amount,
-                tax_amount=tax,
-                net_amount=net,
-                payment_terms=term_label,
-                payment_terms_days=term_days,
-                invoice_date=invoice_date,
-                received_date=received_date,
-                due_date=due_date,
-                approved_date=approved_date,
-                paid_date=paid_date,
-                status=status,
-                match_status=match_status,
-                has_exception=has_exception,
-                exception_type=exception_type,
-                exception_amount=exception_amount,
-                exception_resolved=exception_resolved,
-                exception_notes="Auto-flagged during 3-way match" if has_exception else "",
-                upload_batch=self.batch_id,
-            ))
+            invoices.append(
+                Invoice(
+                    organization=org,
+                    invoice_number=f"INV-{org.slug.upper()}-{invoice_date.year}-{i + 1:06d}",
+                    supplier=po.supplier,
+                    purchase_order=po,
+                    goods_receipt=gr,
+                    invoice_amount=invoice_amount,
+                    tax_amount=tax,
+                    net_amount=net,
+                    payment_terms=term_label,
+                    payment_terms_days=term_days,
+                    invoice_date=invoice_date,
+                    received_date=received_date,
+                    due_date=due_date,
+                    approved_date=approved_date,
+                    paid_date=paid_date,
+                    status=status,
+                    match_status=match_status,
+                    has_exception=has_exception,
+                    exception_type=exception_type,
+                    exception_amount=exception_amount,
+                    exception_resolved=exception_resolved,
+                    exception_notes=(
+                        "Auto-flagged during 3-way match" if has_exception else ""
+                    ),
+                    upload_batch=self.batch_id,
+                )
+            )
         Invoice.objects.bulk_create(invoices, batch_size=200)
         self.stdout.write(f"  Invoices: {len(invoices)}")
 

@@ -9,8 +9,9 @@ the EmbeddedDocument model for RAG-enhanced AI insights:
 
 Uses OpenAI text-embedding-3-small for generating embeddings.
 """
+
 import logging
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from django.conf import settings
 from django.db import transaction
@@ -47,7 +48,7 @@ class DocumentIngestionService:
         """
         self.organization_id = organization_id
         self.openai_api_key = openai_api_key or getattr(
-            settings, 'OPENAI_API_KEY', None
+            settings, "OPENAI_API_KEY", None
         )
         self._openai_client = None
 
@@ -57,6 +58,7 @@ class DocumentIngestionService:
         if self._openai_client is None and self.openai_api_key:
             try:
                 import openai
+
                 self._openai_client = openai.OpenAI(api_key=self.openai_api_key)
             except ImportError:
                 logger.warning("openai package not installed")
@@ -68,12 +70,12 @@ class DocumentIngestionService:
             return None
 
         try:
-            truncated = text[:self.MAX_CONTENT_LENGTH]
+            truncated = text[: self.MAX_CONTENT_LENGTH]
 
             response = self.openai_client.embeddings.create(
                 model=self.EMBEDDING_MODEL,
                 input=truncated,
-                dimensions=self.EMBEDDING_DIMENSIONS
+                dimensions=self.EMBEDDING_DIMENSIONS,
             )
 
             return response.data[0].embedding
@@ -88,12 +90,12 @@ class DocumentIngestionService:
             return [None] * len(texts)
 
         try:
-            truncated = [t[:self.MAX_CONTENT_LENGTH] for t in texts]
+            truncated = [t[: self.MAX_CONTENT_LENGTH] for t in texts]
 
             response = self.openai_client.embeddings.create(
                 model=self.EMBEDDING_MODEL,
                 input=truncated,
-                dimensions=self.EMBEDDING_DIMENSIONS
+                dimensions=self.EMBEDDING_DIMENSIONS,
             )
 
             return [item.embedding for item in response.data]
@@ -117,11 +119,11 @@ class DocumentIngestionService:
             Dict with counts of created, updated, and failed documents
         """
         from apps.procurement.models import Supplier
+
         from .models import EmbeddedDocument
 
         qs = Supplier.objects.filter(
-            organization_id=self.organization_id,
-            is_active=True
+            organization_id=self.organization_id, is_active=True
         )
 
         if supplier_ids:
@@ -133,7 +135,7 @@ class DocumentIngestionService:
         failed = 0
 
         for i in range(0, len(suppliers), self.BATCH_SIZE):
-            batch = suppliers[i:i + self.BATCH_SIZE]
+            batch = suppliers[i : i + self.BATCH_SIZE]
             contents = [self._build_supplier_content(s) for s in batch]
             embeddings = self._get_batch_embeddings(contents)
 
@@ -141,23 +143,23 @@ class DocumentIngestionService:
                 try:
                     existing = EmbeddedDocument.objects.filter(
                         organization_id=self.organization_id,
-                        source_model='Supplier',
-                        source_id=str(supplier.id)
+                        source_model="Supplier",
+                        source_id=str(supplier.id),
                     ).first()
 
                     doc = EmbeddedDocument.create_or_update(
                         organization_id=self.organization_id,
-                        document_type='supplier_profile',
+                        document_type="supplier_profile",
                         title=f"Supplier Profile: {supplier.name}",
                         content=content,
                         embedding=embedding,
                         metadata={
-                            'supplier_id': supplier.id,
-                            'supplier_name': supplier.name,
-                            'supplier_code': supplier.code,
+                            "supplier_id": supplier.id,
+                            "supplier_name": supplier.name,
+                            "supplier_code": supplier.code,
                         },
-                        source_model='Supplier',
-                        source_id=str(supplier.id)
+                        source_model="Supplier",
+                        source_id=str(supplier.id),
                     )
 
                     if existing:
@@ -175,23 +177,22 @@ class DocumentIngestionService:
         )
 
         return {
-            'created': created,
-            'updated': updated,
-            'failed': failed,
-            'total': len(suppliers),
+            "created": created,
+            "updated": updated,
+            "failed": failed,
+            "total": len(suppliers),
         }
 
     def _build_supplier_content(self, supplier) -> str:
         """Build searchable content from supplier data."""
-        from apps.procurement.models import Transaction
-        from django.db.models import Sum, Count, Avg
+        from django.db.models import Avg, Count, Sum
 
-        stats = Transaction.objects.filter(
-            supplier=supplier
-        ).aggregate(
-            total_spend=Sum('amount'),
-            transaction_count=Count('id'),
-            avg_transaction=Avg('amount')
+        from apps.procurement.models import Transaction
+
+        stats = Transaction.objects.filter(supplier=supplier).aggregate(
+            total_spend=Sum("amount"),
+            transaction_count=Count("id"),
+            avg_transaction=Avg("amount"),
         )
 
         content = f"""SUPPLIER PROFILE: {supplier.name}
@@ -213,9 +214,7 @@ Last Updated: {supplier.updated_at.strftime('%Y-%m-%d')}"""
         return content
 
     def ingest_historical_insights(
-        self,
-        outcomes: List[str] = None,
-        limit: int = 100
+        self, outcomes: List[str] = None, limit: int = 100
     ) -> dict:
         """
         Ingest successful historical insights into EmbeddedDocument.
@@ -227,14 +226,13 @@ Last Updated: {supplier.updated_at.strftime('%Y-%m-%d')}"""
         Returns:
             Dict with counts of created, updated, and failed documents
         """
-        from .models import InsightFeedback, EmbeddedDocument
+        from .models import EmbeddedDocument, InsightFeedback
 
-        outcomes = outcomes or ['success', 'partial_success']
+        outcomes = outcomes or ["success", "partial_success"]
 
         feedbacks = InsightFeedback.objects.filter(
-            organization_id=self.organization_id,
-            outcome__in=outcomes
-        ).order_by('-action_date')[:limit]
+            organization_id=self.organization_id, outcome__in=outcomes
+        ).order_by("-action_date")[:limit]
 
         feedbacks = list(feedbacks)
         created = 0
@@ -242,7 +240,7 @@ Last Updated: {supplier.updated_at.strftime('%Y-%m-%d')}"""
         failed = 0
 
         for i in range(0, len(feedbacks), self.BATCH_SIZE):
-            batch = feedbacks[i:i + self.BATCH_SIZE]
+            batch = feedbacks[i : i + self.BATCH_SIZE]
             contents = [self._build_insight_content(f) for f in batch]
             embeddings = self._get_batch_embeddings(contents)
 
@@ -250,26 +248,26 @@ Last Updated: {supplier.updated_at.strftime('%Y-%m-%d')}"""
                 try:
                     existing = EmbeddedDocument.objects.filter(
                         organization_id=self.organization_id,
-                        source_model='InsightFeedback',
-                        source_id=str(feedback.id)
+                        source_model="InsightFeedback",
+                        source_id=str(feedback.id),
                     ).first()
 
                     doc = EmbeddedDocument.create_or_update(
                         organization_id=self.organization_id,
-                        document_type='historical_insight',
+                        document_type="historical_insight",
                         title=f"Historical Insight: {feedback.insight_title[:100]}",
                         content=content,
                         embedding=embedding,
                         metadata={
-                            'insight_id': feedback.insight_id,
-                            'insight_type': feedback.insight_type,
-                            'action_taken': feedback.action_taken,
-                            'outcome': feedback.outcome,
-                            'predicted_savings': float(feedback.predicted_savings or 0),
-                            'actual_savings': float(feedback.actual_savings or 0),
+                            "insight_id": feedback.insight_id,
+                            "insight_type": feedback.insight_type,
+                            "action_taken": feedback.action_taken,
+                            "outcome": feedback.outcome,
+                            "predicted_savings": float(feedback.predicted_savings or 0),
+                            "actual_savings": float(feedback.actual_savings or 0),
                         },
-                        source_model='InsightFeedback',
-                        source_id=str(feedback.id)
+                        source_model="InsightFeedback",
+                        source_id=str(feedback.id),
                     )
 
                     if existing:
@@ -287,10 +285,10 @@ Last Updated: {supplier.updated_at.strftime('%Y-%m-%d')}"""
         )
 
         return {
-            'created': created,
-            'updated': updated,
-            'failed': failed,
-            'total': len(feedbacks),
+            "created": created,
+            "updated": updated,
+            "failed": failed,
+            "total": len(feedbacks),
         }
 
     def _build_insight_content(self, feedback) -> str:
@@ -315,12 +313,8 @@ This insight was successfully implemented and achieved
         return content
 
     def ingest_manual_document(
-        self,
-        document_type: str,
-        title: str,
-        content: str,
-        metadata: dict = None
-    ) -> 'EmbeddedDocument':
+        self, document_type: str, title: str, content: str, metadata: dict = None
+    ) -> "EmbeddedDocument":
         """
         Manually ingest a document (policy, contract, best practice).
 
@@ -354,8 +348,8 @@ This insight was successfully implemented and achieved
         title: str,
         content: str,
         category_id: int = None,
-        effective_date: str = None
-    ) -> 'EmbeddedDocument':
+        effective_date: str = None,
+    ) -> "EmbeddedDocument":
         """
         Ingest a procurement policy document.
 
@@ -370,15 +364,12 @@ This insight was successfully implemented and achieved
         """
         metadata = {}
         if category_id:
-            metadata['category_id'] = category_id
+            metadata["category_id"] = category_id
         if effective_date:
-            metadata['effective_date'] = effective_date
+            metadata["effective_date"] = effective_date
 
         return self.ingest_manual_document(
-            document_type='policy',
-            title=title,
-            content=content,
-            metadata=metadata
+            document_type="policy", title=title, content=content, metadata=metadata
         )
 
     def ingest_contract_summary(
@@ -388,8 +379,8 @@ This insight was successfully implemented and achieved
         content: str,
         contract_start: str = None,
         contract_end: str = None,
-        contract_value: float = None
-    ) -> 'EmbeddedDocument':
+        contract_value: float = None,
+    ) -> "EmbeddedDocument":
         """
         Ingest a contract summary document.
 
@@ -405,29 +396,22 @@ This insight was successfully implemented and achieved
             Created EmbeddedDocument instance
         """
         metadata = {
-            'supplier_id': supplier_id,
+            "supplier_id": supplier_id,
         }
         if contract_start:
-            metadata['contract_start'] = contract_start
+            metadata["contract_start"] = contract_start
         if contract_end:
-            metadata['contract_end'] = contract_end
+            metadata["contract_end"] = contract_end
         if contract_value:
-            metadata['contract_value'] = contract_value
+            metadata["contract_value"] = contract_value
 
         return self.ingest_manual_document(
-            document_type='contract',
-            title=title,
-            content=content,
-            metadata=metadata
+            document_type="contract", title=title, content=content, metadata=metadata
         )
 
     def ingest_best_practice(
-        self,
-        title: str,
-        content: str,
-        category_id: int = None,
-        source: str = None
-    ) -> 'EmbeddedDocument':
+        self, title: str, content: str, category_id: int = None, source: str = None
+    ) -> "EmbeddedDocument":
         """
         Ingest a best practice document.
 
@@ -442,15 +426,15 @@ This insight was successfully implemented and achieved
         """
         metadata = {}
         if category_id:
-            metadata['category_id'] = category_id
+            metadata["category_id"] = category_id
         if source:
-            metadata['source'] = source
+            metadata["source"] = source
 
         return self.ingest_manual_document(
-            document_type='best_practice',
+            document_type="best_practice",
             title=title,
             content=content,
-            metadata=metadata
+            metadata=metadata,
         )
 
     @transaction.atomic
@@ -465,11 +449,13 @@ This insight was successfully implemented and achieved
             Dict with results from each ingestion type
         """
         results = {
-            'suppliers': self.ingest_supplier_profiles(),
-            'historical_insights': self.ingest_historical_insights(),
+            "suppliers": self.ingest_supplier_profiles(),
+            "historical_insights": self.ingest_historical_insights(),
         }
 
-        logger.info(f"Full RAG document refresh complete for org {self.organization_id}")
+        logger.info(
+            f"Full RAG document refresh complete for org {self.organization_id}"
+        )
         return results
 
     def cleanup_orphaned(self) -> int:
@@ -480,13 +466,13 @@ This insight was successfully implemented and achieved
             Number of documents deleted
         """
         from apps.procurement.models import Supplier
-        from .models import InsightFeedback, EmbeddedDocument
+
+        from .models import EmbeddedDocument, InsightFeedback
 
         deleted = 0
 
         supplier_docs = EmbeddedDocument.objects.filter(
-            organization_id=self.organization_id,
-            source_model='Supplier'
+            organization_id=self.organization_id, source_model="Supplier"
         )
         for doc in supplier_docs:
             if not Supplier.objects.filter(id=doc.source_id).exists():
@@ -494,8 +480,7 @@ This insight was successfully implemented and achieved
                 deleted += 1
 
         insight_docs = EmbeddedDocument.objects.filter(
-            organization_id=self.organization_id,
-            source_model='InsightFeedback'
+            organization_id=self.organization_id, source_model="InsightFeedback"
         )
         for doc in insight_docs:
             if not InsightFeedback.objects.filter(id=doc.source_id).exists():
@@ -510,6 +495,6 @@ This insight was successfully implemented and achieved
         from .models import EmbeddedDocument
 
         stats = EmbeddedDocument.get_document_stats(self.organization_id)
-        stats['openai_configured'] = self.openai_client is not None
+        stats["openai_configured"] = self.openai_client is not None
 
         return stats

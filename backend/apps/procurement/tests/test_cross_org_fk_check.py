@@ -10,12 +10,14 @@ These tests exercise the trigger by attempting writes that bypass the
 serializer entirely (``.objects.create`` / ``.save``) and asserting the DB
 raises ``IntegrityError``.
 """
+
+import unittest
 from datetime import date, timedelta
 from decimal import Decimal
-import unittest
 
 import pytest
-from django.db import IntegrityError, connection, transaction as db_transaction
+from django.db import IntegrityError, connection
+from django.db import transaction as db_transaction
 from django.test import TestCase, TransactionTestCase
 
 from apps.authentication.models import Organization
@@ -27,7 +29,6 @@ from apps.procurement.models import (
     Transaction,
 )
 from apps.procurement.tests.factories import CategoryFactory
-
 
 # Triggers are PL/pgSQL; on SQLite (used by settings_test) the migration is a
 # no-op, so the enforcement tests would all fail. Skip the whole module unless
@@ -50,12 +51,8 @@ class CrossOrgFKCheckBase(TransactionTestCase):
     """
 
     def setUp(self):
-        self.org_a = Organization.objects.create(
-            name="Org A", slug="org-a-c3"
-        )
-        self.org_b = Organization.objects.create(
-            name="Org B", slug="org-b-c3"
-        )
+        self.org_a = Organization.objects.create(name="Org A", slug="org-a-c3")
+        self.org_b = Organization.objects.create(name="Org B", slug="org-b-c3")
         # Supplier belongs to org_b; we will try to attach it to rows in org_a.
         self.supplier_b = Supplier.objects.create(
             organization=self.org_b,
@@ -232,7 +229,10 @@ class TriggerInstallationTests(TestCase):
     EXPECTED_TRIGGERS = {
         ("procurement_transaction", "procurement_transaction_check_supplier_org_trg"),
         ("procurement_contract", "procurement_contract_check_supplier_org_trg"),
-        ("procurement_purchaseorder", "procurement_purchaseorder_check_supplier_org_trg"),
+        (
+            "procurement_purchaseorder",
+            "procurement_purchaseorder_check_supplier_org_trg",
+        ),
         ("procurement_invoice", "procurement_invoice_check_supplier_org_trg"),
     }
 

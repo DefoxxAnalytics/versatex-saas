@@ -37,6 +37,7 @@ Deploy guidance: still prefer a low-traffic window. CONCURRENTLY can fail
 mid-build (leaving an INVALID index that must be dropped manually); see
 the pgvector / Postgres docs before retrying.
 """
+
 import os
 
 from django.db import migrations
@@ -44,7 +45,7 @@ from django.db import migrations
 
 def _lists():
     """PGVECTOR_IVFFLAT_LISTS env (int), default 100."""
-    raw = os.environ.get('PGVECTOR_IVFFLAT_LISTS', '100')
+    raw = os.environ.get("PGVECTOR_IVFFLAT_LISTS", "100")
     try:
         value = int(raw)
     except ValueError:
@@ -53,7 +54,7 @@ def _lists():
 
 
 def add_vector_indexes(apps, schema_editor):
-    if schema_editor.connection.vendor != 'postgresql':
+    if schema_editor.connection.vendor != "postgresql":
         return
     lists = _lists()
     schema_editor.execute(
@@ -69,7 +70,7 @@ def add_vector_indexes(apps, schema_editor):
 
 
 def remove_vector_indexes(apps, schema_editor):
-    if schema_editor.connection.vendor != 'postgresql':
+    if schema_editor.connection.vendor != "postgresql":
         return
     schema_editor.execute(
         "DROP INDEX CONCURRENTLY IF EXISTS analytics_semanticcache_query_embedding_ivfflat"
@@ -85,7 +86,7 @@ class Migration(migrations.Migration):
     atomic = False
 
     dependencies = [
-        ('analytics', '0005_embeddeddocument'),
+        ("analytics", "0005_embeddeddocument"),
     ]
 
     operations = [
