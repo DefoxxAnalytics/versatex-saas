@@ -1,0 +1,12 @@
+# Force LF line endings on shell scripts and other files that must stay LF
+# on Linux containers regardless of the developer's OS-level autocrlf setting.
+# Without this, files created on Windows ship with CRLF and Linux exec(2) on
+# a script-with-CRLF-shebang fails with the misleading "no such file or
+# directory" error (kernel parses `#!/bin/sh\r` and can't find `/bin/sh\r`).
+
+*.sh           text eol=lf
+*.bash         text eol=lf
+Dockerfile*    text eol=lf
+*.dockerfile   text eol=lf
+docker-compose*.yml text eol=lf
+.env*          text eol=lf
