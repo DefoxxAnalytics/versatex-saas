@@ -51,6 +51,19 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 # upstream IP (typically 127.0.0.1 if same-host, or the docker bridge IP).
 TRUSTED_PROXIES = config('TRUSTED_PROXIES', default='').split(',') if config('TRUSTED_PROXIES', default='') else []
 
+# First-deploy footgun: without TRUSTED_PROXIES set, get_client_ip() ignores
+# X-Forwarded-For from the reverse proxy, so login attempts log the proxy IP
+# instead of the real client and per-IP rate limiting collapses to a single
+# bucket. Use the module logger so the message routes through Django's logging
+# config rather than the root handler.
+if not DEBUG and not TRUSTED_PROXIES:
+    logging.getLogger(__name__).warning(
+        "TRUSTED_PROXIES is empty in production. Real client IPs may not "
+        "be detected from X-Forwarded-For. Set TRUSTED_PROXIES env var to "
+        "the comma-separated CIDR list of your reverse proxy (e.g., "
+        "Railway/Cloudflare ranges)."
+    )
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -122,7 +135,15 @@ DATABASES = {
         # keep zombie connections from being served after Postgres restarts.
         'CONN_MAX_AGE': 60,
         'CONN_HEALTH_CHECKS': True,
-        'OPTIONS': {'connect_timeout': 10},
+        'OPTIONS': {
+            'connect_timeout': 10,
+            # 'prefer' default keeps dev (no SSL setup) working — Postgres
+            # falls back to non-SSL when the server doesn't support it.
+            # Production-managed Postgres (Railway, RDS) sets DB_SSLMODE=require
+            # to enforce TLS without code changes. 'verify-full' adds CA + host
+            # validation when a CA bundle is plumbed through.
+            'sslmode': config('DB_SSLMODE', default='prefer'),
+        },
     }
 }
 
@@ -335,7 +356,7 @@ EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@analytics.com')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@versatexanalytics.com')
 
 # Celery Configuration
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
