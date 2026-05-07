@@ -117,11 +117,11 @@ services:
         - VITE_APP_LOGO=${VITE_APP_LOGO:-/vtx_logo2.png}
     container_name: vstx-saas-frontend
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${FRONTEND_PORT:-3000}:8080"
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 10s
       retries: 3
