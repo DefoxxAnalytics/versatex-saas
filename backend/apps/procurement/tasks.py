@@ -78,10 +78,21 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         }
 
     try:
+        # Idempotency checkpoint (v3.0 Phase 1 task 1.7).
+        # If `last_processed_batch_index > 0`, this invocation is a Celery
+        # retry resuming after a worker crash. Skip already-processed batches.
+        # Counter records the NEXT batch to attempt, so it equals the count
+        # of fully-handled batches (succeeded or rolled-back-under-skip).
+        resume_from_batch = upload.last_processed_batch_index
+        is_resumed_run = resume_from_batch > 0
+
         # Update status
         upload.status = 'processing'
         upload.progress_percent = 0
-        upload.progress_message = 'Starting processing...'
+        upload.progress_message = (
+            f'Resuming from batch {resume_from_batch}...'
+            if is_resumed_run else 'Starting processing...'
+        )
         upload.save()
 
         # Read file content
@@ -118,31 +129,93 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         organization = upload.organization
         user = upload.uploaded_by
 
-        successful = 0
-        failed = 0
-        duplicates = 0
-        errors = []
-        batch_log = []
-        batches_succeeded = 0
-        batches_failed = 0
-        first_failed_batch_index = None
-        first_failed_batch_rows = None
+        # On a resumed run, seed in-memory accumulators from what the
+        # previous invocation persisted at its last checkpoint. Without
+        # this, the final upload record would only reflect rows ingested
+        # after the resume point, dropping all evidence of pre-crash work.
+        if is_resumed_run:
+            successful = upload.successful_rows
+            failed = upload.failed_rows
+            duplicates = upload.duplicate_rows
+            prior_log = upload.error_log
+            if prior_log:
+                if isinstance(prior_log, list):
+                    decoded = prior_log
+                else:
+                    try:
+                        decoded = json.loads(prior_log)
+                    except (TypeError, ValueError):
+                        decoded = []
+                if not isinstance(decoded, list):
+                    decoded = []
+                batch_log = [e for e in decoded if e.get('kind') == 'batch']
+                errors = [
+                    {k: v for k, v in e.items() if k != 'kind'}
+                    for e in decoded if e.get('kind') == 'row'
+                ]
+            else:
+                batch_log = []
+                errors = []
+            batches_succeeded = sum(
+                1 for b in batch_log if b.get('status') == 'succeeded'
+            )
+            batches_failed = sum(
+                1 for b in batch_log if b.get('status') == 'failed'
+            )
+            failed_entries = [b for b in batch_log if b.get('status') == 'failed']
+            if failed_entries:
+                first = min(failed_entries, key=lambda b: b.get('batch_index', 0))
+                first_failed_batch_index = first.get('batch_index')
+                first_failed_batch_rows = (
+                    first.get('first_row_number'),
+                    first.get('last_row_number'),
+                )
+            else:
+                first_failed_batch_index = None
+                first_failed_batch_rows = None
+        else:
+            successful = 0
+            failed = 0
+            duplicates = 0
+            errors = []
+            batch_log = []
+            batches_succeeded = 0
+            batches_failed = 0
+            first_failed_batch_index = None
+            first_failed_batch_rows = None
 
         # Process in batches
         batch_size = CSV_BATCH_SIZE
         total_batches = (total_rows + batch_size - 1) // batch_size
 
         for batch_index, batch_start in enumerate(range(0, total_rows, batch_size)):
+            # Idempotency: on a resumed run, skip batches the previous
+            # invocation already handled. Their per-row outcomes were
+            # finalized in `error_log` before the checkpoint advanced;
+            # re-processing would double-insert (now caught by the
+            # canonical-case unique constraint, but counts/audit/status
+            # would diverge from reality).
+            if batch_index < resume_from_batch:
+                continue
+
             batch_end = min(batch_start + batch_size, total_rows)
             batch_rows = rows[batch_start:batch_end]
             batch_first_row_number = batch_start + 2  # +2 for 1-indexed and header row
             batch_last_row_number = batch_end + 1
 
-            # Update progress
+            # Update progress. Use targeted .update() instead of .save():
+            # .save() writes ALL fields from the in-memory `upload` object,
+            # which would clobber the checkpoint columns (last_processed_
+            # batch_index, successful_rows, etc.) that previous batches
+            # advanced via direct UPDATE. Targeted update preserves them.
             progress = int((batch_start / total_rows) * 100)
-            upload.progress_percent = progress
-            upload.progress_message = f'Processing rows {batch_start + 1} to {batch_end} of {total_rows}'
-            upload.save()
+            DataUpload.objects.filter(pk=upload.pk).update(
+                progress_percent=progress,
+                progress_message=(
+                    f'Processing rows {batch_start + 1} to {batch_end} '
+                    f'of {total_rows}'
+                ),
+            )
 
             batch_successful = 0
             batch_failed = 0
@@ -253,8 +326,31 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                     'message': str(failure_exception)[:500],
                 })
                 if abort_after_batch:
+                    # Hard abort under skip_invalid=False. Checkpoint stays
+                    # at the failed batch index so a retry resumes here
+                    # rather than re-running prior batches.
+                    DataUpload.objects.filter(pk=upload.pk).update(
+                        last_processed_batch_index=batch_index,
+                        successful_rows=successful,
+                        failed_rows=failed,
+                        duplicate_rows=duplicates,
+                        error_log=json.dumps(
+                            batch_log + [{'kind': 'row', **e} for e in errors]
+                        ),
+                    )
                     break
-                # skip_invalid=True: keep going with the next batch
+                # skip_invalid=True: this batch is fully handled (rolled
+                # back, logged); advance the checkpoint past it before
+                # moving to the next batch.
+                DataUpload.objects.filter(pk=upload.pk).update(
+                    last_processed_batch_index=batch_index + 1,
+                    successful_rows=successful,
+                    failed_rows=failed,
+                    duplicate_rows=duplicates,
+                    error_log=json.dumps(
+                        batch_log + [{'kind': 'row', **e} for e in errors]
+                    ),
+                )
                 continue
 
             # Batch committed successfully. Promote per-batch counters
@@ -276,6 +372,22 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                 'rows_skipped_invalid': batch_failed,
                 'rows_skipped_duplicate': batch_duplicates,
             })
+
+            # Checkpoint advance after a clean batch commit. Use .update()
+            # to bypass model signals (post_save fires Redis cache
+            # invalidation; we only want signals on terminal status
+            # transitions, not on every batch). Running counts persist
+            # alongside the index so a crash after this point preserves
+            # this batch's tally for the next invocation to seed from.
+            DataUpload.objects.filter(pk=upload.pk).update(
+                last_processed_batch_index=batch_index + 1,
+                successful_rows=successful,
+                failed_rows=failed,
+                duplicate_rows=duplicates,
+                error_log=json.dumps(
+                    batch_log + [{'kind': 'row', **e} for e in errors]
+                ),
+            )
 
         batches_unprocessed = max(total_batches - batches_succeeded - batches_failed, 0)
 
@@ -312,6 +424,10 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         else:
             upload.status = 'failed'
 
+        # Reset idempotency checkpoint on terminal completion. Any future
+        # invocation of this task with the same upload_id is treated as a
+        # fresh run rather than a resume.
+        upload.last_processed_batch_index = 0
         upload.save()
 
         # Clean up stored file
@@ -326,16 +442,21 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         }
 
     except Exception as e:
-        upload.status = 'failed'
-        upload.error_log = json.dumps([{'message': str(e)}])
-        upload.progress_message = f'Error: {str(e)}'
-        upload.completed_at = timezone.now()
-        upload.save()
-
-        # Retry on transient errors
+        # Retry on transient errors. Preserve the checkpoint and any
+        # already-persisted batch tallies so the next attempt resumes
+        # from the last committed batch rather than overwriting state.
         if self.request.retries < self.max_retries:
             raise self.retry(exc=e)
 
+        # Retries exhausted: finalize as failed. Do NOT clobber the
+        # error_log if checkpointed data is already present (resume
+        # state has higher diagnostic value than a single bare message).
+        upload.status = 'failed'
+        if not upload.error_log:
+            upload.error_log = json.dumps([{'message': str(e)}])
+        upload.progress_message = f'Error: {str(e)}'[:255]
+        upload.completed_at = timezone.now()
+        upload.save()
         return {'error': str(e)}
 
 
