@@ -2,7 +2,9 @@
 Celery tasks for async report generation and scheduled reports.
 Adapted from REPORTING_MODULE_REPLICATION_GUIDE.md
 """
+
 import logging
+
 from celery import shared_task
 from django.utils import timezone
 
@@ -23,10 +25,12 @@ def generate_report_async(self, report_id: str):
     from .services import ReportingService
 
     try:
-        report = Report.objects.select_related('organization', 'created_by').get(pk=report_id)
+        report = Report.objects.select_related("organization", "created_by").get(
+            pk=report_id
+        )
     except Report.DoesNotExist:
         logger.error(f"Report {report_id} not found")
-        return {'status': 'error', 'message': 'Report not found'}
+        return {"status": "error", "message": "Report not found"}
 
     logger.info(f"Starting generation for report {report_id} ({report.report_type})")
 
@@ -45,9 +49,9 @@ def generate_report_async(self, report_id: str):
             reschedule_report.delay(str(report.pk))
 
         return {
-            'status': 'completed',
-            'report_id': str(report.id),
-            'report_type': report.report_type,
+            "status": "completed",
+            "report_id": str(report.id),
+            "report_type": report.report_type,
         }
 
     except Exception as e:
@@ -63,19 +67,19 @@ def generate_report_async(self, report_id: str):
         # 'scheduled' so process_scheduled_reports picks it up next cadence.)
         if report.is_scheduled:
             report.error_message = str(e)
-            report.save(update_fields=['error_message'])
+            report.save(update_fields=["error_message"])
             reschedule_report.delay(str(report.pk))
         else:
             report.mark_failed(str(e))
 
         return {
-            'status': 'failed',
-            'report_id': str(report.id),
-            'error': str(e),
+            "status": "failed",
+            "report_id": str(report.id),
+            "error": str(e),
         }
 
 
-@shared_task
+@shared_task(name="process_scheduled_reports")
 def process_scheduled_reports():
     """
     Process all scheduled reports that are due for execution.
@@ -94,35 +98,51 @@ def process_scheduled_reports():
 
     # Find due reports
     due_reports = Report.objects.filter(
-        is_scheduled=True,
-        status='scheduled',
-        next_run__lte=now
-    ).select_related('organization')
+        is_scheduled=True, status="scheduled", next_run__lte=now
+    ).values_list("pk", flat=True)
 
-    count = due_reports.count()
+    due_pks = list(due_reports)
+    count = len(due_pks)
     if count == 0:
         logger.debug("No scheduled reports due")
-        return {'processed': 0}
+        return {"processed": 0}
 
     logger.info(f"Processing {count} scheduled reports")
 
+    # v3.1 Phase 1 (R-H2): atomic test-and-set on status before dispatch.
+    # Without this, two beat ticks firing close together (worker restart,
+    # cron overlap) both see the same `status='scheduled'` rows and queue
+    # them twice. Each duplicate run advances next_run on success — so the
+    # schedule silently double-skips a cycle. The .update() is a single
+    # UPDATE ... WHERE status='scheduled' RETURNING-style guard: only the
+    # first claimer flips the row to 'generating' and queues the task; the
+    # second sees 0 rows updated and skips.
     processed = 0
-    for report in due_reports:
+    for pk in due_pks:
+        claimed = Report.objects.filter(pk=pk, status="scheduled").update(
+            status="generating"
+        )
+        if not claimed:
+            logger.info(
+                f"Report {pk} already claimed by concurrent beat tick; skipping"
+            )
+            continue
         try:
-            # Queue async generation
-            generate_report_async.delay(str(report.pk))
+            generate_report_async.delay(str(pk))
             processed += 1
-            logger.info(f"Queued scheduled report {report.pk}")
+            logger.info(f"Queued scheduled report {pk}")
         except Exception as e:
-            logger.exception(f"Error queueing report {report.pk}: {e}")
+            # Roll the status back so the next beat tick can retry.
+            Report.objects.filter(pk=pk, status="generating").update(status="scheduled")
+            logger.exception(f"Error queueing report {pk}: {e}")
 
     return {
-        'processed': processed,
-        'total_due': count,
+        "processed": processed,
+        "total_due": count,
     }
 
 
-@shared_task
+@shared_task(name="cleanup_expired_reports")
 def cleanup_expired_reports(days_old: int = 30):
     """
     Clean up old completed reports.
@@ -133,21 +153,20 @@ def cleanup_expired_reports(days_old: int = 30):
     This helps manage storage by removing stale report files.
     """
     from datetime import timedelta
+
     from .models import Report
 
     cutoff = timezone.now() - timedelta(days=days_old)
 
     # Find expired reports (completed and not scheduled)
     expired = Report.objects.filter(
-        status='completed',
-        is_scheduled=False,
-        generated_at__lt=cutoff
+        status="completed", is_scheduled=False, generated_at__lt=cutoff
     )
 
     count = expired.count()
     if count == 0:
         logger.debug("No expired reports to clean up")
-        return {'deleted': 0}
+        return {"deleted": 0}
 
     logger.info(f"Cleaning up {count} expired reports (older than {days_old} days)")
 
@@ -155,8 +174,8 @@ def cleanup_expired_reports(days_old: int = 30):
     deleted, _ = expired.delete()
 
     return {
-        'deleted': deleted,
-        'cutoff_date': str(cutoff),
+        "deleted": deleted,
+        "cutoff_date": str(cutoff),
     }
 
 
@@ -173,17 +192,17 @@ def reschedule_report(report_id: str):
     try:
         report = Report.objects.get(pk=report_id, is_scheduled=True)
     except Report.DoesNotExist:
-        return {'status': 'skipped', 'reason': 'Report not found or not scheduled'}
+        return {"status": "skipped", "reason": "Report not found or not scheduled"}
 
     report.last_run = timezone.now()
     report.calculate_next_run()
-    report.status = 'scheduled'
-    report.save(update_fields=['last_run', 'next_run', 'status'])
+    report.status = "scheduled"
+    report.save(update_fields=["last_run", "next_run", "status"])
 
     logger.info(f"Report {report_id} rescheduled for {report.next_run}")
 
     return {
-        'status': 'rescheduled',
-        'report_id': str(report_id),
-        'next_run': str(report.next_run),
+        "status": "rescheduled",
+        "report_id": str(report_id),
+        "next_run": str(report.next_run),
     }

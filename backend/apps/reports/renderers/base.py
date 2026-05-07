@@ -1,9 +1,17 @@
 """
 Base renderer for report output formats.
 """
+
+import re
 from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import Any
+
+# Filename character allowlist for Content-Disposition. Anything outside
+# `[A-Za-z0-9._-]` becomes `_`. Blocks header injection (CR/LF), filename
+# quote-escape (`"`), backslash, semicolons, and Unicode that browsers can
+# misinterpret. RFC 5987 encoding is overkill here — we only render ASCII.
+_FILENAME_SAFE_CHARS = re.compile(r"[^A-Za-z0-9._-]")
 
 
 class BaseRenderer(ABC):
@@ -12,7 +20,9 @@ class BaseRenderer(ABC):
     Each renderer handles a specific output format (PDF, Excel, CSV).
     """
 
-    def __init__(self, report_data: dict, report_name: str = "Report", branding: dict = None):
+    def __init__(
+        self, report_data: dict, report_name: str = "Report", branding: dict = None
+    ):
         """
         Initialize renderer with report data.
 
@@ -23,7 +33,7 @@ class BaseRenderer(ABC):
         """
         self.report_data = report_data
         self.report_name = report_name
-        self.metadata = report_data.get('metadata', {})
+        self.metadata = report_data.get("metadata", {})
         self.branding = branding or {}
 
     @property
@@ -50,10 +60,10 @@ class BaseRenderer(ABC):
 
     def get_filename(self) -> str:
         """Generate filename for the rendered report."""
-        timestamp = self.metadata.get('generated_at', '')
+        timestamp = self.metadata.get("generated_at", "")
         if timestamp:
-            timestamp = timestamp.replace(':', '-').replace(' ', '_')[:19]
-        safe_name = self.report_name.replace(' ', '_').replace('/', '-')
+            timestamp = timestamp.replace(":", "-").replace(" ", "_")[:19]
+        safe_name = _FILENAME_SAFE_CHARS.sub("_", self.report_name)
         return f"{safe_name}_{timestamp}{self.file_extension}"
 
     def format_currency(self, value: Any) -> str:
