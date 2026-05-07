@@ -408,8 +408,7 @@ export function useUpdateSettings() {
       toast.error(
         "Settings saved locally but couldn't sync to server. Try again.",
         {
-          description:
-            error instanceof Error ? error.message : "Unknown error",
+          description: error instanceof Error ? error.message : "Unknown error",
         },
       );
     },
@@ -452,8 +451,7 @@ export function useResetSettings() {
       toast.error(
         "Settings reset locally but couldn't clear on server. Try again.",
         {
-          description:
-            error instanceof Error ? error.message : "Unknown error",
+          description: error instanceof Error ? error.message : "Unknown error",
         },
       );
     },

@@ -2,12 +2,15 @@
 CSV Renderer for reports.
 Uses pandas for efficient CSV generation.
 """
+
 import csv
 from io import BytesIO, StringIO
+
 from .base import BaseRenderer
 
 try:
     import pandas as pd
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
@@ -21,11 +24,11 @@ class CSVRenderer(BaseRenderer):
 
     @property
     def content_type(self) -> str:
-        return 'text/csv'
+        return "text/csv"
 
     @property
     def file_extension(self) -> str:
-        return '.csv'
+        return ".csv"
 
     def render(self) -> BytesIO:
         """Render report data as CSV."""
@@ -46,20 +49,20 @@ class CSVRenderer(BaseRenderer):
         """Find the main data array in the report."""
         # Priority order for finding exportable data
         priority_keys = [
-            'pareto_data',
-            'spend_by_category',
-            'spend_by_supplier',
-            'top_suppliers',
-            'top_categories',
-            'monthly_trend',
-            'tail_suppliers',
-            'consolidation_opportunities',
-            'category_opportunities',
-            'stratification',
-            'violations',
-            'savings_by_type',
-            'suppliers',
-            'categories',
+            "pareto_data",
+            "spend_by_category",
+            "spend_by_supplier",
+            "top_suppliers",
+            "top_categories",
+            "monthly_trend",
+            "tail_suppliers",
+            "consolidation_opportunities",
+            "category_opportunities",
+            "stratification",
+            "violations",
+            "savings_by_type",
+            "suppliers",
+            "categories",
         ]
 
         for key in priority_keys:
@@ -69,16 +72,20 @@ class CSVRenderer(BaseRenderer):
 
         # Fallback: find any list in the data
         for key, value in self.report_data.items():
-            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
+            if (
+                isinstance(value, list)
+                and len(value) > 0
+                and isinstance(value[0], dict)
+            ):
                 return value
 
         # If no list found, try to flatten the overview/summary
-        overview = self.report_data.get('overview', {})
+        overview = self.report_data.get("overview", {})
         if not overview:
-            overview = self.report_data.get('summary', {})
+            overview = self.report_data.get("summary", {})
 
         if overview:
-            return [{'metric': k, 'value': v} for k, v in overview.items()]
+            return [{"metric": k, "value": v} for k, v in overview.items()]
 
         return []
 
@@ -91,11 +98,11 @@ class CSVRenderer(BaseRenderer):
         df = pd.DataFrame(data)
 
         # Format column names
-        df.columns = [col.replace('_', ' ').title() for col in df.columns]
+        df.columns = [col.replace("_", " ").title() for col in df.columns]
 
         # Convert to CSV
         csv_string = df.to_csv(index=False)
-        buffer.write(csv_string.encode('utf-8'))
+        buffer.write(csv_string.encode("utf-8"))
 
     def _render_with_csv(self, buffer, data):
         """Render CSV using stdlib csv module."""
@@ -111,19 +118,19 @@ class CSVRenderer(BaseRenderer):
             if isinstance(item, dict):
                 if writer is None:
                     # Write headers
-                    headers = [k.replace('_', ' ').title() for k in item.keys()]
+                    headers = [k.replace("_", " ").title() for k in item.keys()]
                     writer = csv.DictWriter(
                         string_buffer,
                         fieldnames=list(item.keys()),
-                        extrasaction='ignore'
+                        extrasaction="ignore",
                     )
                     # Write custom header row
-                    string_buffer.write(','.join(headers) + '\n')
+                    string_buffer.write(",".join(headers) + "\n")
 
                 # Write row
                 writer.writerow(item)
 
-        buffer.write(string_buffer.getvalue().encode('utf-8'))
+        buffer.write(string_buffer.getvalue().encode("utf-8"))
 
     def render_multiple_sheets(self) -> dict:
         """
@@ -134,15 +141,15 @@ class CSVRenderer(BaseRenderer):
 
         # Data sections to export
         data_sections = {
-            'spend_by_category': 'spend_by_category',
-            'spend_by_supplier': 'spend_by_supplier',
-            'top_suppliers': 'top_suppliers',
-            'monthly_trend': 'monthly_trend',
-            'pareto_data': 'pareto_analysis',
-            'tail_suppliers': 'tail_suppliers',
-            'consolidation_opportunities': 'consolidation',
-            'stratification': 'stratification',
-            'violations': 'violations',
+            "spend_by_category": "spend_by_category",
+            "spend_by_supplier": "spend_by_supplier",
+            "top_suppliers": "top_suppliers",
+            "monthly_trend": "monthly_trend",
+            "pareto_data": "pareto_analysis",
+            "tail_suppliers": "tail_suppliers",
+            "consolidation_opportunities": "consolidation",
+            "stratification": "stratification",
+            "violations": "violations",
         }
 
         for key, filename in data_sections.items():

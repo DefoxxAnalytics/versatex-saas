@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('procurement', '0009_cross_org_fk_check_constraints'),
+        ("procurement", "0009_cross_org_fk_check_constraints"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='dataupload',
-            name='last_processed_batch_index',
+            model_name="dataupload",
+            name="last_processed_batch_index",
             field=models.PositiveIntegerField(default=0),
         ),
     ]

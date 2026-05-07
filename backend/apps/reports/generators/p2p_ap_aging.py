@@ -2,8 +2,10 @@
 AP Aging Report Generator.
 Provides Accounts Payable aging analysis and payment performance metrics.
 """
-from .base import BaseReportGenerator
+
 from apps.analytics.p2p_services import P2PAnalyticsService
+
+from .base import BaseReportGenerator
 
 
 class APAgingReportGenerator(BaseReportGenerator):
@@ -19,11 +21,11 @@ class APAgingReportGenerator(BaseReportGenerator):
 
     @property
     def report_type(self) -> str:
-        return 'p2p_ap_aging'
+        return "p2p_ap_aging"
 
     @property
     def report_title(self) -> str:
-        return 'AP Aging Report'
+        return "AP Aging Report"
 
     def generate(self) -> dict:
         """Generate AP aging analysis data."""
@@ -49,32 +51,36 @@ class APAgingReportGenerator(BaseReportGenerator):
         # pre-fix Report.summary_data snapshots still parse; canonical key is
         # `current_days_to_pay`.
         avg_days_to_pay = aging_overview.get(
-            'avg_days_to_pay',
-            aging_overview.get('avg_dpo', 0),
+            "avg_days_to_pay",
+            aging_overview.get("avg_dpo", 0),
         )
         summary = {
-            'total_ap': aging_overview.get('total_ap', 0),
-            'overdue_amount': aging_overview.get('total_overdue', 0),
-            'current_days_to_pay': avg_days_to_pay,
-            'current_dpo': avg_days_to_pay,  # Deprecated alias
-            'on_time_rate': aging_overview.get('on_time_rate', 0),
-            'suppliers_with_ap': payment_overview.get('suppliers_with_ap', 0),
-            'exception_rate': payment_overview.get('exception_rate', 0),
+            "total_ap": aging_overview.get("total_ap", 0),
+            "overdue_amount": aging_overview.get("total_overdue", 0),
+            "current_days_to_pay": avg_days_to_pay,
+            "current_dpo": avg_days_to_pay,  # Deprecated alias
+            "on_time_rate": aging_overview.get("on_time_rate", 0),
+            "suppliers_with_ap": payment_overview.get("suppliers_with_ap", 0),
+            "exception_rate": payment_overview.get("exception_rate", 0),
         }
 
         # Calculate overdue percentage
-        total_ap = summary['total_ap']
-        overdue = summary['overdue_amount']
-        summary['overdue_pct'] = round((overdue / total_ap * 100) if total_ap > 0 else 0, 1)
+        total_ap = summary["total_ap"]
+        overdue = summary["overdue_amount"]
+        summary["overdue_pct"] = round(
+            (overdue / total_ap * 100) if total_ap > 0 else 0, 1
+        )
 
         # Get aging buckets
-        aging_buckets = aging_overview.get('buckets', [])
+        aging_buckets = aging_overview.get("buckets", [])
 
         # Get avg days-to-pay trend from aging overview
-        dpo_trend = aging_overview.get('trend', [])
+        dpo_trend = aging_overview.get("trend", [])
 
         # Generate risk assessment
-        risk_assessment = self._assess_ap_risk(summary, aging_buckets, aging_by_supplier)
+        risk_assessment = self._assess_ap_risk(
+            summary, aging_buckets, aging_by_supplier
+        )
 
         # Generate insights
         insights = self._generate_insights(
@@ -89,17 +95,17 @@ class APAgingReportGenerator(BaseReportGenerator):
         # `dpo_trend` retained as a stored-JSON alias for pre-fix snapshots.
         days_to_pay_trend = dpo_trend if dpo_trend else dpo_trends[:6]
         return {
-            'metadata': self.get_metadata(),
-            'summary': summary,
-            'aging_buckets': aging_buckets,
-            'days_to_pay_trend': days_to_pay_trend,
-            'dpo_trend': days_to_pay_trend,  # Deprecated alias
-            'supplier_aging': aging_by_supplier[:20],
-            'terms_compliance': terms_compliance,
-            'cash_flow_forecast': cash_flow,
-            'risk_assessment': risk_assessment,
-            'insights': insights,
-            'recommendations': recommendations,
+            "metadata": self.get_metadata(),
+            "summary": summary,
+            "aging_buckets": aging_buckets,
+            "days_to_pay_trend": days_to_pay_trend,
+            "dpo_trend": days_to_pay_trend,  # Deprecated alias
+            "supplier_aging": aging_by_supplier[:20],
+            "terms_compliance": terms_compliance,
+            "cash_flow_forecast": cash_flow,
+            "risk_assessment": risk_assessment,
+            "insights": insights,
+            "recommendations": recommendations,
         }
 
     def _assess_ap_risk(self, summary, buckets, suppliers):
@@ -107,179 +113,218 @@ class APAgingReportGenerator(BaseReportGenerator):
         risk_factors = []
 
         # Overdue concentration risk
-        overdue_pct = summary.get('overdue_pct', 0)
+        overdue_pct = summary.get("overdue_pct", 0)
         if overdue_pct > 30:
-            risk_factors.append({
-                'factor': 'Overdue Concentration',
-                'level': 'High',
-                'description': f'{overdue_pct:.1f}% of AP is overdue',
-                'impact': f"${summary.get('overdue_amount', 0):,.0f} at risk"
-            })
+            risk_factors.append(
+                {
+                    "factor": "Overdue Concentration",
+                    "level": "High",
+                    "description": f"{overdue_pct:.1f}% of AP is overdue",
+                    "impact": f"${summary.get('overdue_amount', 0):,.0f} at risk",
+                }
+            )
         elif overdue_pct > 15:
-            risk_factors.append({
-                'factor': 'Overdue Concentration',
-                'level': 'Medium',
-                'description': f'{overdue_pct:.1f}% of AP is overdue',
-                'impact': 'Monitor closely'
-            })
+            risk_factors.append(
+                {
+                    "factor": "Overdue Concentration",
+                    "level": "Medium",
+                    "description": f"{overdue_pct:.1f}% of AP is overdue",
+                    "impact": "Monitor closely",
+                }
+            )
         else:
-            risk_factors.append({
-                'factor': 'Overdue Concentration',
-                'level': 'Low',
-                'description': f'{overdue_pct:.1f}% of AP is overdue',
-                'impact': 'Within acceptable range'
-            })
+            risk_factors.append(
+                {
+                    "factor": "Overdue Concentration",
+                    "level": "Low",
+                    "description": f"{overdue_pct:.1f}% of AP is overdue",
+                    "impact": "Within acceptable range",
+                }
+            )
 
         # Payment cycle risk
-        current_days_to_pay = summary.get('current_days_to_pay', summary.get('current_dpo', 0))
+        current_days_to_pay = summary.get(
+            "current_days_to_pay", summary.get("current_dpo", 0)
+        )
         if current_days_to_pay > 45:
-            risk_factors.append({
-                'factor': 'Extended Payment Cycle',
-                'level': 'Medium',
-                'description': f'Avg {current_days_to_pay:.1f} days to pay may strain supplier relationships',
-                'impact': 'Potential supply chain risk'
-            })
+            risk_factors.append(
+                {
+                    "factor": "Extended Payment Cycle",
+                    "level": "Medium",
+                    "description": f"Avg {current_days_to_pay:.1f} days to pay may strain supplier relationships",
+                    "impact": "Potential supply chain risk",
+                }
+            )
         elif current_days_to_pay < 15:
-            risk_factors.append({
-                'factor': 'Early Payment',
-                'level': 'Low',
-                'description': f'Avg {current_days_to_pay:.1f} days to pay indicates fast payments',
-                'impact': 'Strong supplier relationships'
-            })
+            risk_factors.append(
+                {
+                    "factor": "Early Payment",
+                    "level": "Low",
+                    "description": f"Avg {current_days_to_pay:.1f} days to pay indicates fast payments",
+                    "impact": "Strong supplier relationships",
+                }
+            )
 
         # Supplier concentration risk
         if suppliers:
-            top_5_value = sum(s.get('total_ap', 0) for s in suppliers[:5])
-            total_ap = summary.get('total_ap', 0)
+            top_5_value = sum(s.get("total_ap", 0) for s in suppliers[:5])
+            total_ap = summary.get("total_ap", 0)
             concentration = (top_5_value / total_ap * 100) if total_ap > 0 else 0
 
             if concentration > 70:
-                risk_factors.append({
-                    'factor': 'Supplier Concentration',
-                    'level': 'High',
-                    'description': f'Top 5 suppliers represent {concentration:.1f}% of AP',
-                    'impact': 'High dependency on few suppliers'
-                })
+                risk_factors.append(
+                    {
+                        "factor": "Supplier Concentration",
+                        "level": "High",
+                        "description": f"Top 5 suppliers represent {concentration:.1f}% of AP",
+                        "impact": "High dependency on few suppliers",
+                    }
+                )
             elif concentration > 50:
-                risk_factors.append({
-                    'factor': 'Supplier Concentration',
-                    'level': 'Medium',
-                    'description': f'Top 5 suppliers represent {concentration:.1f}% of AP',
-                    'impact': 'Moderate concentration'
-                })
+                risk_factors.append(
+                    {
+                        "factor": "Supplier Concentration",
+                        "level": "Medium",
+                        "description": f"Top 5 suppliers represent {concentration:.1f}% of AP",
+                        "impact": "Moderate concentration",
+                    }
+                )
 
         # 90+ days bucket risk
-        bucket_90_plus = next((b for b in buckets if '90' in b.get('bucket', '')), None)
+        bucket_90_plus = next((b for b in buckets if "90" in b.get("bucket", "")), None)
         if bucket_90_plus:
-            pct_90_plus = bucket_90_plus.get('percentage', 0)
+            pct_90_plus = bucket_90_plus.get("percentage", 0)
             if pct_90_plus > 10:
-                risk_factors.append({
-                    'factor': 'Severely Overdue',
-                    'level': 'High',
-                    'description': f'{pct_90_plus:.1f}% of AP is 90+ days overdue',
-                    'impact': 'Potential bad debt or disputes'
-                })
+                risk_factors.append(
+                    {
+                        "factor": "Severely Overdue",
+                        "level": "High",
+                        "description": f"{pct_90_plus:.1f}% of AP is 90+ days overdue",
+                        "impact": "Potential bad debt or disputes",
+                    }
+                )
 
         # Determine overall risk
-        high_count = len([r for r in risk_factors if r['level'] == 'High'])
-        medium_count = len([r for r in risk_factors if r['level'] == 'Medium'])
+        high_count = len([r for r in risk_factors if r["level"] == "High"])
+        medium_count = len([r for r in risk_factors if r["level"] == "Medium"])
 
         if high_count >= 2:
-            overall = 'High'
+            overall = "High"
         elif high_count == 1 or medium_count >= 2:
-            overall = 'Medium'
+            overall = "Medium"
         else:
-            overall = 'Low'
+            overall = "Low"
 
-        return {
-            'overall_level': overall,
-            'factors': risk_factors
-        }
+        return {"overall_level": overall, "factors": risk_factors}
 
     def _generate_insights(self, summary, buckets, suppliers, terms_compliance):
         """Generate key insights from AP data."""
         insights = []
 
         # Payment cycle insight
-        current_days_to_pay = summary.get('current_days_to_pay', summary.get('current_dpo', 0))
+        current_days_to_pay = summary.get(
+            "current_days_to_pay", summary.get("current_dpo", 0)
+        )
         if current_days_to_pay > 45:
-            insights.append({
-                'type': 'warning',
-                'title': 'Extended Payment Cycle',
-                'description': f'Avg days to pay is {current_days_to_pay:.1f} days. '
-                               f'May impact supplier relationships.',
-                'impact': 'negative'
-            })
+            insights.append(
+                {
+                    "type": "warning",
+                    "title": "Extended Payment Cycle",
+                    "description": f"Avg days to pay is {current_days_to_pay:.1f} days. "
+                    f"May impact supplier relationships.",
+                    "impact": "negative",
+                }
+            )
         elif current_days_to_pay <= 30:
-            insights.append({
-                'type': 'success',
-                'title': 'Healthy Payment Cycle',
-                'description': f'Avg {current_days_to_pay:.1f} days to pay indicates timely payments.',
-                'impact': 'positive'
-            })
+            insights.append(
+                {
+                    "type": "success",
+                    "title": "Healthy Payment Cycle",
+                    "description": f"Avg {current_days_to_pay:.1f} days to pay indicates timely payments.",
+                    "impact": "positive",
+                }
+            )
 
         # On-time rate insight
-        on_time_rate = summary.get('on_time_rate', 0)
+        on_time_rate = summary.get("on_time_rate", 0)
         if on_time_rate < 80:
-            insights.append({
-                'type': 'warning',
-                'title': 'Low On-Time Payment Rate',
-                'description': f'Only {on_time_rate:.1f}% of invoices paid on time.',
-                'impact': 'negative'
-            })
+            insights.append(
+                {
+                    "type": "warning",
+                    "title": "Low On-Time Payment Rate",
+                    "description": f"Only {on_time_rate:.1f}% of invoices paid on time.",
+                    "impact": "negative",
+                }
+            )
         elif on_time_rate >= 95:
-            insights.append({
-                'type': 'success',
-                'title': 'Excellent Payment Performance',
-                'description': f'{on_time_rate:.1f}% on-time payment rate.',
-                'impact': 'positive'
-            })
+            insights.append(
+                {
+                    "type": "success",
+                    "title": "Excellent Payment Performance",
+                    "description": f"{on_time_rate:.1f}% on-time payment rate.",
+                    "impact": "positive",
+                }
+            )
 
         # Overdue amount insight
-        overdue = summary.get('overdue_amount', 0)
-        overdue_pct = summary.get('overdue_pct', 0)
+        overdue = summary.get("overdue_amount", 0)
+        overdue_pct = summary.get("overdue_pct", 0)
         if overdue > 0 and overdue_pct > 20:
-            insights.append({
-                'type': 'warning',
-                'title': 'Significant Overdue Balance',
-                'description': f'${overdue:,.0f} ({overdue_pct:.1f}%) is past due.',
-                'impact': 'negative'
-            })
+            insights.append(
+                {
+                    "type": "warning",
+                    "title": "Significant Overdue Balance",
+                    "description": f"${overdue:,.0f} ({overdue_pct:.1f}%) is past due.",
+                    "impact": "negative",
+                }
+            )
 
         # 90+ days bucket
-        bucket_90_plus = next((b for b in buckets if '90' in b.get('bucket', '')), None)
-        if bucket_90_plus and bucket_90_plus.get('amount', 0) > 0:
-            insights.append({
-                'type': 'warning',
-                'title': 'Severely Overdue Invoices',
-                'description': f"${bucket_90_plus.get('amount', 0):,.0f} is 90+ days overdue.",
-                'impact': 'negative'
-            })
+        bucket_90_plus = next((b for b in buckets if "90" in b.get("bucket", "")), None)
+        if bucket_90_plus and bucket_90_plus.get("amount", 0) > 0:
+            insights.append(
+                {
+                    "type": "warning",
+                    "title": "Severely Overdue Invoices",
+                    "description": f"${bucket_90_plus.get('amount', 0):,.0f} is 90+ days overdue.",
+                    "impact": "negative",
+                }
+            )
 
         # Supplier with high overdue
-        high_overdue_suppliers = [s for s in suppliers if s.get('days_90_plus', 0) > 0]
+        high_overdue_suppliers = [s for s in suppliers if s.get("days_90_plus", 0) > 0]
         if high_overdue_suppliers:
-            total_90_plus = sum(s.get('days_90_plus', 0) for s in high_overdue_suppliers)
-            insights.append({
-                'type': 'info',
-                'title': 'Suppliers with Aged Payables',
-                'description': f'{len(high_overdue_suppliers)} suppliers have 90+ day balances '
-                               f'totaling ${total_90_plus:,.0f}.',
-                'impact': 'neutral'
-            })
+            total_90_plus = sum(
+                s.get("days_90_plus", 0) for s in high_overdue_suppliers
+            )
+            insights.append(
+                {
+                    "type": "info",
+                    "title": "Suppliers with Aged Payables",
+                    "description": f"{len(high_overdue_suppliers)} suppliers have 90+ day balances "
+                    f"totaling ${total_90_plus:,.0f}.",
+                    "impact": "neutral",
+                }
+            )
 
         # Payment terms compliance
         if terms_compliance:
-            low_compliance_terms = [t for t in terms_compliance if t.get('on_time_rate', 100) < 70]
+            low_compliance_terms = [
+                t for t in terms_compliance if t.get("on_time_rate", 100) < 70
+            ]
             if low_compliance_terms:
-                worst = min(low_compliance_terms, key=lambda x: x.get('on_time_rate', 100))
-                insights.append({
-                    'type': 'warning',
-                    'title': 'Payment Terms Non-Compliance',
-                    'description': f"'{worst.get('payment_terms', '')}' terms have "
-                                   f"{worst.get('on_time_rate', 0):.1f}% on-time rate.",
-                    'impact': 'negative'
-                })
+                worst = min(
+                    low_compliance_terms, key=lambda x: x.get("on_time_rate", 100)
+                )
+                insights.append(
+                    {
+                        "type": "warning",
+                        "title": "Payment Terms Non-Compliance",
+                        "description": f"'{worst.get('payment_terms', '')}' terms have "
+                        f"{worst.get('on_time_rate', 0):.1f}% on-time rate.",
+                        "impact": "negative",
+                    }
+                )
 
         return insights[:6]
 
@@ -288,94 +333,118 @@ class APAgingReportGenerator(BaseReportGenerator):
         recommendations = []
 
         # Overdue management
-        overdue_pct = summary.get('overdue_pct', 0)
-        overdue_amount = summary.get('overdue_amount', 0)
+        overdue_pct = summary.get("overdue_pct", 0)
+        overdue_amount = summary.get("overdue_amount", 0)
         if overdue_pct > 15:
-            recommendations.append({
-                'type': 'warning',
-                'priority': 'High',
-                'title': 'Reduce Overdue Balance',
-                'description': f'${overdue_amount:,.0f} overdue requires immediate attention.',
-                'action': 'Prioritize payment of oldest invoices and resolve disputes'
-            })
+            recommendations.append(
+                {
+                    "type": "warning",
+                    "priority": "High",
+                    "title": "Reduce Overdue Balance",
+                    "description": f"${overdue_amount:,.0f} overdue requires immediate attention.",
+                    "action": "Prioritize payment of oldest invoices and resolve disputes",
+                }
+            )
 
         # 90+ days aging
-        bucket_90_plus = next((b for b in buckets if '90' in b.get('bucket', '')), None)
-        if bucket_90_plus and bucket_90_plus.get('amount', 0) > 10000:
-            recommendations.append({
-                'type': 'warning',
-                'priority': 'High',
-                'title': 'Address Severely Overdue Items',
-                'description': f"${bucket_90_plus.get('amount', 0):,.0f} in 90+ day bucket.",
-                'action': 'Investigate payment blocks, disputes, or authorization issues'
-            })
+        bucket_90_plus = next((b for b in buckets if "90" in b.get("bucket", "")), None)
+        if bucket_90_plus and bucket_90_plus.get("amount", 0) > 10000:
+            recommendations.append(
+                {
+                    "type": "warning",
+                    "priority": "High",
+                    "title": "Address Severely Overdue Items",
+                    "description": f"${bucket_90_plus.get('amount', 0):,.0f} in 90+ day bucket.",
+                    "action": "Investigate payment blocks, disputes, or authorization issues",
+                }
+            )
 
         # On-time rate improvement
-        on_time_rate = summary.get('on_time_rate', 0)
+        on_time_rate = summary.get("on_time_rate", 0)
         if on_time_rate < 85:
-            recommendations.append({
-                'type': 'opportunity',
-                'priority': 'Medium',
-                'title': 'Improve On-Time Payments',
-                'description': f'{on_time_rate:.1f}% on-time rate below target of 90%.',
-                'action': 'Implement payment automation and early warning alerts'
-            })
+            recommendations.append(
+                {
+                    "type": "opportunity",
+                    "priority": "Medium",
+                    "title": "Improve On-Time Payments",
+                    "description": f"{on_time_rate:.1f}% on-time rate below target of 90%.",
+                    "action": "Implement payment automation and early warning alerts",
+                }
+            )
 
         # High-risk suppliers
-        high_risk_suppliers = [s for s in suppliers if s.get('on_time_rate', 100) < 70 and s.get('total_ap', 0) > 50000]
+        high_risk_suppliers = [
+            s
+            for s in suppliers
+            if s.get("on_time_rate", 100) < 70 and s.get("total_ap", 0) > 50000
+        ]
         if high_risk_suppliers:
-            supplier_names = ', '.join([s.get('supplier', '') for s in high_risk_suppliers[:3]])
-            recommendations.append({
-                'type': 'warning',
-                'priority': 'High',
-                'title': 'Critical Supplier Payment Issues',
-                'description': f'Low on-time rates with key suppliers: {supplier_names}.',
-                'action': 'Review payment processes for these suppliers immediately'
-            })
+            supplier_names = ", ".join(
+                [s.get("supplier", "") for s in high_risk_suppliers[:3]]
+            )
+            recommendations.append(
+                {
+                    "type": "warning",
+                    "priority": "High",
+                    "title": "Critical Supplier Payment Issues",
+                    "description": f"Low on-time rates with key suppliers: {supplier_names}.",
+                    "action": "Review payment processes for these suppliers immediately",
+                }
+            )
 
         # Cash flow planning
         if cash_flow:
-            upcoming_payments = sum(cf.get('amount', 0) for cf in cash_flow[:4])
-            if upcoming_payments > summary.get('total_ap', 0) * 0.5:
-                recommendations.append({
-                    'type': 'info',
-                    'priority': 'Medium',
-                    'title': 'Upcoming Payment Volume',
-                    'description': f'${upcoming_payments:,.0f} due in next 4 weeks.',
-                    'action': 'Ensure adequate cash reserves for upcoming payments'
-                })
+            upcoming_payments = sum(cf.get("amount", 0) for cf in cash_flow[:4])
+            if upcoming_payments > summary.get("total_ap", 0) * 0.5:
+                recommendations.append(
+                    {
+                        "type": "info",
+                        "priority": "Medium",
+                        "title": "Upcoming Payment Volume",
+                        "description": f"${upcoming_payments:,.0f} due in next 4 weeks.",
+                        "action": "Ensure adequate cash reserves for upcoming payments",
+                    }
+                )
 
         # Payment timing optimization
-        current_days_to_pay = summary.get('current_days_to_pay', summary.get('current_dpo', 0))
+        current_days_to_pay = summary.get(
+            "current_days_to_pay", summary.get("current_dpo", 0)
+        )
         if current_days_to_pay < 25:
-            recommendations.append({
-                'type': 'opportunity',
-                'priority': 'Low',
-                'title': 'Optimize Payment Timing',
-                'description': f'Avg {current_days_to_pay:.1f} days to pay may be too aggressive.',
-                'action': 'Consider extending payment terms to improve cash flow'
-            })
+            recommendations.append(
+                {
+                    "type": "opportunity",
+                    "priority": "Low",
+                    "title": "Optimize Payment Timing",
+                    "description": f"Avg {current_days_to_pay:.1f} days to pay may be too aggressive.",
+                    "action": "Consider extending payment terms to improve cash flow",
+                }
+            )
         elif current_days_to_pay > 50:
-            recommendations.append({
-                'type': 'warning',
-                'priority': 'Medium',
-                'title': 'Extended Payment Cycle Risk',
-                'description': f'Avg {current_days_to_pay:.1f} days to pay may strain supplier relationships.',
-                'action': 'Accelerate payments to strategic suppliers'
-            })
+            recommendations.append(
+                {
+                    "type": "warning",
+                    "priority": "Medium",
+                    "title": "Extended Payment Cycle Risk",
+                    "description": f"Avg {current_days_to_pay:.1f} days to pay may strain supplier relationships.",
+                    "action": "Accelerate payments to strategic suppliers",
+                }
+            )
 
         # Supplier concentration
         if suppliers:
-            top_3_value = sum(s.get('total_ap', 0) for s in suppliers[:3])
-            total_ap = summary.get('total_ap', 0)
+            top_3_value = sum(s.get("total_ap", 0) for s in suppliers[:3])
+            total_ap = summary.get("total_ap", 0)
             concentration = (top_3_value / total_ap * 100) if total_ap > 0 else 0
             if concentration > 60:
-                recommendations.append({
-                    'type': 'info',
-                    'priority': 'Medium',
-                    'title': 'High AP Concentration',
-                    'description': f'Top 3 suppliers represent {concentration:.1f}% of AP.',
-                    'action': 'Prioritize relationship management with key suppliers'
-                })
+                recommendations.append(
+                    {
+                        "type": "info",
+                        "priority": "Medium",
+                        "title": "High AP Concentration",
+                        "description": f"Top 3 suppliers represent {concentration:.1f}% of AP.",
+                        "action": "Prioritize relationship management with key suppliers",
+                    }
+                )
 
         return recommendations[:6]

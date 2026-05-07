@@ -14,17 +14,18 @@ c) Semantic cache key includes user_id. Two users in the same org sharing
    an insight ID would otherwise receive each other's cached analytical
    responses — a privacy leak in multi-user organizations.
 """
+
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.authentication.models import Organization, UserProfile
-from apps.analytics.tasks import perform_deep_analysis_async
 from apps.analytics.ai_providers import AIProviderManager
+from apps.analytics.tasks import perform_deep_analysis_async
+from apps.authentication.models import Organization, UserProfile
 
 User = get_user_model()
 
@@ -63,9 +64,7 @@ class TestDeepAnalysisInsightDataCaps(APITestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(username="da_user", password="pw")
-        UserProfile.objects.create(
-            user=self.user, organization=self.org, role="viewer"
-        )
+        UserProfile.objects.create(user=self.user, organization=self.org, role="viewer")
         self.client.force_authenticate(self.user)
         self.url = reverse("request-deep-analysis")
 

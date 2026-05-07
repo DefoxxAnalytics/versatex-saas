@@ -11,7 +11,8 @@ AI_CHAT_ALLOWED_MODELS + AI_CHAT_DEFAULT_MODEL settings:
 Mocking matches `test_sse_error_sanitization.py` — `patch("anthropic.Anthropic")`
 inside the request, so the streaming generator never touches the real network.
 """
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import override_settings
@@ -46,8 +47,8 @@ class TestStreamingModelAllowlist:
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514', 'claude-opus-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_disallowed_model_rejected_with_400(self, authenticated_client):
         url = reverse("ai-chat-stream")
@@ -64,18 +65,20 @@ class TestStreamingModelAllowlist:
             f"Body: {getattr(response, 'data', None)!r}"
         )
         body = str(response.data).lower()
-        assert "model" in body, (
-            f"Error response must mention 'model': {response.data!r}"
-        )
+        assert (
+            "model" in body
+        ), f"Error response must mention 'model': {response.data!r}"
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514', 'claude-opus-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_allowed_model_accepted(self, authenticated_client):
         url = reverse("ai-chat-stream")
-        with patch("anthropic.Anthropic", return_value=_stub_anthropic()) as mock_anthropic:
+        with patch(
+            "anthropic.Anthropic", return_value=_stub_anthropic()
+        ) as mock_anthropic:
             response = authenticated_client.post(
                 url,
                 {
@@ -106,12 +109,14 @@ class TestStreamingModelAllowlist:
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_no_model_uses_default(self, authenticated_client):
         url = reverse("ai-chat-stream")
-        with patch("anthropic.Anthropic", return_value=_stub_anthropic()) as mock_anthropic:
+        with patch(
+            "anthropic.Anthropic", return_value=_stub_anthropic()
+        ) as mock_anthropic:
             response = authenticated_client.post(
                 url,
                 {"messages": [{"role": "user", "content": "hi"}]},  # no 'model'
@@ -133,8 +138,8 @@ class TestStreamingModelAllowlist:
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_blank_model_uses_default(self, authenticated_client):
         """Empty-string 'model' must fall back to default, not 400 the request.
@@ -143,7 +148,9 @@ class TestStreamingModelAllowlist:
         string from the client is indistinguishable from "no model specified".
         """
         url = reverse("ai-chat-stream")
-        with patch("anthropic.Anthropic", return_value=_stub_anthropic()) as mock_anthropic:
+        with patch(
+            "anthropic.Anthropic", return_value=_stub_anthropic()
+        ) as mock_anthropic:
             response = authenticated_client.post(
                 url,
                 {"messages": [{"role": "user", "content": "hi"}], "model": ""},

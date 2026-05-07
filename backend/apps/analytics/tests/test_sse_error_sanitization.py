@@ -8,12 +8,12 @@ its message, which then bleeds out to the browser as an SSE event.
 These tests force the streaming generator to take the error path and
 assert the raw exception message does not appear in the response body.
 """
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import override_settings
 from django.urls import reverse
-
 
 LEAKY_MESSAGE = "Invalid API key sk-ant-FAKEKEYFRAGMENT not authorized"
 
@@ -53,13 +53,11 @@ class TestSSEErrorSanitization:
                 "exercised the streaming error path. Body was: " + body[:500]
             )
 
-        assert "sk-ant-FAKEKEYFRAGMENT" not in body, (
-            f"Raw exception text leaked into SSE response. Body was: {body[:500]}"
-        )
+        assert (
+            "sk-ant-FAKEKEYFRAGMENT" not in body
+        ), f"Raw exception text leaked into SSE response. Body was: {body[:500]}"
         assert "FAKEKEYFRAGMENT" not in body
-        assert '"error"' in body, (
-            f"Expected an SSE 'error' event, got: {body[:500]}"
-        )
+        assert '"error"' in body, f"Expected an SSE 'error' event, got: {body[:500]}"
 
     @override_settings(ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over")
     def test_ai_quick_query_does_not_leak_exception_text(self, authenticated_client):
@@ -83,8 +81,8 @@ class TestSSEErrorSanitization:
                 "exercised the streaming error path. Body was: " + body[:500]
             )
 
-        assert "sk-ant-FAKEKEYFRAGMENT" not in body, (
-            f"Raw exception text leaked into SSE response. Body was: {body[:500]}"
-        )
+        assert (
+            "sk-ant-FAKEKEYFRAGMENT" not in body
+        ), f"Raw exception text leaked into SSE response. Body was: {body[:500]}"
         assert "FAKEKEYFRAGMENT" not in body
         assert '"error"' in body

@@ -9,11 +9,11 @@ messages with a small enum so frontend can branch and ops can monitor.
 
 
 class AIErrorCode:
-    AUTH_ERROR = 'auth_error'
-    RATE_LIMITED = 'rate_limited'
-    SERVICE_UNAVAILABLE = 'service_unavailable'
-    BAD_REQUEST = 'bad_request'
-    UNKNOWN = 'unknown'
+    AUTH_ERROR = "auth_error"
+    RATE_LIMITED = "rate_limited"
+    SERVICE_UNAVAILABLE = "service_unavailable"
+    BAD_REQUEST = "bad_request"
+    UNKNOWN = "unknown"
 
 
 def classify_anthropic_error(exc):
@@ -39,9 +39,9 @@ def classify_anthropic_error(exc):
 
 
 USER_FACING_MESSAGES = {
-    AIErrorCode.AUTH_ERROR: 'AI authentication failed. Check the API key in Settings.',
-    AIErrorCode.RATE_LIMITED: 'AI service is rate limited. Try again in a moment.',
-    AIErrorCode.SERVICE_UNAVAILABLE: 'AI service is temporarily unavailable.',
-    AIErrorCode.BAD_REQUEST: 'AI request was rejected. Check input length / model name.',
-    AIErrorCode.UNKNOWN: 'AI service error. See server logs.',
+    AIErrorCode.AUTH_ERROR: "AI authentication failed. Check the API key in Settings.",
+    AIErrorCode.RATE_LIMITED: "AI service is rate limited. Try again in a moment.",
+    AIErrorCode.SERVICE_UNAVAILABLE: "AI service is temporarily unavailable.",
+    AIErrorCode.BAD_REQUEST: "AI request was rejected. Check input length / model name.",
+    AIErrorCode.UNKNOWN: "AI service error. See server logs.",
 }

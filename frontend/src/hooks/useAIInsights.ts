@@ -13,9 +13,9 @@
  * - Redis caching with cache_hit indicator
  * - Manual refresh support to bypass cache
  */
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { analyticsAPI, getOrganizationParam } from "@/lib/api";
+import { analyticsAPI, authAPI, getOrganizationParam } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAnalyticsFilters } from "./useAnalytics";
 import type {
@@ -119,7 +119,10 @@ export function useAIInsightsAnomalies(sensitivity: number = 2.0) {
   return useQuery({
     queryKey: queryKeys.ai.insightsAnomalies(sensitivity, orgId, filters),
     queryFn: async () => {
-      const response = await analyticsAPI.getAIInsightsAnomalies(sensitivity, filters);
+      const response = await analyticsAPI.getAIInsightsAnomalies(
+        sensitivity,
+        filters,
+      );
       return response.data;
     },
     staleTime: 5 * 60 * 1000,
@@ -638,126 +641,178 @@ export function useAIChatStream() {
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  // v3.1 Phase 1 (F-C1): ref tracks the latest messages alongside React
+  // state so the sendMessage callback can read fresh history without
+  // re-creating the callback (and remounting consumers) on every message.
+  // Previously `useCallback(..., [state.messages])` captured a snapshot;
+  // a fast follow-up sent before React flushed the setState would land
+  // with stale history, breaking LLM context for the second turn.
+  const messagesRef = useRef<ChatMessage[]>([]);
 
-  const sendMessage = useCallback(async (content: string, context?: Record<string, unknown>) => {
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content,
-      timestamp: new Date(),
-    };
+  const sendMessage = useCallback(
+    async (content: string, context?: Record<string, unknown>) => {
+      const userMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content,
+        timestamp: new Date(),
+      };
 
-    const assistantMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "",
-      timestamp: new Date(),
-      isStreaming: true,
-    };
+      const assistantMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+        timestamp: new Date(),
+        isStreaming: true,
+      };
 
-    setState((prev) => ({
-      ...prev,
-      messages: [...prev.messages, userMessage, assistantMessage],
-      isStreaming: true,
-      error: null,
-    }));
-
-    abortControllerRef.current = new AbortController();
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001/api";
-
-      const messagesToSend = [...state.messages, userMessage].map((m) => ({
+      // Snapshot history BEFORE the optimistic append so we send only
+      // {prior history + the new user turn} — not the placeholder
+      // assistant message we're about to render.
+      const messagesToSend = [...messagesRef.current, userMessage].map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const response = await fetch(`${apiUrl}/v1/analytics/ai-insights/chat/stream/`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: messagesToSend,
-          context: context || {},
-        }),
-        signal: abortControllerRef.current.signal,
+      setState((prev) => {
+        const next = [...prev.messages, userMessage, assistantMessage];
+        messagesRef.current = next;
+        return {
+          ...prev,
+          messages: next,
+          isStreaming: true,
+          error: null,
+        };
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
-      }
+      abortControllerRef.current = new AbortController();
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body");
-      }
+      // Helper kept inline so the closure over assistantMessage.id is
+      // colocated. Updates messagesRef in lockstep with setState so the
+      // ref never lags the rendered UI.
+      const applyMessages = (
+        updater: (msgs: ChatMessage[]) => ChatMessage[],
+        patch: Partial<Omit<ChatStreamState, "messages">> = {},
+      ) => {
+        setState((prev) => {
+          const messages = updater(prev.messages);
+          messagesRef.current = messages;
+          return { ...prev, ...patch, messages };
+        });
+      };
 
-      const decoder = new TextDecoder();
-      let fullContent = "";
+      try {
+        const apiUrl =
+          import.meta.env.VITE_API_URL || "http://127.0.0.1:8001/api";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        // v3.1 Phase 1 (F-H1): if the access cookie expires mid-session, the
+        // SSE fetch returns 401 — but unlike the axios interceptor it has no
+        // retry. Refresh once, retry once, then surface the failure. Retry
+        // is bounded so a genuinely-broken auth state doesn't loop.
+        const openStream = async (): Promise<Response> =>
+          fetch(`${apiUrl}/v1/analytics/ai-insights/chat/stream/`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: messagesToSend,
+              context: context || {},
+            }),
+            signal: abortControllerRef.current!.signal,
+          });
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        let response = await openStream();
+        if (response.status === 401) {
+          try {
+            await authAPI.refreshToken();
+            response = await openStream();
+          } catch {
+            // refreshToken failure: fall through, surface 401 below.
+          }
+        }
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("No response body");
+        }
+
+        const decoder = new TextDecoder();
+        let fullContent = "";
+        // v3.1 Phase 1 (F-H2): reader buffer for SSE events split across
+        // TCP boundaries. Without this, a `data: {...}` line that arrives
+        // in two chunks gets JSON.parse-rejected and silently dropped via
+        // the catch — visible to users as missing tokens / empty replies.
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            // Flush the trailing buffer in case the stream ended without a
+            // final newline.
+            buffer += decoder.decode();
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          // Keep the last (possibly incomplete) line for the next iteration.
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
             try {
               const data: StreamEvent = JSON.parse(line.slice(6));
 
               if (data.error || data.error_code) {
-                setState((prev) => ({
-                  ...prev,
+                applyMessages((m) => m, {
                   isStreaming: false,
                   error: resolveStreamErrorMessage(data),
-                }));
+                });
                 return;
               }
 
               if (data.token) {
                 fullContent += data.token;
-                setState((prev) => ({
-                  ...prev,
-                  messages: prev.messages.map((m) =>
+                applyMessages((msgs) =>
+                  msgs.map((m) =>
                     m.id === assistantMessage.id
                       ? { ...m, content: fullContent }
-                      : m
+                      : m,
                   ),
-                }));
+                );
               }
 
               if (data.done) {
-                setState((prev) => ({
-                  ...prev,
-                  isStreaming: false,
-                  usage: data.usage || null,
-                  messages: prev.messages.map((m) =>
-                    m.id === assistantMessage.id
-                      ? { ...m, isStreaming: false }
-                      : m
-                  ),
-                }));
+                applyMessages(
+                  (msgs) =>
+                    msgs.map((m) =>
+                      m.id === assistantMessage.id
+                        ? { ...m, isStreaming: false }
+                        : m,
+                    ),
+                  { isStreaming: false, usage: data.usage || null },
+                );
               }
             } catch {
-              // Ignore parse errors for incomplete chunks
+              // Truly malformed SSE frame — log via dev tools, skip.
             }
           }
         }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          applyMessages((m) => m, {
+            isStreaming: false,
+            error: (error as Error).message,
+          });
+        }
       }
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setState((prev) => ({
-          ...prev,
-          isStreaming: false,
-          error: (error as Error).message,
-        }));
-      }
-    }
-  }, [state.messages]);
+    },
+    [],
+  );
 
   const cancelStream = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -765,9 +820,21 @@ export function useAIChatStream() {
       ...prev,
       isStreaming: false,
       messages: prev.messages.map((m) =>
-        m.isStreaming ? { ...m, isStreaming: false } : m
+        m.isStreaming ? { ...m, isStreaming: false } : m,
       ),
     }));
+  }, []);
+
+  // v3.1 Phase 2 (F-M3): abort any in-flight stream on unmount. Without
+  // this, navigating away mid-stream leaves the fetch + reader running:
+  // the assistant message keeps consuming LLM credits and the eventual
+  // setState fires on an unmounted component (React 18 warning, prod
+  // memory leak). cancelStream is consumer-driven and didn't fire here.
+  useEffect(() => {
+    const controller = abortControllerRef;
+    return () => {
+      controller.current?.abort();
+    };
   }, []);
 
   const clearMessages = useCallback(() => {
@@ -805,84 +872,91 @@ export function useAIQuickQuery() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const query = useCallback(async (queryText: string, includeContext = true) => {
-    setState({ response: "", isStreaming: true, error: null });
+  const query = useCallback(
+    async (queryText: string, includeContext = true) => {
+      setState({ response: "", isStreaming: true, error: null });
 
-    abortControllerRef.current = new AbortController();
+      abortControllerRef.current = new AbortController();
 
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001/api";
+      try {
+        const apiUrl =
+          import.meta.env.VITE_API_URL || "http://127.0.0.1:8001/api";
 
-      const response = await fetch(`${apiUrl}/v1/analytics/ai-insights/chat/quick/`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: queryText,
-          include_context: includeContext,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
+        const response = await fetch(
+          `${apiUrl}/v1/analytics/ai-insights/chat/quick/`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: queryText,
+              include_context: includeContext,
+            }),
+            signal: abortControllerRef.current.signal,
+          },
+        );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
-      }
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body");
-      }
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("No response body");
+        }
 
-      const decoder = new TextDecoder();
-      let fullContent = "";
+        const decoder = new TextDecoder();
+        let fullContent = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data: StreamEvent = JSON.parse(line.slice(6));
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data: StreamEvent = JSON.parse(line.slice(6));
 
-              if (data.error || data.error_code) {
-                setState((prev) => ({
-                  ...prev,
-                  isStreaming: false,
-                  error: resolveStreamErrorMessage(data),
-                }));
-                return;
+                if (data.error || data.error_code) {
+                  setState((prev) => ({
+                    ...prev,
+                    isStreaming: false,
+                    error: resolveStreamErrorMessage(data),
+                  }));
+                  return;
+                }
+
+                if (data.token) {
+                  fullContent += data.token;
+                  setState((prev) => ({ ...prev, response: fullContent }));
+                }
+
+                if (data.done) {
+                  setState((prev) => ({ ...prev, isStreaming: false }));
+                }
+              } catch {
+                // Ignore parse errors
               }
-
-              if (data.token) {
-                fullContent += data.token;
-                setState((prev) => ({ ...prev, response: fullContent }));
-              }
-
-              if (data.done) {
-                setState((prev) => ({ ...prev, isStreaming: false }));
-              }
-            } catch {
-              // Ignore parse errors
             }
           }
         }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setState((prev) => ({
+            ...prev,
+            isStreaming: false,
+            error: (error as Error).message,
+          }));
+        }
       }
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setState((prev) => ({
-          ...prev,
-          isStreaming: false,
-          error: (error as Error).message,
-        }));
-      }
-    }
-  }, []);
+    },
+    [],
+  );
 
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort();

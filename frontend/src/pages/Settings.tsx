@@ -648,7 +648,8 @@ export default function Settings() {
                   </div>
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
-                    Stored in your user preferences. Treat as sensitive — visible to users with admin access to your account.
+                    Stored in your user preferences. Treat as sensitive —
+                    visible to users with admin access to your account.
                   </p>
                 </div>
               </div>
@@ -799,7 +800,9 @@ export default function Settings() {
                       <SelectItem value="conservative">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-blue-500" />
-                          <span>Conservative (Risk-averse, 70%+ confidence)</span>
+                          <span>
+                            Conservative (Risk-averse, 70%+ confidence)
+                          </span>
                         </div>
                       </SelectItem>
                       <SelectItem value="moderate">
@@ -831,19 +834,26 @@ export default function Settings() {
                   </p>
                   {/* Realization Probability Badge */}
                   {savingsConfigData?.effective_config?.benchmark_profile &&
-                    savingsConfigData.effective_config.benchmark_profile !== "custom" && (
+                    savingsConfigData.effective_config.benchmark_profile !==
+                      "custom" && (
                       <div className="flex items-center gap-2 mt-2">
                         <Badge
                           variant={
                             PROFILE_REALIZATION[
                               savingsConfigData.effective_config
-                                .benchmark_profile as Exclude<BenchmarkProfile, "custom">
+                                .benchmark_profile as Exclude<
+                                BenchmarkProfile,
+                                "custom"
+                              >
                             ]?.variant || "secondary"
                           }
                         >
                           {PROFILE_REALIZATION[
                             savingsConfigData.effective_config
-                              .benchmark_profile as Exclude<BenchmarkProfile, "custom">
+                              .benchmark_profile as Exclude<
+                              BenchmarkProfile,
+                              "custom"
+                            >
                           ]?.range || "N/A"}{" "}
                           Achievement
                         </Badge>
@@ -856,7 +866,9 @@ export default function Settings() {
 
                 {/* Show current effective rates with ranges */}
                 <div className="rounded-lg bg-muted/50 p-4 space-y-3">
-                  <h4 className="text-sm font-medium">Current Effective Rates</h4>
+                  <h4 className="text-sm font-medium">
+                    Current Effective Rates
+                  </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">
@@ -870,7 +882,8 @@ export default function Settings() {
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
-                          (range: {getBenchmarkRangeString("consolidation_rate")})
+                          (range:{" "}
+                          {getBenchmarkRangeString("consolidation_rate")})
                         </span>
                       </div>
                     </div>
@@ -886,7 +899,8 @@ export default function Settings() {
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
-                          (range: {getBenchmarkRangeString("anomaly_recovery_rate")})
+                          (range:{" "}
+                          {getBenchmarkRangeString("anomaly_recovery_rate")})
                         </span>
                       </div>
                     </div>
@@ -902,7 +916,8 @@ export default function Settings() {
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
-                          (range: {getBenchmarkRangeString("price_variance_capture")})
+                          (range:{" "}
+                          {getBenchmarkRangeString("price_variance_capture")})
                         </span>
                       </div>
                     </div>
@@ -913,12 +928,13 @@ export default function Settings() {
                       <div className="text-right">
                         <span className="font-medium">
                           {formatRateAsPercentage(
-                            savingsConfigData?.effective_config?.specification_rate ??
-                              0.03,
+                            savingsConfigData?.effective_config
+                              ?.specification_rate ?? 0.03,
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
-                          (range: {getBenchmarkRangeString("specification_rate")})
+                          (range:{" "}
+                          {getBenchmarkRangeString("specification_rate")})
                         </span>
                       </div>
                     </div>
@@ -934,7 +950,8 @@ export default function Settings() {
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
-                          (range: {getBenchmarkRangeString("payment_terms_rate")})
+                          (range:{" "}
+                          {getBenchmarkRangeString("payment_terms_rate")})
                         </span>
                       </div>
                     </div>
@@ -950,7 +967,8 @@ export default function Settings() {
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2">
-                          (range: {getBenchmarkRangeString("process_savings_per_txn")})
+                          (range:{" "}
+                          {getBenchmarkRangeString("process_savings_per_txn")})
                         </span>
                       </div>
                     </div>
@@ -967,8 +985,12 @@ export default function Settings() {
                     <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-4 space-y-3 text-sm">
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="font-medium">Vendor Consolidation (1-8%)</span>
-                          <p className="text-muted-foreground">Deloitte Procurement Study, 2024</p>
+                          <span className="font-medium">
+                            Vendor Consolidation (1-8%)
+                          </span>
+                          <p className="text-muted-foreground">
+                            Deloitte Procurement Study, 2024
+                          </p>
                         </div>
                         <a
                           href="https://www2.deloitte.com/us/en/pages/operations/articles/procurement-analytics.html"
@@ -982,8 +1004,12 @@ export default function Settings() {
                       <Separator />
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="font-medium">Invoice Accuracy (0.5-1.5%)</span>
-                          <p className="text-muted-foreground">Aberdeen Group AP Research, 2023</p>
+                          <span className="font-medium">
+                            Invoice Accuracy (0.5-1.5%)
+                          </span>
+                          <p className="text-muted-foreground">
+                            Aberdeen Group AP Research, 2023
+                          </p>
                         </div>
                         <a
                           href="https://www.aberdeen.com/research/accounts-payable"
@@ -997,8 +1023,12 @@ export default function Settings() {
                       <Separator />
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="font-medium">Specification Standardization (2-4%)</span>
-                          <p className="text-muted-foreground">McKinsey Operations Practice, 2024</p>
+                          <span className="font-medium">
+                            Specification Standardization (2-4%)
+                          </span>
+                          <p className="text-muted-foreground">
+                            McKinsey Operations Practice, 2024
+                          </p>
                         </div>
                         <a
                           href="https://www.mckinsey.com/capabilities/operations/our-insights"
@@ -1012,8 +1042,12 @@ export default function Settings() {
                       <Separator />
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="font-medium">Payment Terms Optimization (0.5-1.2%)</span>
-                          <p className="text-muted-foreground">Hackett Group Working Capital Study, 2024</p>
+                          <span className="font-medium">
+                            Payment Terms Optimization (0.5-1.2%)
+                          </span>
+                          <p className="text-muted-foreground">
+                            Hackett Group Working Capital Study, 2024
+                          </p>
                         </div>
                         <a
                           href="https://www.thehackettgroup.com/research/procurement"
@@ -1027,8 +1061,12 @@ export default function Settings() {
                       <Separator />
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className="font-medium">Process Automation ($25-50/txn)</span>
-                          <p className="text-muted-foreground">APQC Process Benchmarking, 2024</p>
+                          <span className="font-medium">
+                            Process Automation ($25-50/txn)
+                          </span>
+                          <p className="text-muted-foreground">
+                            APQC Process Benchmarking, 2024
+                          </p>
                         </div>
                         <a
                           href="https://www.apqc.org/resource-library/resource-listing/procurement-benchmarks"
@@ -1045,7 +1083,8 @@ export default function Settings() {
 
                 {/* Historical Performance (if data available) */}
                 {effectivenessData &&
-                  effectivenessData.savings_metrics?.total_actual_savings > 0 && (
+                  effectivenessData.savings_metrics?.total_actual_savings >
+                    0 && (
                     <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 p-4 mt-4 border border-amber-200 dark:border-amber-800">
                       <h4 className="text-sm font-medium flex items-center gap-2 mb-3">
                         <TrendingUp className="h-4 w-4 text-amber-600" />
@@ -1085,7 +1124,9 @@ export default function Settings() {
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
-                        Based on {effectivenessData.savings_metrics.implemented_insights || 0}{" "}
+                        Based on{" "}
+                        {effectivenessData.savings_metrics
+                          .implemented_insights || 0}{" "}
                         implemented insights
                       </p>
                     </div>
@@ -1097,7 +1138,9 @@ export default function Settings() {
                   <>
                     <Separator />
                     <div className="space-y-4 pl-4 border-l-2 border-green-200 dark:border-green-800">
-                      <h4 className="text-sm font-medium">Custom Rate Configuration</h4>
+                      <h4 className="text-sm font-medium">
+                        Custom Rate Configuration
+                      </h4>
 
                       {/* Consolidation Rate */}
                       <div className="space-y-2">
@@ -1157,7 +1200,9 @@ export default function Settings() {
                               { anomaly_recovery_rate: value[0] / 100 },
                               {
                                 onSuccess: () =>
-                                  toast.success("Anomaly recovery rate updated"),
+                                  toast.success(
+                                    "Anomaly recovery rate updated",
+                                  ),
                               },
                             );
                           }}
@@ -1191,7 +1236,9 @@ export default function Settings() {
                               { price_variance_capture: value[0] / 100 },
                               {
                                 onSuccess: () =>
-                                  toast.success("Price variance capture updated"),
+                                  toast.success(
+                                    "Price variance capture updated",
+                                  ),
                               },
                             );
                           }}
@@ -1214,17 +1261,20 @@ export default function Settings() {
                       [
                         { key: "consolidation", label: "Vendor Consolidation" },
                         { key: "anomaly", label: "Anomaly Detection" },
-                        { key: "cost_optimization", label: "Cost Optimization" },
+                        {
+                          key: "cost_optimization",
+                          label: "Cost Optimization",
+                        },
                         { key: "risk", label: "Risk Analysis" },
                       ] as const
                     ).map(({ key, label }) => {
-                      const enabledInsights =
-                        savingsConfigData?.effective_config?.enabled_insights || [
-                          "consolidation",
-                          "anomaly",
-                          "cost_optimization",
-                          "risk",
-                        ];
+                      const enabledInsights = savingsConfigData
+                        ?.effective_config?.enabled_insights || [
+                        "consolidation",
+                        "anomaly",
+                        "cost_optimization",
+                        "risk",
+                      ];
                       const isChecked = enabledInsights.includes(key);
                       return (
                         <div key={key} className="flex items-center space-x-2">

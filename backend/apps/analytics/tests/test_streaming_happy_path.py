@@ -18,6 +18,7 @@ from `text_stream`, then returns a final message with usage.
 See docs/codebase-review-2026-05-06-second-pass.md (Agent 6 coverage gaps) for
 the second-pass review requesting this coverage.
 """
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -56,8 +57,8 @@ class TestAiChatStreamHappyPath:
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_emits_tokens_in_order_then_done_sentinel(self, authenticated_client):
         # #given a stubbed Anthropic client that yields three tokens
@@ -106,8 +107,8 @@ class TestAiChatStreamHappyPath:
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_each_token_is_its_own_sse_frame(self, authenticated_client):
         # #given three distinct tokens
@@ -141,18 +142,18 @@ class TestAiChatStreamHappyPath:
         token_payloads = []
         for frame in token_frames[:-1]:  # last is the done frame
             payload = json.loads(frame.removeprefix("data: "))
-            assert "token" in payload, (
-                f"Non-terminal SSE frame missing 'token' key: {payload!r}"
-            )
+            assert (
+                "token" in payload
+            ), f"Non-terminal SSE frame missing 'token' key: {payload!r}"
             token_payloads.append(payload["token"])
-        assert token_payloads == tokens, (
-            f"Token order/content drift: expected {tokens!r}, got {token_payloads!r}"
-        )
+        assert (
+            token_payloads == tokens
+        ), f"Token order/content drift: expected {tokens!r}, got {token_payloads!r}"
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_response_carries_sse_content_type_and_proxy_headers(
         self, authenticated_client
@@ -185,8 +186,8 @@ class TestAiQuickQueryHappyPath:
 
     @override_settings(
         ANTHROPIC_API_KEY="test-key-not-used-mock-takes-over",
-        AI_CHAT_ALLOWED_MODELS=['claude-sonnet-4-20250514'],
-        AI_CHAT_DEFAULT_MODEL='claude-sonnet-4-20250514',
+        AI_CHAT_ALLOWED_MODELS=["claude-sonnet-4-20250514"],
+        AI_CHAT_DEFAULT_MODEL="claude-sonnet-4-20250514",
     )
     def test_emits_tokens_in_order_then_done_sentinel(self, authenticated_client):
         # #given a stubbed Anthropic client that yields ordered tokens

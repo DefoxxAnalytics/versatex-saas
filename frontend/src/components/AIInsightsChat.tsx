@@ -54,7 +54,7 @@ export function AIInsightsChat({
 
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]"
+      "[data-radix-scroll-area-viewport]",
     ) as HTMLDivElement;
 
     if (viewport) {
@@ -168,17 +168,16 @@ export function AIInsightsChat({
                   <MessageBubble key={message.id} message={message} />
                 ))}
 
-                {isStreaming &&
-                  !displayMessages.some((m) => m.isStreaming) && (
-                    <div className="flex items-start gap-3">
-                      <div className="h-8 w-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="rounded-lg bg-muted px-4 py-2.5">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>
+                {isStreaming && !displayMessages.some((m) => m.isStreaming) && (
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Sparkles className="h-4 w-4 text-primary" />
                     </div>
-                  )}
+                    <div className="rounded-lg bg-muted px-4 py-2.5">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
               </div>
             </ScrollArea>
           )}
@@ -219,11 +218,7 @@ export function AIInsightsChat({
               <StopCircle className="h-5 w-5" />
             </Button>
           ) : (
-            <Button
-              type="submit"
-              size="icon"
-              className="shrink-0 h-11 w-11"
-            >
+            <Button type="submit" size="icon" className="shrink-0 h-11 w-11">
               <Send className="h-5 w-5" />
             </Button>
           )}
@@ -240,7 +235,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     <div
       className={cn(
         "flex gap-3",
-        isUser ? "justify-end items-start" : "justify-start items-start"
+        isUser ? "justify-end items-start" : "justify-start items-start",
       )}
     >
       {!isUser && (
@@ -254,7 +249,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           "max-w-[80%] rounded-lg px-4 py-2.5",
           isUser
             ? "bg-primary text-primary-foreground"
-            : "bg-muted text-foreground"
+            : "bg-muted text-foreground",
         )}
       >
         {isUser ? (

@@ -2,24 +2,26 @@
 Custom exception handler for sanitized API error responses.
 Prevents leaking sensitive information in error messages.
 """
+
 import logging
-from rest_framework.views import exception_handler
-from rest_framework.response import Response
-from rest_framework import status
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import exception_handler
 
-logger = logging.getLogger('django.security')
+logger = logging.getLogger("django.security")
 
 # Generic error messages for security-sensitive errors
 GENERIC_ERROR_MESSAGES = {
-    400: 'Invalid request data.',
-    401: 'Authentication credentials were not provided or are invalid.',
-    403: 'You do not have permission to perform this action.',
-    404: 'The requested resource was not found.',
-    405: 'Method not allowed.',
-    429: 'Too many requests. Please try again later.',
-    500: 'An internal server error occurred.',
+    400: "Invalid request data.",
+    401: "Authentication credentials were not provided or are invalid.",
+    403: "You do not have permission to perform this action.",
+    404: "The requested resource was not found.",
+    405: "Method not allowed.",
+    429: "Too many requests. Please try again later.",
+    500: "An internal server error occurred.",
 }
 
 
@@ -35,8 +37,8 @@ def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
 
     # Get request info for logging
-    request = context.get('request')
-    view = context.get('view')
+    request = context.get("request")
+    view = context.get("view")
 
     # Log the full exception for debugging
     logger.warning(
@@ -53,8 +55,8 @@ def custom_exception_handler(exc, context):
         # For server errors, always return generic message
         if status_code >= 500:
             response.data = {
-                'error': GENERIC_ERROR_MESSAGES.get(500),
-                'status_code': status_code
+                "error": GENERIC_ERROR_MESSAGES.get(500),
+                "status_code": status_code,
             }
 
         # For 401/403, don't leak whether user exists
@@ -62,13 +64,15 @@ def custom_exception_handler(exc, context):
             # Keep error message but ensure it's generic
             if isinstance(response.data, dict):
                 response.data = {
-                    'error': response.data.get('detail', GENERIC_ERROR_MESSAGES.get(status_code)),
-                    'status_code': status_code
+                    "error": response.data.get(
+                        "detail", GENERIC_ERROR_MESSAGES.get(status_code)
+                    ),
+                    "status_code": status_code,
                 }
             else:
                 response.data = {
-                    'error': GENERIC_ERROR_MESSAGES.get(status_code),
-                    'status_code': status_code
+                    "error": GENERIC_ERROR_MESSAGES.get(status_code),
+                    "status_code": status_code,
                 }
 
         # For validation errors (400), sanitize database-related messages
@@ -88,8 +92,8 @@ def custom_exception_handler(exc, context):
                 response.data = sanitized_data
 
         # Add status code to response for consistency
-        if isinstance(response.data, dict) and 'status_code' not in response.data:
-            response.data['status_code'] = status_code
+        if isinstance(response.data, dict) and "status_code" not in response.data:
+            response.data["status_code"] = status_code
 
     return response
 
@@ -100,29 +104,29 @@ def sanitize_error_message(message: str) -> str:
     """
     # Keywords that might indicate database/internal structure leakage
     sensitive_patterns = [
-        'DETAIL:',
-        'SQL',
-        'column',
-        'table',
-        'constraint',
-        'foreign key',
-        'IntegrityError',
-        'OperationalError',
-        'ProgrammingError',
-        'psycopg2',
-        'postgresql',
-        'mysql',
-        'sqlite',
-        '/app/',
-        '/home/',
-        'Traceback',
+        "DETAIL:",
+        "SQL",
+        "column",
+        "table",
+        "constraint",
+        "foreign key",
+        "IntegrityError",
+        "OperationalError",
+        "ProgrammingError",
+        "psycopg2",
+        "postgresql",
+        "mysql",
+        "sqlite",
+        "/app/",
+        "/home/",
+        "Traceback",
         'File "',
-        'line ',
+        "line ",
     ]
 
     message_lower = message.lower()
     for pattern in sensitive_patterns:
         if pattern.lower() in message_lower:
-            return 'An error occurred while processing your request.'
+            return "An error occurred while processing your request."
 
     return message

@@ -146,7 +146,10 @@ function applyVersatexPaletteToSeries(
       next.itemStyle = itemStyle;
     }
     if ("areaStyle" in next && next.areaStyle) {
-      next.areaStyle = { ...(next.areaStyle as object), color: VERSATEX_AREA_GRADIENT };
+      next.areaStyle = {
+        ...(next.areaStyle as object),
+        color: VERSATEX_AREA_GRADIENT,
+      };
     }
     return next;
   }) as EChartsOption["series"];

@@ -1,11 +1,14 @@
 """
 Tests for Report API views.
 """
-import pytest
+
 import uuid
 from datetime import date
+
+import pytest
 from django.urls import reverse
 from rest_framework import status
+
 from apps.reports.models import Report
 
 
@@ -15,7 +18,7 @@ class TestReportTemplates:
 
     def test_list_templates(self, authenticated_client):
         """Test listing available report templates."""
-        url = reverse('reports:templates')
+        url = reverse("reports:templates")
         response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -24,29 +27,31 @@ class TestReportTemplates:
 
         # Check template structure
         template = response.data[0]
-        assert 'id' in template
-        assert 'name' in template
-        assert 'description' in template
-        assert 'report_type' in template
+        assert "id" in template
+        assert "name" in template
+        assert "description" in template
+        assert "report_type" in template
 
     def test_templates_require_auth(self, api_client):
         """Test that templates endpoint requires authentication."""
-        url = reverse('reports:templates')
+        url = reverse("reports:templates")
         response = api_client.get(url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_template_detail(self, authenticated_client):
         """Test getting a specific template."""
-        url = reverse('reports:template-detail', kwargs={'template_id': 'executive_summary'})
+        url = reverse(
+            "reports:template-detail", kwargs={"template_id": "executive_summary"}
+        )
         response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['id'] == 'executive_summary'
-        assert response.data['name'] == 'Executive Summary'
+        assert response.data["id"] == "executive_summary"
+        assert response.data["name"] == "Executive Summary"
 
     def test_template_detail_not_found(self, authenticated_client):
         """Test getting a non-existent template."""
-        url = reverse('reports:template-detail', kwargs={'template_id': 'nonexistent'})
+        url = reverse("reports:template-detail", kwargs={"template_id": "nonexistent"})
         response = authenticated_client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -55,87 +60,87 @@ class TestReportTemplates:
 class TestReportGeneration:
     """Tests for report generation endpoint."""
 
-    def test_generate_report_sync(self, admin_client, organization, admin_user, transaction):
+    def test_generate_report_sync(
+        self, admin_client, organization, admin_user, transaction
+    ):
         """Test generating a report synchronously."""
-        url = reverse('reports:generate')
+        url = reverse("reports:generate")
         data = {
-            'report_type': 'spend_analysis',
-            'report_format': 'pdf',
-            'name': 'Test Spend Report',
-            'async_generation': False
+            "report_type": "spend_analysis",
+            "report_format": "pdf",
+            "name": "Test Spend Report",
+            "async_generation": False,
         }
-        response = admin_client.post(url, data, format='json')
+        response = admin_client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert 'id' in response.data
-        assert response.data['status'] == 'completed'
-        assert response.data['report_type'] == 'spend_analysis'
+        assert "id" in response.data
+        assert response.data["status"] == "completed"
+        assert response.data["report_type"] == "spend_analysis"
 
-    def test_generate_report_async(self, admin_client, organization, admin_user, transaction):
+    def test_generate_report_async(
+        self, admin_client, organization, admin_user, transaction
+    ):
         """Test generating a report asynchronously."""
-        url = reverse('reports:generate')
+        url = reverse("reports:generate")
         data = {
-            'report_type': 'executive_summary',
-            'report_format': 'xlsx',
-            'async_generation': True
+            "report_type": "executive_summary",
+            "report_format": "xlsx",
+            "async_generation": True,
         }
-        response = admin_client.post(url, data, format='json')
+        response = admin_client.post(url, data, format="json")
 
         # Async returns 202 Accepted
         assert response.status_code == status.HTTP_202_ACCEPTED
-        assert 'id' in response.data
-        assert response.data['status'] == 'generating'
+        assert "id" in response.data
+        assert response.data["status"] == "generating"
 
-    def test_generate_report_with_filters(self, admin_client, organization, supplier, category, transaction):
+    def test_generate_report_with_filters(
+        self, admin_client, organization, supplier, category, transaction
+    ):
         """Test generating a report with filters."""
-        url = reverse('reports:generate')
+        url = reverse("reports:generate")
         data = {
-            'report_type': 'spend_analysis',
-            'report_format': 'pdf',
-            'filters': {
-                'supplier_ids': [supplier.id],
-                'category_ids': [category.id]
-            },
-            'async_generation': False
+            "report_type": "spend_analysis",
+            "report_format": "pdf",
+            "filters": {"supplier_ids": [supplier.id], "category_ids": [category.id]},
+            "async_generation": False,
         }
-        response = admin_client.post(url, data, format='json')
+        response = admin_client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_201_CREATED
 
     def test_generate_report_with_date_range(self, admin_client, transaction):
         """Test generating a report with date range."""
-        url = reverse('reports:generate')
+        url = reverse("reports:generate")
         data = {
-            'report_type': 'spend_analysis',
-            'period_start': '2024-01-01',
-            'period_end': '2024-12-31',
-            'async_generation': False
+            "report_type": "spend_analysis",
+            "period_start": "2024-01-01",
+            "period_end": "2024-12-31",
+            "async_generation": False,
         }
-        response = admin_client.post(url, data, format='json')
+        response = admin_client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_201_CREATED
 
     def test_generate_report_invalid_type(self, admin_client):
         """Test generating with invalid report type."""
-        url = reverse('reports:generate')
-        data = {
-            'report_type': 'invalid_type',
-            'async_generation': False
-        }
-        response = admin_client.post(url, data, format='json')
+        url = reverse("reports:generate")
+        data = {"report_type": "invalid_type", "async_generation": False}
+        response = admin_client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_generate_report_missing_type(self, admin_client):
         """Test generating without report type."""
-        url = reverse('reports:generate')
+        url = reverse("reports:generate")
         data = {}
-        response = admin_client.post(url, data, format='json')
+        response = admin_client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_generate_requires_auth(self, api_client):
         """Test that generation requires authentication."""
-        url = reverse('reports:generate')
-        response = api_client.post(url, {}, format='json')
+        url = reverse("reports:generate")
+        response = api_client.post(url, {}, format="json")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -145,24 +150,20 @@ class TestReportPreview:
 
     def test_preview_report(self, admin_client, transaction):
         """Test previewing a report."""
-        url = reverse('reports:preview')
-        data = {
-            'report_type': 'spend_analysis'
-        }
-        response = admin_client.post(url, data, format='json')
+        url = reverse("reports:preview")
+        data = {"report_type": "spend_analysis"}
+        response = admin_client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_200_OK
-        assert '_preview' in response.data
-        assert response.data['_preview'] is True
-        assert response.data['_truncated'] is True
+        assert "_preview" in response.data
+        assert response.data["_preview"] is True
+        assert response.data["_truncated"] is True
 
     def test_preview_invalid_type(self, admin_client):
         """Test previewing with invalid type."""
-        url = reverse('reports:preview')
-        data = {
-            'report_type': 'invalid'
-        }
-        response = admin_client.post(url, data, format='json')
+        url = reverse("reports:preview")
+        data = {"report_type": "invalid"}
+        response = admin_client.post(url, data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -177,58 +178,58 @@ class TestReportList:
             Report.objects.create(
                 organization=organization,
                 created_by=admin_user,
-                report_type='spend_analysis',
-                name=f'Test Report {i}'
+                report_type="spend_analysis",
+                name=f"Test Report {i}",
             )
 
-        url = reverse('reports:list')
+        url = reverse("reports:list")
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert 'results' in response.data
-        assert 'total' in response.data
-        assert response.data['total'] == 3
+        assert "results" in response.data
+        assert "total" in response.data
+        assert response.data["total"] == 3
 
     def test_list_reports_filter_status(self, admin_client, organization, admin_user):
         """Test filtering reports by status."""
         Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            status='completed'
+            report_type="spend_analysis",
+            status="completed",
         )
         Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            status='draft'
+            report_type="spend_analysis",
+            status="draft",
         )
 
-        url = reverse('reports:list')
-        response = admin_client.get(url, {'status': 'completed'})
+        url = reverse("reports:list")
+        response = admin_client.get(url, {"status": "completed"})
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['total'] == 1
-        assert response.data['results'][0]['status'] == 'completed'
+        assert response.data["total"] == 1
+        assert response.data["results"][0]["status"] == "completed"
 
     def test_list_reports_filter_type(self, admin_client, organization, admin_user):
         """Test filtering reports by type."""
         Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='executive_summary'
+            report_type="executive_summary",
         )
 
-        url = reverse('reports:list')
-        response = admin_client.get(url, {'report_type': 'executive_summary'})
+        url = reverse("reports:list")
+        response = admin_client.get(url, {"report_type": "executive_summary"})
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['total'] == 1
+        assert response.data["total"] == 1
 
     def test_list_reports_pagination(self, admin_client, organization, admin_user):
         """Test report list pagination."""
@@ -236,54 +237,58 @@ class TestReportList:
             Report.objects.create(
                 organization=organization,
                 created_by=admin_user,
-                report_type='spend_analysis',
-                name=f'Report {i}'
+                report_type="spend_analysis",
+                name=f"Report {i}",
             )
 
-        url = reverse('reports:list')
-        response = admin_client.get(url, {'limit': 5, 'offset': 0})
+        url = reverse("reports:list")
+        response = admin_client.get(url, {"limit": 5, "offset": 0})
 
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data['results']) == 5
-        assert response.data['total'] == 15
-        assert response.data['limit'] == 5
+        assert len(response.data["results"]) == 5
+        assert response.data["total"] == 15
+        assert response.data["limit"] == 5
 
-    def test_list_reports_organization_scoped(self, admin_client, organization, other_organization, admin_user):
+    def test_list_reports_organization_scoped(
+        self, admin_client, organization, other_organization, admin_user
+    ):
         """Test that reports are scoped by organization."""
         # Create a user for the other org directly to avoid api_client collision
-        from apps.authentication.models import UserProfile
         from django.contrib.auth.models import User
+
+        from apps.authentication.models import UserProfile
+
         other_user = User.objects.create_user(
-            username='otheruser_isolated',
-            email='other_isolated@example.com',
-            password='TestPass123!'
+            username="otheruser_isolated",
+            email="other_isolated@example.com",
+            password="TestPass123!",
         )
         UserProfile.objects.create(
             user=other_user,
             organization=other_organization,
-            role='admin',
-            is_active=True
+            role="admin",
+            is_active=True,
         )
 
         Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            name='Org 1 Report'
+            report_type="spend_analysis",
+            name="Org 1 Report",
         )
         Report.objects.create(
             organization=other_organization,
             created_by=other_user,
-            report_type='spend_analysis',
-            name='Org 2 Report'
+            report_type="spend_analysis",
+            name="Org 2 Report",
         )
 
         # User 1 should only see org 1 report
-        url = reverse('reports:list')
+        url = reverse("reports:list")
         response = admin_client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['total'] == 1
-        assert response.data['results'][0]['name'] == 'Org 1 Report'
+        assert response.data["total"] == 1
+        assert response.data["results"][0]["name"] == "Org 1 Report"
 
 
 @pytest.mark.django_db
@@ -295,27 +300,29 @@ class TestReportDetail:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            name='Detailed Report',
-            status='completed',
-            summary_data={'total_spend': 100000}
+            report_type="spend_analysis",
+            name="Detailed Report",
+            status="completed",
+            summary_data={"total_spend": 100000},
         )
 
-        url = reverse('reports:detail', kwargs={'report_id': str(report.id)})
+        url = reverse("reports:detail", kwargs={"report_id": str(report.id)})
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['name'] == 'Detailed Report'
-        assert response.data['summary_data']['total_spend'] == 100000
+        assert response.data["name"] == "Detailed Report"
+        assert response.data["summary_data"]["total_spend"] == 100000
 
     def test_get_report_not_found(self, admin_client):
         """Test getting non-existent report."""
         fake_id = uuid.uuid4()
-        url = reverse('reports:detail', kwargs={'report_id': str(fake_id)})
+        url = reverse("reports:detail", kwargs={"report_id": str(fake_id)})
         response = admin_client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_get_report_access_denied(self, authenticated_client, other_organization, other_org_user):
+    def test_get_report_access_denied(
+        self, authenticated_client, other_organization, other_org_user
+    ):
         """Test accessing report from another org.
 
         After Phase 0 Finding #4 containment (org filter at the queryset level),
@@ -326,10 +333,10 @@ class TestReportDetail:
         report = Report.objects.create(
             organization=other_organization,
             created_by=other_org_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
 
-        url = reverse('reports:detail', kwargs={'report_id': str(report.id)})
+        url = reverse("reports:detail", kwargs={"report_id": str(report.id)})
         response = authenticated_client.get(url)
         assert response.status_code in (
             status.HTTP_403_FORBIDDEN,
@@ -346,20 +353,20 @@ class TestReportStatus:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            status='generating'
+            report_type="spend_analysis",
+            status="generating",
         )
 
-        url = reverse('reports:status', kwargs={'report_id': str(report.id)})
+        url = reverse("reports:status", kwargs={"report_id": str(report.id)})
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['status'] == 'generating'
+        assert response.data["status"] == "generating"
 
     def test_status_not_found(self, admin_client):
         """Test status for non-existent report."""
         fake_id = uuid.uuid4()
-        url = reverse('reports:status', kwargs={'report_id': str(fake_id)})
+        url = reverse("reports:status", kwargs={"report_id": str(fake_id)})
         response = admin_client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -373,11 +380,11 @@ class TestReportDelete:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
         report_id = str(report.id)
 
-        url = reverse('reports:delete', kwargs={'report_id': report_id})
+        url = reverse("reports:delete", kwargs={"report_id": report_id})
         response = admin_client.delete(url)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
@@ -388,17 +395,17 @@ class TestReportDelete:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
 
-        url = reverse('reports:delete', kwargs={'report_id': str(report.id)})
+        url = reverse("reports:delete", kwargs={"report_id": str(report.id)})
         response = authenticated_client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_delete_not_found(self, admin_client):
         """Test deleting non-existent report."""
         fake_id = uuid.uuid4()
-        url = reverse('reports:delete', kwargs={'report_id': str(fake_id)})
+        url = reverse("reports:delete", kwargs={"report_id": str(fake_id)})
         response = admin_client.delete(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -411,8 +418,9 @@ class TestReportDelete:
         the primary org and broke this multi-org persona.
         """
         from django.contrib.auth.models import User
-        from apps.authentication.models import UserProfile, UserOrganizationMembership
         from rest_framework_simplejwt.tokens import RefreshToken
+
+        from apps.authentication.models import UserOrganizationMembership, UserProfile
 
         # Org A is the report's org; Org B is the user's primary profile.organization.
         org_a = organization
@@ -420,33 +428,36 @@ class TestReportDelete:
 
         # Report creator (admin in Org A) — distinct from the deleter, so the role
         # check (not the creator-equals-self path) is the gate under test.
-        creator = User.objects.create_user(username='org_a_creator', password='pw')
+        creator = User.objects.create_user(username="org_a_creator", password="pw")
         UserProfile.objects.create(
-            user=creator, organization=org_a, role='admin', is_active=True
+            user=creator, organization=org_a, role="admin", is_active=True
         )
 
-        deleter = User.objects.create_user(username='multi_org_admin', password='pw')
+        deleter = User.objects.create_user(username="multi_org_admin", password="pw")
         # post_save signal on UserProfile auto-creates a primary membership in
         # the profile's org (Org B) — only the Org A membership needs an explicit
         # create here.
         UserProfile.objects.create(
-            user=deleter, organization=org_b, role='viewer', is_active=True
+            user=deleter, organization=org_b, role="viewer", is_active=True
         )
         UserOrganizationMembership.objects.create(
-            user=deleter, organization=org_a, role='admin', is_active=True,
+            user=deleter,
+            organization=org_a,
+            role="admin",
+            is_active=True,
             is_primary=False,
         )
 
         report = Report.objects.create(
             organization=org_a,
             created_by=creator,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
         )
 
         refresh = RefreshToken.for_user(deleter)
-        api_client.cookies['access_token'] = str(refresh.access_token)
+        api_client.cookies["access_token"] = str(refresh.access_token)
 
-        url = reverse('reports:delete', kwargs={'report_id': str(report.id)})
+        url = reverse("reports:delete", kwargs={"report_id": str(report.id)})
         response = api_client.delete(url)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
@@ -460,34 +471,35 @@ class TestReportDelete:
         admin status against the report's own organization, not the user's primary org.
         """
         from django.contrib.auth.models import User
-        from apps.authentication.models import UserProfile, UserOrganizationMembership
         from rest_framework_simplejwt.tokens import RefreshToken
+
+        from apps.authentication.models import UserOrganizationMembership, UserProfile
 
         org_a = organization
         org_b = other_organization
 
-        creator = User.objects.create_user(username='org_a_only_creator', password='pw')
+        creator = User.objects.create_user(username="org_a_only_creator", password="pw")
         UserProfile.objects.create(
-            user=creator, organization=org_a, role='admin', is_active=True
+            user=creator, organization=org_a, role="admin", is_active=True
         )
 
-        outsider = User.objects.create_user(username='org_b_only_admin', password='pw')
+        outsider = User.objects.create_user(username="org_b_only_admin", password="pw")
         # post_save signal auto-creates the (outsider, Org B, admin) membership;
         # outsider has NO membership in Org A.
         UserProfile.objects.create(
-            user=outsider, organization=org_b, role='admin', is_active=True
+            user=outsider, organization=org_b, role="admin", is_active=True
         )
 
         report = Report.objects.create(
             organization=org_a,
             created_by=creator,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
         )
 
         refresh = RefreshToken.for_user(outsider)
-        api_client.cookies['access_token'] = str(refresh.access_token)
+        api_client.cookies["access_token"] = str(refresh.access_token)
 
-        url = reverse('reports:delete', kwargs={'report_id': str(report.id)})
+        url = reverse("reports:delete", kwargs={"report_id": str(report.id)})
         response = api_client.delete(url)
 
         assert response.status_code in (
@@ -501,56 +513,68 @@ class TestReportDelete:
 class TestReportDownload:
     """Tests for report download endpoint."""
 
-    def test_download_completed_report(self, admin_client, organization, admin_user, transaction):
+    def test_download_completed_report(
+        self, admin_client, organization, admin_user, transaction
+    ):
         """Test downloading a completed report."""
         # First generate a report
-        gen_url = reverse('reports:generate')
-        gen_response = admin_client.post(gen_url, {
-            'report_type': 'spend_analysis',
-            'report_format': 'csv',
-            'async_generation': False
-        }, format='json')
+        gen_url = reverse("reports:generate")
+        gen_response = admin_client.post(
+            gen_url,
+            {
+                "report_type": "spend_analysis",
+                "report_format": "csv",
+                "async_generation": False,
+            },
+            format="json",
+        )
 
-        report_id = gen_response.data['id']
+        report_id = gen_response.data["id"]
 
         # Then download it
-        url = reverse('reports:download', kwargs={'report_id': report_id})
+        url = reverse("reports:download", kwargs={"report_id": report_id})
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert 'attachment' in response['Content-Disposition']
+        assert "attachment" in response["Content-Disposition"]
 
     def test_download_incomplete_report(self, admin_client, organization, admin_user):
         """Test downloading an incomplete report."""
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            status='generating'
+            report_type="spend_analysis",
+            status="generating",
         )
 
-        url = reverse('reports:download', kwargs={'report_id': str(report.id)})
+        url = reverse("reports:download", kwargs={"report_id": str(report.id)})
         response = admin_client.get(url)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_download_with_format_override(self, admin_client, organization, admin_user, transaction):
+    def test_download_with_format_override(
+        self, admin_client, organization, admin_user, transaction
+    ):
         """Test downloading with format override."""
         # Generate PDF report
-        gen_url = reverse('reports:generate')
-        gen_response = admin_client.post(gen_url, {
-            'report_type': 'spend_analysis',
-            'report_format': 'pdf',
-            'async_generation': False
-        }, format='json')
+        gen_url = reverse("reports:generate")
+        gen_response = admin_client.post(
+            gen_url,
+            {
+                "report_type": "spend_analysis",
+                "report_format": "pdf",
+                "async_generation": False,
+            },
+            format="json",
+        )
 
-        report_id = gen_response.data['id']
+        report_id = gen_response.data["id"]
 
         # Download as CSV instead
-        url = reverse('reports:download', kwargs={'report_id': report_id})
-        response = admin_client.get(url, {'output_format': 'csv'})
+        url = reverse("reports:download", kwargs={"report_id": report_id})
+        response = admin_client.get(url, {"output_format": "csv"})
 
         assert response.status_code == status.HTTP_200_OK
-        assert 'text/csv' in response['Content-Type']
+        assert "text/csv" in response["Content-Type"]
 
 
 @pytest.mark.django_db
@@ -562,13 +586,13 @@ class TestReportSchedules:
         Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='weekly',
-            status='scheduled'
+            schedule_frequency="weekly",
+            status="scheduled",
         )
 
-        url = reverse('reports:schedules')
+        url = reverse("reports:schedules")
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -576,54 +600,54 @@ class TestReportSchedules:
 
     def test_create_schedule(self, admin_client):
         """Test creating a scheduled report."""
-        url = reverse('reports:schedules')
+        url = reverse("reports:schedules")
         data = {
-            'report_type': 'executive_summary',
-            'report_format': 'pdf',
-            'name': 'Weekly Executive Report',
-            'is_scheduled': True,
-            'schedule_frequency': 'weekly'
+            "report_type": "executive_summary",
+            "report_format": "pdf",
+            "name": "Weekly Executive Report",
+            "is_scheduled": True,
+            "schedule_frequency": "weekly",
         }
-        response = admin_client.post(url, data, format='json')
+        response = admin_client.post(url, data, format="json")
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data['is_scheduled'] is True
-        assert response.data['schedule_frequency'] == 'weekly'
-        assert response.data['next_run'] is not None
+        assert response.data["is_scheduled"] is True
+        assert response.data["schedule_frequency"] == "weekly"
+        assert response.data["next_run"] is not None
 
     def test_update_schedule(self, admin_client, organization, admin_user):
         """Test updating a schedule."""
         schedule = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='weekly',
-            status='scheduled'
+            schedule_frequency="weekly",
+            status="scheduled",
         )
 
-        url = reverse('reports:schedule-detail', kwargs={'schedule_id': str(schedule.id)})
-        response = admin_client.put(url, {
-            'schedule_frequency': 'daily'
-        }, format='json')
+        url = reverse(
+            "reports:schedule-detail", kwargs={"schedule_id": str(schedule.id)}
+        )
+        response = admin_client.put(url, {"schedule_frequency": "daily"}, format="json")
 
         assert response.status_code == status.HTTP_200_OK
         schedule.refresh_from_db()
-        assert schedule.schedule_frequency == 'daily'
+        assert schedule.schedule_frequency == "daily"
 
     def test_delete_schedule(self, admin_client, organization, admin_user):
         """Test deleting a schedule."""
         schedule = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='weekly',
-            status='scheduled'
+            schedule_frequency="weekly",
+            status="scheduled",
         )
         schedule_id = str(schedule.id)
 
-        url = reverse('reports:schedule-detail', kwargs={'schedule_id': schedule_id})
+        url = reverse("reports:schedule-detail", kwargs={"schedule_id": schedule_id})
         response = admin_client.delete(url)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
@@ -634,17 +658,19 @@ class TestReportSchedules:
         schedule = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='weekly',
-            status='scheduled'
+            schedule_frequency="weekly",
+            status="scheduled",
         )
 
-        url = reverse('reports:schedule-run-now', kwargs={'schedule_id': str(schedule.id)})
+        url = reverse(
+            "reports:schedule-run-now", kwargs={"schedule_id": str(schedule.id)}
+        )
         response = admin_client.post(url)
 
         assert response.status_code == status.HTTP_200_OK
-        assert 'Report generation triggered' in response.data['message']
+        assert "Report generation triggered" in response.data["message"]
 
 
 @pytest.mark.django_db
@@ -656,12 +682,12 @@ class TestReportShare:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
-            is_public=False
+            report_type="spend_analysis",
+            is_public=False,
         )
 
-        url = reverse('reports:share', kwargs={'report_id': str(report.id)})
-        response = admin_client.post(url, {'is_public': True}, format='json')
+        url = reverse("reports:share", kwargs={"report_id": str(report.id)})
+        response = admin_client.post(url, {"is_public": True}, format="json")
 
         assert response.status_code == status.HTTP_200_OK
         report.refresh_from_db()
@@ -672,26 +698,28 @@ class TestReportShare:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
 
-        url = reverse('reports:share', kwargs={'report_id': str(report.id)})
-        response = admin_client.post(url, {'user_ids': [user.id]}, format='json')
+        url = reverse("reports:share", kwargs={"report_id": str(report.id)})
+        response = admin_client.post(url, {"user_ids": [user.id]}, format="json")
 
         assert response.status_code == status.HTTP_200_OK
         report.refresh_from_db()
         assert user in report.shared_with.all()
 
-    def test_share_only_creator_can_share(self, authenticated_client, organization, admin_user):
+    def test_share_only_creator_can_share(
+        self, authenticated_client, organization, admin_user
+    ):
         """Test that only creator can share a report."""
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis'
+            report_type="spend_analysis",
         )
 
-        url = reverse('reports:share', kwargs={'report_id': str(report.id)})
-        response = authenticated_client.post(url, {'is_public': True}, format='json')
+        url = reverse("reports:share", kwargs={"report_id": str(report.id)})
+        response = authenticated_client.post(url, {"is_public": True}, format="json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
@@ -704,36 +732,41 @@ class TestReportAuthentication:
         report = Report.objects.create(
             organization=organization,
             created_by=admin_user,
-            report_type='spend_analysis',
+            report_type="spend_analysis",
             is_scheduled=True,
-            schedule_frequency='weekly',
-            status='scheduled'
+            schedule_frequency="weekly",
+            status="scheduled",
         )
         report_id = str(report.id)
 
         endpoints = [
-            ('reports:templates', 'get', {}),
-            ('reports:generate', 'post', {}),
-            ('reports:preview', 'post', {}),
-            ('reports:list', 'get', {}),
-            ('reports:detail', 'get', {'report_id': report_id}),
-            ('reports:status', 'get', {'report_id': report_id}),
-            ('reports:download', 'get', {'report_id': report_id}),
-            ('reports:delete', 'delete', {'report_id': report_id}),
-            ('reports:share', 'post', {'report_id': report_id}),
-            ('reports:schedules', 'get', {}),
-            ('reports:schedule-detail', 'get', {'schedule_id': report_id}),
-            ('reports:schedule-run-now', 'post', {'schedule_id': report_id}),
+            ("reports:templates", "get", {}),
+            ("reports:generate", "post", {}),
+            ("reports:preview", "post", {}),
+            ("reports:list", "get", {}),
+            ("reports:detail", "get", {"report_id": report_id}),
+            ("reports:status", "get", {"report_id": report_id}),
+            ("reports:download", "get", {"report_id": report_id}),
+            ("reports:delete", "delete", {"report_id": report_id}),
+            ("reports:share", "post", {"report_id": report_id}),
+            ("reports:schedules", "get", {}),
+            ("reports:schedule-detail", "get", {"schedule_id": report_id}),
+            ("reports:schedule-run-now", "post", {"schedule_id": report_id}),
         ]
 
         for endpoint_name, method, kwargs in endpoints:
-            url = reverse(endpoint_name, kwargs=kwargs) if kwargs else reverse(endpoint_name)
-            if method == 'get':
+            url = (
+                reverse(endpoint_name, kwargs=kwargs)
+                if kwargs
+                else reverse(endpoint_name)
+            )
+            if method == "get":
                 response = api_client.get(url)
-            elif method == 'post':
+            elif method == "post":
                 response = api_client.post(url, {})
-            elif method == 'delete':
+            elif method == "delete":
                 response = api_client.delete(url)
 
-            assert response.status_code == status.HTTP_401_UNAUTHORIZED, \
-                f"Endpoint {endpoint_name} did not require authentication"
+            assert (
+                response.status_code == status.HTTP_401_UNAUTHORIZED
+            ), f"Endpoint {endpoint_name} did not require authentication"

@@ -3,7 +3,9 @@ Overview analytics service.
 
 Provides high-level statistics and summary metrics for the analytics dashboard.
 """
-from django.db.models import Sum, Count, Avg
+
+from django.db.models import Avg, Count, Sum
+
 from .base import BaseAnalyticsService
 
 
@@ -28,17 +30,17 @@ class OverviewAnalyticsService(BaseAnalyticsService):
                 - avg_transaction: Average transaction amount
         """
         stats = self.transactions.aggregate(
-            total_spend=Sum('amount'),
-            transaction_count=Count('id'),
-            supplier_count=Count('supplier', distinct=True),
-            category_count=Count('category', distinct=True),
-            avg_transaction=Avg('amount')
+            total_spend=Sum("amount"),
+            transaction_count=Count("id"),
+            supplier_count=Count("supplier", distinct=True),
+            category_count=Count("category", distinct=True),
+            avg_transaction=Avg("amount"),
         )
 
         return {
-            'total_spend': float(stats['total_spend'] or 0),
-            'transaction_count': stats['transaction_count'] or 0,
-            'supplier_count': stats['supplier_count'] or 0,
-            'category_count': stats['category_count'] or 0,
-            'avg_transaction': float(stats['avg_transaction'] or 0)
+            "total_spend": float(stats["total_spend"] or 0),
+            "transaction_count": stats["transaction_count"] or 0,
+            "supplier_count": stats["supplier_count"] or 0,
+            "category_count": stats["category_count"] or 0,
+            "avg_transaction": float(stats["avg_transaction"] or 0),
         }

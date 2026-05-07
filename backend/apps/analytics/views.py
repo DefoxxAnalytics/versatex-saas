@@ -1,27 +1,31 @@
 """
 Analytics API views
 """
+
 import logging
 from decimal import Decimal
+
+from django.db.models import Avg, Count, F, Sum
 from django.utils import timezone
-from django.db.models import Count, Sum, Avg, F
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.exceptions import ValidationError
-from apps.authentication.utils import log_action
+
 from apps.authentication.models import Organization
 from apps.authentication.organization_utils import (
     get_target_organization,
     user_is_admin_in_org,
 )
-from .services import AnalyticsService
+from apps.authentication.utils import log_action
+
 from .ai_services import AIInsightsService
+from .compliance_services import ComplianceService
+from .contract_services import ContractAnalyticsService
 from .models import InsightFeedback
 from .predictive_services import PredictiveAnalyticsService
-from .contract_services import ContractAnalyticsService
-from .compliance_services import ComplianceService
+from .services import AnalyticsService
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +51,14 @@ def validate_int_param(request, param_name, default, min_val=1, max_val=1000):
     try:
         value = int(raw_value)
         if value < min_val or value > max_val:
-            raise ValidationError({
-                param_name: f"Value must be between {min_val} and {max_val}"
-            })
+            raise ValidationError(
+                {param_name: f"Value must be between {min_val} and {max_val}"}
+            )
         return value
     except (ValueError, TypeError):
-        raise ValidationError({
-            param_name: f"Invalid value '{raw_value}'. Must be an integer."
-        })
+        raise ValidationError(
+            {param_name: f"Invalid value '{raw_value}'. Must be an integer."}
+        )
 
 
 def parse_filter_params(request):
@@ -81,91 +85,95 @@ def parse_filter_params(request):
     Returns:
         dict or None: Filter dict if any filters provided, None otherwise
     """
-    from apps.procurement.models import Supplier, Category
+    from apps.procurement.models import Category, Supplier
 
     filters = {}
 
-    date_from = request.query_params.get('date_from')
+    date_from = request.query_params.get("date_from")
     if date_from:
-        filters['date_from'] = date_from
+        filters["date_from"] = date_from
 
-    date_to = request.query_params.get('date_to')
+    date_to = request.query_params.get("date_to")
     if date_to:
-        filters['date_to'] = date_to
+        filters["date_to"] = date_to
 
     # Get organization for name->ID resolution
     organization = get_target_organization(request)
 
     # Supplier filtering - support both IDs and names
     supplier_id_set = set()
-    supplier_ids = request.query_params.get('supplier_ids')
+    supplier_ids = request.query_params.get("supplier_ids")
     if supplier_ids:
         try:
-            supplier_id_set.update(int(x.strip()) for x in supplier_ids.split(',') if x.strip())
+            supplier_id_set.update(
+                int(x.strip()) for x in supplier_ids.split(",") if x.strip()
+            )
         except ValueError:
             pass
 
-    supplier_names = request.query_params.get('supplier_names')
+    supplier_names = request.query_params.get("supplier_names")
     if supplier_names and organization:
-        names = [x.strip() for x in supplier_names.split(',') if x.strip()]
+        names = [x.strip() for x in supplier_names.split(",") if x.strip()]
         if names:
             resolved_ids = Supplier.objects.filter(
-                organization=organization,
-                name__in=names
-            ).values_list('id', flat=True)
+                organization=organization, name__in=names
+            ).values_list("id", flat=True)
             supplier_id_set.update(resolved_ids)
 
     if supplier_id_set:
-        filters['supplier_ids'] = list(supplier_id_set)
+        filters["supplier_ids"] = list(supplier_id_set)
 
     # Category filtering - support both IDs and names
     category_id_set = set()
-    category_ids = request.query_params.get('category_ids')
+    category_ids = request.query_params.get("category_ids")
     if category_ids:
         try:
-            category_id_set.update(int(x.strip()) for x in category_ids.split(',') if x.strip())
+            category_id_set.update(
+                int(x.strip()) for x in category_ids.split(",") if x.strip()
+            )
         except ValueError:
             pass
 
-    category_names = request.query_params.get('category_names')
+    category_names = request.query_params.get("category_names")
     if category_names and organization:
-        names = [x.strip() for x in category_names.split(',') if x.strip()]
+        names = [x.strip() for x in category_names.split(",") if x.strip()]
         if names:
             resolved_ids = Category.objects.filter(
-                organization=organization,
-                name__in=names
-            ).values_list('id', flat=True)
+                organization=organization, name__in=names
+            ).values_list("id", flat=True)
             category_id_set.update(resolved_ids)
 
     if category_id_set:
-        filters['category_ids'] = list(category_id_set)
+        filters["category_ids"] = list(category_id_set)
 
-    subcategories = request.query_params.get('subcategories')
+    subcategories = request.query_params.get("subcategories")
     if subcategories:
-        filters['subcategories'] = [x.strip() for x in subcategories.split(',') if x.strip()]
+        filters["subcategories"] = [
+            x.strip() for x in subcategories.split(",") if x.strip()
+        ]
 
-    locations = request.query_params.get('locations')
+    locations = request.query_params.get("locations")
     if locations:
-        filters['locations'] = [x.strip() for x in locations.split(',') if x.strip()]
+        filters["locations"] = [x.strip() for x in locations.split(",") if x.strip()]
 
-    years = request.query_params.get('years')
+    years = request.query_params.get("years")
     if years:
         try:
-            filters['years'] = [int(x.strip()) for x in years.split(',') if x.strip()]
+            filters["years"] = [int(x.strip()) for x in years.split(",") if x.strip()]
         except ValueError:
             pass
 
-    min_amount = request.query_params.get('min_amount')
+    min_amount = request.query_params.get("min_amount")
     if min_amount:
         try:
-            filters['min_amount'] = float(min_amount)
+            filters["min_amount"] = float(min_amount)
         except ValueError:
             pass
 
-    max_amount = request.query_params.get('max_amount')
+    max_amount = request.query_params.get("max_amount")
     if max_amount:
         try:
-            filters['max_amount'] = float(max_amount)
+            filters["max_amount"] = float(max_amount)
         except ValueError:
             pass
 
@@ -174,35 +182,41 @@ def parse_filter_params(request):
 
 class ReadAPIThrottle(ScopedRateThrottle):
     """Throttle for read API endpoints."""
-    scope = 'read_api'
+
+    scope = "read_api"
 
 
 class AIInsightsThrottle(ScopedRateThrottle):
     """Throttle for AI insights endpoints (more restrictive due to computation cost)."""
-    scope = 'ai_insights'
+
+    scope = "ai_insights"
 
 
 class PredictionsThrottle(ScopedRateThrottle):
     """Throttle for predictions endpoints."""
-    scope = 'predictions'
+
+    scope = "predictions"
 
 
 class ContractAnalyticsThrottle(ScopedRateThrottle):
     """Throttle for contract analytics endpoints."""
-    scope = 'contract_analytics'
+
+    scope = "contract_analytics"
 
 
 class ComplianceThrottle(ScopedRateThrottle):
     """Throttle for compliance endpoints."""
-    scope = 'compliance'
+
+    scope = "compliance"
 
 
 class InsightFeedbackThrottle(ScopedRateThrottle):
     """Throttle for insight feedback endpoints."""
-    scope = 'insight_feedback'
+
+    scope = "insight_feedback"
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def overview_stats(request):
@@ -220,7 +234,7 @@ def overview_stats(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -228,16 +242,18 @@ def overview_stats(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='analytics_overview',
+        action="view",
+        resource="analytics_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def spend_by_category(request):
@@ -250,7 +266,7 @@ def spend_by_category(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -259,7 +275,7 @@ def spend_by_category(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def detailed_category_stats(request):
@@ -278,7 +294,7 @@ def detailed_category_stats(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -287,7 +303,7 @@ def detailed_category_stats(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def spend_by_supplier(request):
@@ -300,7 +316,7 @@ def spend_by_supplier(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -309,7 +325,7 @@ def spend_by_supplier(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def detailed_supplier_stats(request):
@@ -326,7 +342,7 @@ def detailed_supplier_stats(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -335,7 +351,7 @@ def detailed_supplier_stats(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def supplier_drilldown(request, supplier_id):
@@ -356,19 +372,19 @@ def supplier_drilldown(request, supplier_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_supplier_drilldown(supplier_id)
 
     if data is None:
-        return Response({'error': 'Supplier not found'}, status=404)
+        return Response({"error": "Supplier not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def category_drilldown(request, category_id):
@@ -390,19 +406,19 @@ def category_drilldown(request, category_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_category_drilldown(category_id)
 
     if data is None:
-        return Response({'error': 'Category not found'}, status=404)
+        return Response({"error": "Category not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def monthly_trend(request):
@@ -416,9 +432,9 @@ def monthly_trend(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 12, min_val=1, max_val=120)
+    months = validate_int_param(request, "months", 12, min_val=1, max_val=120)
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_monthly_trend(months=months)
@@ -426,7 +442,7 @@ def monthly_trend(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def pareto_analysis(request):
@@ -439,7 +455,7 @@ def pareto_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -448,7 +464,7 @@ def pareto_analysis(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def tail_spend_analysis(request):
@@ -465,9 +481,9 @@ def tail_spend_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    threshold = validate_int_param(request, 'threshold', 20, min_val=1, max_val=100)
+    threshold = validate_int_param(request, "threshold", 20, min_val=1, max_val=100)
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_tail_spend_analysis(threshold_percentage=threshold)
@@ -475,7 +491,7 @@ def tail_spend_analysis(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def spend_stratification(request):
@@ -491,7 +507,7 @@ def spend_stratification(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -500,7 +516,7 @@ def spend_stratification(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def detailed_stratification(request):
@@ -519,7 +535,7 @@ def detailed_stratification(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -528,7 +544,7 @@ def detailed_stratification(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def stratification_segment_drilldown(request, segment_name):
@@ -549,19 +565,24 @@ def stratification_segment_drilldown(request, segment_name):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_stratification_segment_drilldown(segment_name)
 
     if data is None:
-        return Response({'error': f"Invalid segment name: {segment_name}. Must be one of: Strategic, Leverage, Routine, Tactical"}, status=400)
+        return Response(
+            {
+                "error": f"Invalid segment name: {segment_name}. Must be one of: Strategic, Leverage, Routine, Tactical"
+            },
+            status=400,
+        )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def stratification_band_drilldown(request, band_name):
@@ -582,21 +603,24 @@ def stratification_band_drilldown(request, band_name):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_stratification_band_drilldown(band_name)
 
     if data is None:
-        return Response({
-            'error': f"Invalid band name: {band_name}. Must be one of: 0 - 1K, 1K - 2K, 2K - 5K, 5K - 10K, 10K - 25K, 25K - 50K, 50K - 100K, 100K - 500K, 500K - 1M, 1M and Above"
-        }, status=400)
+        return Response(
+            {
+                "error": f"Invalid band name: {band_name}. Must be one of: 0 - 1K, 1K - 2K, 2K - 5K, 5K - 10K, 10K - 25K, 25K - 50K, 50K - 100K, 100K - 500K, 500K - 1M, 1M and Above"
+            },
+            status=400,
+        )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def seasonality_analysis(request):
@@ -612,7 +636,7 @@ def seasonality_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -621,7 +645,7 @@ def seasonality_analysis(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def detailed_seasonality(request):
@@ -640,15 +664,15 @@ def detailed_seasonality(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     # Parse use_fiscal_year parameter (default: true)
-    use_fiscal_year_param = request.query_params.get('use_fiscal_year', 'true').lower()
-    use_fiscal_year = use_fiscal_year_param not in ('false', '0', 'no')
+    use_fiscal_year_param = request.query_params.get("use_fiscal_year", "true").lower()
+    use_fiscal_year = use_fiscal_year_param not in ("false", "0", "no")
 
     # Parse optional year filter. Invalid / non-numeric values are ignored
     # (the service will fall back to multi-year aggregate).
-    year_param = request.query_params.get('year')
+    year_param = request.query_params.get("year")
     year = None
     if year_param:
         try:
@@ -666,7 +690,7 @@ def detailed_seasonality(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def seasonality_category_drilldown(request, category_id):
@@ -681,23 +705,25 @@ def seasonality_category_drilldown(request, category_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     # Parse use_fiscal_year parameter (default: true)
-    use_fiscal_year_param = request.query_params.get('use_fiscal_year', 'true').lower()
-    use_fiscal_year = use_fiscal_year_param not in ('false', '0', 'no')
+    use_fiscal_year_param = request.query_params.get("use_fiscal_year", "true").lower()
+    use_fiscal_year = use_fiscal_year_param not in ("false", "0", "no")
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
-    data = service.get_seasonality_category_drilldown(category_id, use_fiscal_year=use_fiscal_year)
+    data = service.get_seasonality_category_drilldown(
+        category_id, use_fiscal_year=use_fiscal_year
+    )
 
     if data is None:
-        return Response({'error': 'Category not found'}, status=404)
+        return Response({"error": "Category not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def year_over_year(request):
@@ -713,7 +739,7 @@ def year_over_year(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -722,7 +748,7 @@ def year_over_year(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def detailed_year_over_year(request):
@@ -738,11 +764,13 @@ def detailed_year_over_year(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    use_fiscal_year = request.query_params.get('use_fiscal_year', 'true').lower() not in ('false', '0', 'no')
-    year1 = request.query_params.get('year1')
-    year2 = request.query_params.get('year2')
+    use_fiscal_year = request.query_params.get(
+        "use_fiscal_year", "true"
+    ).lower() not in ("false", "0", "no")
+    year1 = request.query_params.get("year1")
+    year2 = request.query_params.get("year2")
 
     # Convert years to int if provided
     if year1:
@@ -758,12 +786,14 @@ def detailed_year_over_year(request):
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
-    data = service.get_detailed_year_over_year(year1=year1, year2=year2, use_fiscal_year=use_fiscal_year)
+    data = service.get_detailed_year_over_year(
+        year1=year1, year2=year2, use_fiscal_year=use_fiscal_year
+    )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def yoy_category_drilldown(request, category_id):
@@ -779,11 +809,13 @@ def yoy_category_drilldown(request, category_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    use_fiscal_year = request.query_params.get('use_fiscal_year', 'true').lower() not in ('false', '0', 'no')
-    year1 = request.query_params.get('year1')
-    year2 = request.query_params.get('year2')
+    use_fiscal_year = request.query_params.get(
+        "use_fiscal_year", "true"
+    ).lower() not in ("false", "0", "no")
+    year1 = request.query_params.get("year1")
+    year2 = request.query_params.get("year2")
 
     if year1:
         try:
@@ -798,15 +830,17 @@ def yoy_category_drilldown(request, category_id):
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
-    data = service.get_yoy_category_drilldown(category_id, year1=year1, year2=year2, use_fiscal_year=use_fiscal_year)
+    data = service.get_yoy_category_drilldown(
+        category_id, year1=year1, year2=year2, use_fiscal_year=use_fiscal_year
+    )
 
     if data is None:
-        return Response({'error': 'Category not found'}, status=404)
+        return Response({"error": "Category not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def yoy_supplier_drilldown(request, supplier_id):
@@ -822,11 +856,13 @@ def yoy_supplier_drilldown(request, supplier_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    use_fiscal_year = request.query_params.get('use_fiscal_year', 'true').lower() not in ('false', '0', 'no')
-    year1 = request.query_params.get('year1')
-    year2 = request.query_params.get('year2')
+    use_fiscal_year = request.query_params.get(
+        "use_fiscal_year", "true"
+    ).lower() not in ("false", "0", "no")
+    year1 = request.query_params.get("year1")
+    year2 = request.query_params.get("year2")
 
     if year1:
         try:
@@ -841,15 +877,17 @@ def yoy_supplier_drilldown(request, supplier_id):
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
-    data = service.get_yoy_supplier_drilldown(supplier_id, year1=year1, year2=year2, use_fiscal_year=use_fiscal_year)
+    data = service.get_yoy_supplier_drilldown(
+        supplier_id, year1=year1, year2=year2, use_fiscal_year=use_fiscal_year
+    )
 
     if data is None:
-        return Response({'error': 'Supplier not found'}, status=404)
+        return Response({"error": "Supplier not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def consolidation_opportunities(request):
@@ -865,7 +903,7 @@ def consolidation_opportunities(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -874,7 +912,7 @@ def consolidation_opportunities(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def detailed_tail_spend(request):
@@ -896,9 +934,11 @@ def detailed_tail_spend(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    threshold = validate_int_param(request, 'threshold', 50000, min_val=1000, max_val=500000)
+    threshold = validate_int_param(
+        request, "threshold", 50000, min_val=1000, max_val=500000
+    )
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
@@ -906,16 +946,20 @@ def detailed_tail_spend(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='tail_spend_detailed',
+        action="view",
+        resource="tail_spend_detailed",
         request=request,
-        details={'threshold': threshold, 'organization_id': organization.id} if request.user.is_superuser else {'threshold': threshold}
+        details=(
+            {"threshold": threshold, "organization_id": organization.id}
+            if request.user.is_superuser
+            else {"threshold": threshold}
+        ),
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def tail_spend_category_drilldown(request, category_id):
@@ -930,21 +974,23 @@ def tail_spend_category_drilldown(request, category_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    threshold = validate_int_param(request, 'threshold', 50000, min_val=1000, max_val=500000)
+    threshold = validate_int_param(
+        request, "threshold", 50000, min_val=1000, max_val=500000
+    )
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_tail_spend_category_drilldown(category_id, threshold=threshold)
 
     if data is None:
-        return Response({'error': 'Category not found'}, status=404)
+        return Response({"error": "Category not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ReadAPIThrottle])
 def tail_spend_vendor_drilldown(request, supplier_id):
@@ -959,16 +1005,18 @@ def tail_spend_vendor_drilldown(request, supplier_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    threshold = validate_int_param(request, 'threshold', 50000, min_val=1000, max_val=500000)
+    threshold = validate_int_param(
+        request, "threshold", 50000, min_val=1000, max_val=500000
+    )
 
     filters = parse_filter_params(request)
     service = AnalyticsService(organization, filters=filters)
     data = service.get_tail_spend_vendor_drilldown(supplier_id, threshold=threshold)
 
     if data is None:
-        return Response({'error': 'Supplier not found'}, status=404)
+        return Response({"error": "Supplier not found"}, status=404)
 
     return Response(data)
 
@@ -976,6 +1024,7 @@ def tail_spend_vendor_drilldown(request, supplier_id):
 # ============================================================================
 # AI Insights Endpoints
 # ============================================================================
+
 
 def _get_ai_service(request, organization=None, filters=None):
     """
@@ -992,7 +1041,7 @@ def _get_ai_service(request, organization=None, filters=None):
         organization: Optional organization override (for superuser org switching)
         filters: Optional dict of filter parameters from parse_filter_params()
     """
-    prefs = (request.user.profile.preferences or {})
+    prefs = request.user.profile.preferences or {}
 
     # Use provided organization or get from request
     target_org = organization or get_target_organization(request)
@@ -1000,13 +1049,13 @@ def _get_ai_service(request, organization=None, filters=None):
     return AIInsightsService(
         organization=target_org,
         filters=filters,
-        use_external_ai=prefs.get('useExternalAI', False),
-        ai_provider=prefs.get('aiProvider', 'anthropic'),
-        api_key=prefs.get('aiApiKey') or None,
+        use_external_ai=prefs.get("useExternalAI", False),
+        ai_provider=prefs.get("aiProvider", "anthropic"),
+        api_key=prefs.get("aiApiKey") or None,
     )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def ai_insights(request):
@@ -1031,35 +1080,35 @@ def ai_insights(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
-    force_refresh = request.query_params.get('refresh', 'false').lower() == 'true'
+    force_refresh = request.query_params.get("refresh", "false").lower() == "true"
 
     service = _get_ai_service(request, organization, filters=filters)
     data = service.get_all_insights(force_refresh=force_refresh)
 
     log_details = {
-        'insight_count': data['summary']['total_insights'],
-        'cache_hit': data.get('cache_hit', False),
-        'ai_enhanced': 'ai_enhancement' in data,
-        'enhancement_status': data.get('enhancement_status'),
+        "insight_count": data["summary"]["total_insights"],
+        "cache_hit": data.get("cache_hit", False),
+        "ai_enhanced": "ai_enhancement" in data,
+        "enhancement_status": data.get("enhancement_status"),
     }
     if request.user.is_superuser:
-        log_details['organization_id'] = organization.id
+        log_details["organization_id"] = organization.id
 
     log_action(
         user=request.user,
-        action='view',
-        resource='ai_insights',
+        action="view",
+        resource="ai_insights",
         request=request,
-        details=log_details
+        details=log_details,
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def ai_insights_cost(request):
@@ -1079,19 +1128,16 @@ def ai_insights_cost(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = _get_ai_service(request, organization, filters=filters)
     insights = service.get_cost_optimization_insights()
 
-    return Response({
-        'insights': insights,
-        'count': len(insights)
-    })
+    return Response({"insights": insights, "count": len(insights)})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def ai_insights_risk(request):
@@ -1111,19 +1157,16 @@ def ai_insights_risk(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = _get_ai_service(request, organization, filters=filters)
     insights = service.get_supplier_risk_insights()
 
-    return Response({
-        'insights': insights,
-        'count': len(insights)
-    })
+    return Response({"insights": insights, "count": len(insights)})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def ai_insights_anomalies(request):
@@ -1144,11 +1187,11 @@ def ai_insights_anomalies(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     # Parse sensitivity parameter
     try:
-        sensitivity = float(request.query_params.get('sensitivity', 2.0))
+        sensitivity = float(request.query_params.get("sensitivity", 2.0))
         sensitivity = max(1.0, min(5.0, sensitivity))  # Clamp to range
     except (ValueError, TypeError):
         sensitivity = 2.0
@@ -1157,18 +1200,17 @@ def ai_insights_anomalies(request):
     service = _get_ai_service(request, organization, filters=filters)
     insights = service.get_anomaly_insights(sensitivity=sensitivity)
 
-    return Response({
-        'insights': insights,
-        'count': len(insights),
-        'sensitivity': sensitivity
-    })
+    return Response(
+        {"insights": insights, "count": len(insights), "sensitivity": sensitivity}
+    )
 
 
 # ============================================================================
 # Async AI Enhancement Endpoints
 # ============================================================================
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def request_ai_enhancement(request):
@@ -1188,43 +1230,43 @@ def request_ai_enhancement(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    insights_data = request.data.get('insights', [])
+    insights_data = request.data.get("insights", [])
     if not insights_data:
-        return Response({'error': 'insights list is required'}, status=400)
+        return Response({"error": "insights list is required"}, status=400)
 
     if not isinstance(insights_data, list):
-        return Response({'error': 'insights must be a list'}, status=400)
+        return Response({"error": "insights must be a list"}, status=400)
 
     task = enhance_insights_async.delay(
-        org_id=organization.id,
-        user_id=request.user.id,
-        insights_data=insights_data
+        org_id=organization.id, user_id=request.user.id, insights_data=insights_data
     )
 
     log_action(
         user=request.user,
-        action='create',
-        resource='ai_enhancement_task',
+        action="create",
+        resource="ai_enhancement_task",
         resource_id=task.id,
         request=request,
-        details={
-            'insight_count': len(insights_data),
-            'organization_id': organization.id
-        } if request.user.is_superuser else {
-            'insight_count': len(insights_data)
-        }
+        details=(
+            {"insight_count": len(insights_data), "organization_id": organization.id}
+            if request.user.is_superuser
+            else {"insight_count": len(insights_data)}
+        ),
     )
 
-    return Response({
-        'task_id': task.id,
-        'status': 'queued',
-        'message': 'AI enhancement task queued successfully'
-    }, status=202)
+    return Response(
+        {
+            "task_id": task.id,
+            "status": "queued",
+            "message": "AI enhancement task queued successfully",
+        },
+        status=202,
+    )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def get_ai_enhancement_status(request):
@@ -1237,38 +1279,41 @@ def get_ai_enhancement_status(request):
     - organization_id: Get status for a specific organization
     """
     from django.core.cache import cache
-    from .tasks import ENHANCEMENT_STATUS_PREFIX, ENHANCEMENT_RESULT_PREFIX
+
+    from .tasks import ENHANCEMENT_RESULT_PREFIX, ENHANCEMENT_STATUS_PREFIX
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     status_key = f"{ENHANCEMENT_STATUS_PREFIX}:{organization.id}:{request.user.id}"
     result_key = f"{ENHANCEMENT_RESULT_PREFIX}:{organization.id}:{request.user.id}"
 
     status_data = cache.get(status_key)
     if status_data is None:
-        return Response({
-            'status': 'not_found',
-            'message': 'No enhancement task found. Start one with POST /api/v1/analytics/ai/enhance/request/'
-        })
+        return Response(
+            {
+                "status": "not_found",
+                "message": "No enhancement task found. Start one with POST /api/v1/analytics/ai/enhance/request/",
+            }
+        )
 
     response_data = {
-        'status': status_data.get('status', 'unknown'),
-        'progress': status_data.get('progress', 0),
+        "status": status_data.get("status", "unknown"),
+        "progress": status_data.get("progress", 0),
     }
 
-    if status_data.get('status') == 'completed':
+    if status_data.get("status") == "completed":
         result_data = cache.get(result_key)
         if result_data:
-            response_data['enhancement'] = result_data
-    elif status_data.get('status') == 'failed':
-        response_data['error'] = status_data.get('error', 'Unknown error')
+            response_data["enhancement"] = result_data
+    elif status_data.get("status") == "failed":
+        response_data["error"] = status_data.get("error", "Unknown error")
 
     return Response(response_data)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def request_deep_analysis(request):
@@ -1288,17 +1333,17 @@ def request_deep_analysis(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    insight_data = request.data.get('insight')
+    insight_data = request.data.get("insight")
     if not insight_data:
-        return Response({'error': 'insight object is required'}, status=400)
+        return Response({"error": "insight object is required"}, status=400)
 
     if not isinstance(insight_data, dict):
-        return Response({'error': 'insight must be an object'}, status=400)
+        return Response({"error": "insight must be an object"}, status=400)
 
-    if 'id' not in insight_data:
-        return Response({'error': 'insight must have an id field'}, status=400)
+    if "id" not in insight_data:
+        return Response({"error": "insight must have an id field"}, status=400)
 
     # M-AI3: per-field caps prevent a single-field cost-blast inside the
     # request-level payload bound. Pre-existing AI_CHAT_MAX_PAYLOAD_BYTES
@@ -1306,41 +1351,52 @@ def request_deep_analysis(request):
     # actually consumes from the deep-analysis payload.
     DEEP_ANALYSIS_TITLE_MAX = 1000
     DEEP_ANALYSIS_DESC_MAX = 1000
-    title = (insight_data.get('title') or '')[:DEEP_ANALYSIS_TITLE_MAX]
-    description = (insight_data.get('description') or '')[:DEEP_ANALYSIS_DESC_MAX]
-    sanitized_insight_data = {**insight_data, 'title': title, 'description': description}
+    title = (insight_data.get("title") or "")[:DEEP_ANALYSIS_TITLE_MAX]
+    description = (insight_data.get("description") or "")[:DEEP_ANALYSIS_DESC_MAX]
+    sanitized_insight_data = {
+        **insight_data,
+        "title": title,
+        "description": description,
+    }
 
     task = perform_deep_analysis_async.delay(
         org_id=organization.id,
         user_id=request.user.id,
-        insight_data=sanitized_insight_data
+        insight_data=sanitized_insight_data,
     )
 
     log_action(
         user=request.user,
-        action='create',
-        resource='deep_analysis_task',
+        action="create",
+        resource="deep_analysis_task",
         resource_id=task.id,
         request=request,
-        details={
-            'insight_id': insight_data.get('id'),
-            'insight_type': insight_data.get('type'),
-            'organization_id': organization.id
-        } if request.user.is_superuser else {
-            'insight_id': insight_data.get('id'),
-            'insight_type': insight_data.get('type')
-        }
+        details=(
+            {
+                "insight_id": insight_data.get("id"),
+                "insight_type": insight_data.get("type"),
+                "organization_id": organization.id,
+            }
+            if request.user.is_superuser
+            else {
+                "insight_id": insight_data.get("id"),
+                "insight_type": insight_data.get("type"),
+            }
+        ),
     )
 
-    return Response({
-        'task_id': task.id,
-        'insight_id': insight_data.get('id'),
-        'status': 'queued',
-        'message': 'Deep analysis task queued successfully'
-    }, status=202)
+    return Response(
+        {
+            "task_id": task.id,
+            "insight_id": insight_data.get("id"),
+            "status": "queued",
+            "message": "Deep analysis task queued successfully",
+        },
+        status=202,
+    )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def get_deep_analysis_status(request, insight_id):
@@ -1357,31 +1413,33 @@ def get_deep_analysis_status(request, insight_id):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     status_key = f"deep_analysis_status:{organization.id}:{insight_id}"
     result_key = f"deep_analysis_result:{organization.id}:{insight_id}"
 
     status_data = cache.get(status_key)
     if status_data is None:
-        return Response({
-            'status': 'not_found',
-            'insight_id': insight_id,
-            'message': 'No deep analysis task found for this insight'
-        })
+        return Response(
+            {
+                "status": "not_found",
+                "insight_id": insight_id,
+                "message": "No deep analysis task found for this insight",
+            }
+        )
 
     response_data = {
-        'status': status_data.get('status', 'unknown'),
-        'progress': status_data.get('progress', 0),
-        'insight_id': insight_id,
+        "status": status_data.get("status", "unknown"),
+        "progress": status_data.get("progress", 0),
+        "insight_id": insight_id,
     }
 
-    if status_data.get('status') == 'completed':
+    if status_data.get("status") == "completed":
         result_data = cache.get(result_key)
         if result_data:
-            response_data['analysis'] = result_data
-    elif status_data.get('status') == 'failed':
-        response_data['error'] = status_data.get('error', 'Unknown error')
+            response_data["analysis"] = result_data
+    elif status_data.get("status") == "failed":
+        response_data["error"] = status_data.get("error", "Unknown error")
 
     return Response(response_data)
 
@@ -1390,7 +1448,8 @@ def get_deep_analysis_status(request, insight_id):
 # AI Insights Metrics & Monitoring Endpoints
 # ============================================================================
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ai_insights_metrics(request):
     """
@@ -1412,9 +1471,11 @@ def ai_insights_metrics(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    include_health_check = request.query_params.get('include_health_check', 'false').lower() == 'true'
+    include_health_check = (
+        request.query_params.get("include_health_check", "false").lower() == "true"
+    )
 
     # Get cache statistics
     cache_stats = AIInsightsCache.get_cache_stats(organization.id)
@@ -1429,41 +1490,47 @@ def ai_insights_metrics(request):
         provider_health = service.health_check_providers()
 
     metrics = {
-        'organization_id': organization.id,
-        'organization_name': organization.name,
-        'timestamp': timezone.now().isoformat(),
-        'cache': {
-            'hits': cache_stats.get('hits', 0),
-            'misses': cache_stats.get('misses', 0),
-            'hit_rate': cache_stats.get('hit_rate', 0),
-            'total_requests': cache_stats.get('total_requests', 0),
+        "organization_id": organization.id,
+        "organization_name": organization.name,
+        "timestamp": timezone.now().isoformat(),
+        "cache": {
+            "hits": cache_stats.get("hits", 0),
+            "misses": cache_stats.get("misses", 0),
+            "hit_rate": cache_stats.get("hit_rate", 0),
+            "total_requests": cache_stats.get("total_requests", 0),
         },
-        'providers': {
-            'primary': provider_status.get('primary_provider'),
-            'fallback_enabled': provider_status.get('fallback_enabled', False),
-            'available': provider_status.get('available_providers', []),
-            'last_successful': provider_status.get('last_successful_provider'),
-            'errors': provider_status.get('provider_errors', {}),
-            'status': provider_status.get('providers', {}),
+        "providers": {
+            "primary": provider_status.get("primary_provider"),
+            "fallback_enabled": provider_status.get("fallback_enabled", False),
+            "available": provider_status.get("available_providers", []),
+            "last_successful": provider_status.get("last_successful_provider"),
+            "errors": provider_status.get("provider_errors", {}),
+            "status": provider_status.get("providers", {}),
         },
     }
 
     if provider_health:
-        metrics['health_checks'] = provider_health
+        metrics["health_checks"] = provider_health
 
     log_action(
         user=request.user,
-        action='view',
-        resource='ai_insights_metrics',
+        action="view",
+        resource="ai_insights_metrics",
         request=request,
-        details={'organization_id': organization.id, 'include_health_check': include_health_check}
-        if request.user.is_superuser else {'include_health_check': include_health_check}
+        details=(
+            {
+                "organization_id": organization.id,
+                "include_health_check": include_health_check,
+            }
+            if request.user.is_superuser
+            else {"include_health_check": include_health_check}
+        ),
     )
 
     return Response(metrics)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ai_insights_metrics_prometheus(request):
     """
@@ -1476,11 +1543,12 @@ def ai_insights_metrics_prometheus(request):
     - organization_id: Get metrics for a specific organization
     """
     from django.http import HttpResponse
+
     from .ai_cache import AIInsightsCache
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     cache_stats = AIInsightsCache.get_cache_stats(organization.id)
     service = _get_ai_service(request, organization)
@@ -1490,48 +1558,49 @@ def ai_insights_metrics_prometheus(request):
     org_name = organization.name.replace('"', '\\"')
 
     lines = [
-        '# HELP ai_insights_cache_hits_total Total number of cache hits',
-        '# TYPE ai_insights_cache_hits_total counter',
+        "# HELP ai_insights_cache_hits_total Total number of cache hits",
+        "# TYPE ai_insights_cache_hits_total counter",
         f'ai_insights_cache_hits_total{{org_id="{org_id}",org_name="{org_name}"}} {cache_stats.get("hits", 0)}',
-        '',
-        '# HELP ai_insights_cache_misses_total Total number of cache misses',
-        '# TYPE ai_insights_cache_misses_total counter',
+        "",
+        "# HELP ai_insights_cache_misses_total Total number of cache misses",
+        "# TYPE ai_insights_cache_misses_total counter",
         f'ai_insights_cache_misses_total{{org_id="{org_id}",org_name="{org_name}"}} {cache_stats.get("misses", 0)}',
-        '',
-        '# HELP ai_insights_cache_hit_rate Cache hit rate percentage',
-        '# TYPE ai_insights_cache_hit_rate gauge',
+        "",
+        "# HELP ai_insights_cache_hit_rate Cache hit rate percentage",
+        "# TYPE ai_insights_cache_hit_rate gauge",
         f'ai_insights_cache_hit_rate{{org_id="{org_id}",org_name="{org_name}"}} {cache_stats.get("hit_rate", 0)}',
-        '',
-        '# HELP ai_insights_cache_requests_total Total cache requests',
-        '# TYPE ai_insights_cache_requests_total counter',
+        "",
+        "# HELP ai_insights_cache_requests_total Total cache requests",
+        "# TYPE ai_insights_cache_requests_total counter",
         f'ai_insights_cache_requests_total{{org_id="{org_id}",org_name="{org_name}"}} {cache_stats.get("total_requests", 0)}',
-        '',
-        '# HELP ai_insights_provider_available Provider availability (1=available, 0=unavailable)',
-        '# TYPE ai_insights_provider_available gauge',
+        "",
+        "# HELP ai_insights_provider_available Provider availability (1=available, 0=unavailable)",
+        "# TYPE ai_insights_provider_available gauge",
     ]
 
-    for provider_name, status in provider_status.get('providers', {}).items():
-        available = 1 if status.get('available', False) else 0
+    for provider_name, status in provider_status.get("providers", {}).items():
+        available = 1 if status.get("available", False) else 0
         lines.append(
             f'ai_insights_provider_available{{org_id="{org_id}",provider="{provider_name}"}} {available}'
         )
 
-    lines.extend([
-        '',
-        '# HELP ai_insights_fallback_enabled Whether provider fallback is enabled',
-        '# TYPE ai_insights_fallback_enabled gauge',
-        f'ai_insights_fallback_enabled{{org_id="{org_id}"}} {1 if provider_status.get("fallback_enabled") else 0}',
-    ])
+    lines.extend(
+        [
+            "",
+            "# HELP ai_insights_fallback_enabled Whether provider fallback is enabled",
+            "# TYPE ai_insights_fallback_enabled gauge",
+            f'ai_insights_fallback_enabled{{org_id="{org_id}"}} {1 if provider_status.get("fallback_enabled") else 0}',
+        ]
+    )
 
-    metrics_text = '\n'.join(lines) + '\n'
+    metrics_text = "\n".join(lines) + "\n"
 
     return HttpResponse(
-        metrics_text,
-        content_type='text/plain; version=0.0.4; charset=utf-8'
+        metrics_text, content_type="text/plain; version=0.0.4; charset=utf-8"
     )
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def ai_insights_cache_invalidate(request):
     """
@@ -1547,31 +1616,32 @@ def ai_insights_cache_invalidate(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     invalidated_count = AIInsightsCache.invalidate_org_cache(organization.id)
 
     log_action(
         user=request.user,
-        action='delete',
-        resource='ai_insights_cache',
+        action="delete",
+        resource="ai_insights_cache",
         request=request,
-        details={
-            'organization_id': organization.id,
-            'invalidated_count': invalidated_count
-        } if request.user.is_superuser else {
-            'invalidated_count': invalidated_count
+        details=(
+            {"organization_id": organization.id, "invalidated_count": invalidated_count}
+            if request.user.is_superuser
+            else {"invalidated_count": invalidated_count}
+        ),
+    )
+
+    return Response(
+        {
+            "message": "Cache invalidated successfully",
+            "organization_id": organization.id,
+            "invalidated_entries": invalidated_count,
         }
     )
 
-    return Response({
-        'message': 'Cache invalidated successfully',
-        'organization_id': organization.id,
-        'invalidated_entries': invalidated_count
-    })
 
-
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ai_insights_usage(request):
     """
@@ -1591,28 +1661,34 @@ def ai_insights_usage(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    days = min(int(request.query_params.get('days', 30)), 90)
+    # v3.1 Phase 2 (AN-H4): use validate_int_param so ?days=abc returns 400,
+    # not 500. Bare int() raised ValueError that propagated through DRF as
+    # an unhandled 500.
+    days = validate_int_param(request, "days", 30, min_val=1, max_val=90)
 
     usage_summary = LLMRequestLog.get_usage_summary(organization.id, days)
 
-    usage_summary['organization_id'] = organization.id
-    usage_summary['organization_name'] = organization.name
+    usage_summary["organization_id"] = organization.id
+    usage_summary["organization_name"] = organization.name
 
     log_action(
         user=request.user,
-        action='view',
-        resource='ai_insights_usage',
+        action="view",
+        resource="ai_insights_usage",
         request=request,
-        details={'organization_id': organization.id, 'days': days}
-        if request.user.is_superuser else {'days': days}
+        details=(
+            {"organization_id": organization.id, "days": days}
+            if request.user.is_superuser
+            else {"days": days}
+        ),
     )
 
     return Response(usage_summary)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ai_insights_usage_daily(request):
     """
@@ -1624,51 +1700,56 @@ def ai_insights_usage_daily(request):
     - days: Number of days to look back (default: 30, max: 90)
     - organization_id: (superusers only) Get usage for specific organization
     """
-    from django.db.models import Sum, Count
-    from django.db.models.functions import TruncDate
     from datetime import timedelta
+
+    from django.db.models import Count, Sum
+    from django.db.models.functions import TruncDate
+
     from .models import LLMRequestLog
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    days = min(int(request.query_params.get('days', 30)), 90)
+    # v3.1 Phase 2 (AN-H4): see twin in ai_insights_usage.
+    days = validate_int_param(request, "days", 30, min_val=1, max_val=90)
     cutoff = timezone.now() - timedelta(days=days)
 
     daily_data = list(
         LLMRequestLog.objects.filter(
-            organization_id=organization.id,
-            created_at__gte=cutoff
+            organization_id=organization.id, created_at__gte=cutoff
         )
-        .annotate(date=TruncDate('created_at'))
-        .values('date')
+        .annotate(date=TruncDate("created_at"))
+        .values("date")
         .annotate(
-            requests=Count('id'),
-            cost=Sum('cost_usd'),
-            input_tokens=Sum('tokens_input'),
-            output_tokens=Sum('tokens_output'),
-            cache_reads=Sum('prompt_cache_read_tokens'),
+            requests=Count("id"),
+            cost=Sum("cost_usd"),
+            input_tokens=Sum("tokens_input"),
+            output_tokens=Sum("tokens_output"),
+            cache_reads=Sum("prompt_cache_read_tokens"),
         )
-        .order_by('date')
+        .order_by("date")
     )
 
     for entry in daily_data:
-        entry['date'] = entry['date'].isoformat() if entry['date'] else None
-        entry['cost'] = float(entry['cost'] or 0)
+        entry["date"] = entry["date"].isoformat() if entry["date"] else None
+        entry["cost"] = float(entry["cost"] or 0)
 
-    return Response({
-        'organization_id': organization.id,
-        'period_days': days,
-        'daily_usage': daily_data
-    })
+    return Response(
+        {
+            "organization_id": organization.id,
+            "period_days": days,
+            "daily_usage": daily_data,
+        }
+    )
 
 
 # ============================================================================
 # Predictive Analytics Endpoints
 # ============================================================================
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([PredictionsThrottle])
 def spending_forecast(request):
@@ -1681,25 +1762,29 @@ def spending_forecast(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 6, min_val=1, max_val=24)
+    months = validate_int_param(request, "months", 6, min_val=1, max_val=24)
 
     service = PredictiveAnalyticsService(organization)
     data = service.get_spending_forecast(months=months)
 
     log_action(
         user=request.user,
-        action='view',
-        resource='spending_forecast',
+        action="view",
+        resource="spending_forecast",
         request=request,
-        details={'months': months, 'organization_id': organization.id} if request.user.is_superuser else {'months': months}
+        details=(
+            {"months": months, "organization_id": organization.id}
+            if request.user.is_superuser
+            else {"months": months}
+        ),
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([PredictionsThrottle])
 def category_forecast(request, category_id):
@@ -1712,9 +1797,9 @@ def category_forecast(request, category_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 6, min_val=1, max_val=24)
+    months = validate_int_param(request, "months", 6, min_val=1, max_val=24)
 
     service = PredictiveAnalyticsService(organization)
     data = service.get_category_forecast(category_id=category_id, months=months)
@@ -1722,7 +1807,7 @@ def category_forecast(request, category_id):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([PredictionsThrottle])
 def supplier_forecast(request, supplier_id):
@@ -1735,9 +1820,9 @@ def supplier_forecast(request, supplier_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 6, min_val=1, max_val=24)
+    months = validate_int_param(request, "months", 6, min_val=1, max_val=24)
 
     service = PredictiveAnalyticsService(organization)
     data = service.get_supplier_forecast(supplier_id=supplier_id, months=months)
@@ -1745,7 +1830,7 @@ def supplier_forecast(request, supplier_id):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([PredictionsThrottle])
 def trend_analysis(request):
@@ -1757,7 +1842,7 @@ def trend_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = PredictiveAnalyticsService(organization)
     data = service.get_trend_analysis()
@@ -1765,7 +1850,7 @@ def trend_analysis(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([PredictionsThrottle])
 def budget_projection(request):
@@ -1778,20 +1863,16 @@ def budget_projection(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     try:
-        annual_budget = float(request.query_params.get('annual_budget', 0))
+        annual_budget = float(request.query_params.get("annual_budget", 0))
         if annual_budget <= 0:
             return Response(
-                {'error': 'annual_budget must be a positive number'},
-                status=400
+                {"error": "annual_budget must be a positive number"}, status=400
             )
     except (ValueError, TypeError):
-        return Response(
-            {'error': 'annual_budget must be a valid number'},
-            status=400
-        )
+        return Response({"error": "annual_budget must be a valid number"}, status=400)
 
     service = PredictiveAnalyticsService(organization)
     data = service.get_budget_projection(annual_budget=annual_budget)
@@ -1803,7 +1884,8 @@ def budget_projection(request):
 # Contract Analytics Endpoints
 # ============================================================================
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def contract_overview(request):
@@ -1820,23 +1902,25 @@ def contract_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ContractAnalyticsService(organization)
     data = service.get_contract_overview()
 
     log_action(
         user=request.user,
-        action='view',
-        resource='contract_overview',
+        action="view",
+        resource="contract_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def contracts_list(request):
@@ -1853,18 +1937,15 @@ def contracts_list(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ContractAnalyticsService(organization)
     data = service.get_contracts_list()
 
-    return Response({
-        'contracts': data,
-        'count': len(data)
-    })
+    return Response({"contracts": data, "count": len(data)})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def contract_detail(request, contract_id):
@@ -1881,18 +1962,18 @@ def contract_detail(request, contract_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ContractAnalyticsService(organization)
     data = service.get_contract_detail(contract_id)
 
     if data is None:
-        return Response({'error': 'Contract not found'}, status=404)
+        return Response({"error": "Contract not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def expiring_contracts(request):
@@ -1905,21 +1986,17 @@ def expiring_contracts(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    days = validate_int_param(request, 'days', 90, min_val=1, max_val=365)
+    days = validate_int_param(request, "days", 90, min_val=1, max_val=365)
 
     service = ContractAnalyticsService(organization)
     data = service.get_expiring_contracts(days=days)
 
-    return Response({
-        'contracts': data,
-        'count': len(data),
-        'days_threshold': days
-    })
+    return Response({"contracts": data, "count": len(data), "days_threshold": days})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def contract_performance(request, contract_id):
@@ -1936,18 +2013,18 @@ def contract_performance(request, contract_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ContractAnalyticsService(organization)
     data = service.get_contract_performance(contract_id)
 
     if data is None:
-        return Response({'error': 'Contract not found'}, status=404)
+        return Response({"error": "Contract not found"}, status=404)
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def contract_savings_opportunities(request):
@@ -1964,23 +2041,25 @@ def contract_savings_opportunities(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ContractAnalyticsService(organization)
     data = service.get_savings_opportunities()
 
     log_action(
         user=request.user,
-        action='view',
-        resource='contract_savings',
+        action="view",
+        resource="contract_savings",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def contract_renewals(request):
@@ -1997,18 +2076,15 @@ def contract_renewals(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ContractAnalyticsService(organization)
     data = service.get_renewal_recommendations()
 
-    return Response({
-        'recommendations': data,
-        'count': len(data)
-    })
+    return Response({"recommendations": data, "count": len(data)})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ContractAnalyticsThrottle])
 def contract_vs_actual(request):
@@ -2026,14 +2102,14 @@ def contract_vs_actual(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    contract_id = request.query_params.get('contract_id')
+    contract_id = request.query_params.get("contract_id")
     if contract_id:
         try:
             contract_id = int(contract_id)
         except (ValueError, TypeError):
-            return Response({'error': 'contract_id must be an integer'}, status=400)
+            return Response({"error": "contract_id must be an integer"}, status=400)
 
     service = ContractAnalyticsService(organization)
     data = service.get_contract_vs_actual_spend(contract_id=contract_id)
@@ -2045,7 +2121,8 @@ def contract_vs_actual(request):
 # Compliance & Maverick Spend Endpoints
 # ============================================================================
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ComplianceThrottle])
 def compliance_overview(request):
@@ -2063,23 +2140,25 @@ def compliance_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ComplianceService(organization)
     data = service.get_compliance_overview()
 
     log_action(
         user=request.user,
-        action='view',
-        resource='compliance_overview',
+        action="view",
+        resource="compliance_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ComplianceThrottle])
 def maverick_spend_analysis(request):
@@ -2096,7 +2175,7 @@ def maverick_spend_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ComplianceService(organization)
     data = service.get_maverick_spend_analysis()
@@ -2104,7 +2183,7 @@ def maverick_spend_analysis(request):
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ComplianceThrottle])
 def policy_violations(request):
@@ -2119,32 +2198,31 @@ def policy_violations(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     # Parse resolved filter
-    resolved_param = request.query_params.get('resolved')
+    resolved_param = request.query_params.get("resolved")
     resolved = None
     if resolved_param is not None:
-        resolved = resolved_param.lower() == 'true'
+        resolved = resolved_param.lower() == "true"
 
     # Parse severity filter
-    severity = request.query_params.get('severity')
-    if severity and severity not in ['critical', 'high', 'medium', 'low']:
+    severity = request.query_params.get("severity")
+    if severity and severity not in ["critical", "high", "medium", "low"]:
         severity = None
 
     # Parse limit
-    limit = validate_int_param(request, 'limit', 100, min_val=1, max_val=500)
+    limit = validate_int_param(request, "limit", 100, min_val=1, max_val=500)
 
     service = ComplianceService(organization)
-    data = service.get_policy_violations(resolved=resolved, severity=severity, limit=limit)
+    data = service.get_policy_violations(
+        resolved=resolved, severity=severity, limit=limit
+    )
 
-    return Response({
-        'violations': data,
-        'count': len(data)
-    })
+    return Response({"violations": data, "count": len(data)})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ComplianceThrottle])
 def violation_trends(request):
@@ -2157,9 +2235,9 @@ def violation_trends(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 12, min_val=1, max_val=36)
+    months = validate_int_param(request, "months", 12, min_val=1, max_val=36)
 
     service = ComplianceService(organization)
     data = service.get_violation_trends(months=months)
@@ -2167,7 +2245,7 @@ def violation_trends(request):
     return Response(data)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ComplianceThrottle])
 def resolve_violation(request, violation_id):
@@ -2182,38 +2260,37 @@ def resolve_violation(request, violation_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    resolution_notes = request.data.get('resolution_notes', '')
+    resolution_notes = request.data.get("resolution_notes", "")
     if not resolution_notes:
-        return Response({'error': 'resolution_notes is required'}, status=400)
+        return Response({"error": "resolution_notes is required"}, status=400)
 
     service = ComplianceService(organization)
     data = service.resolve_violation(
-        violation_id=violation_id,
-        user=request.user,
-        resolution_notes=resolution_notes
+        violation_id=violation_id, user=request.user, resolution_notes=resolution_notes
     )
 
     if data is None:
-        return Response({'error': 'Violation not found'}, status=404)
+        return Response({"error": "Violation not found"}, status=404)
 
     log_action(
         user=request.user,
-        action='update',
-        resource='policy_violation',
+        action="update",
+        resource="policy_violation",
         resource_id=violation_id,
         request=request,
-        details={
-            'resolution_notes': resolution_notes,
-            'organization_id': organization.id
-        } if request.user.is_superuser else {'resolution_notes': resolution_notes}
+        details=(
+            {"resolution_notes": resolution_notes, "organization_id": organization.id}
+            if request.user.is_superuser
+            else {"resolution_notes": resolution_notes}
+        ),
     )
 
     return Response(data)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ComplianceThrottle])
 def supplier_compliance_scores(request):
@@ -2231,18 +2308,15 @@ def supplier_compliance_scores(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ComplianceService(organization)
     data = service.get_supplier_compliance_scores()
 
-    return Response({
-        'suppliers': data,
-        'count': len(data)
-    })
+    return Response({"suppliers": data, "count": len(data)})
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([ComplianceThrottle])
 def spending_policies(request):
@@ -2256,22 +2330,20 @@ def spending_policies(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = ComplianceService(organization)
     data = service.get_policies_list()
 
-    return Response({
-        'policies': data,
-        'count': len(data)
-    })
+    return Response({"policies": data, "count": len(data)})
 
 
 # ============================================================================
 # AI Insight Feedback Endpoints
 # ============================================================================
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([InsightFeedbackThrottle])
 def record_insight_feedback(request):
@@ -2292,68 +2364,86 @@ def record_insight_feedback(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    required_fields = ['insight_id', 'insight_type', 'insight_title', 'insight_severity', 'action_taken']
+    required_fields = [
+        "insight_id",
+        "insight_type",
+        "insight_title",
+        "insight_severity",
+        "action_taken",
+    ]
     for field in required_fields:
         if not request.data.get(field):
-            return Response({'error': f'{field} is required'}, status=400)
+            return Response({"error": f"{field} is required"}, status=400)
 
-    action_taken = request.data.get('action_taken')
-    valid_actions = ['implemented', 'dismissed', 'deferred', 'investigating', 'partial']
+    action_taken = request.data.get("action_taken")
+    valid_actions = ["implemented", "dismissed", "deferred", "investigating", "partial"]
     if action_taken not in valid_actions:
-        return Response({
-            'error': f'Invalid action_taken. Must be one of: {", ".join(valid_actions)}'
-        }, status=400)
+        return Response(
+            {
+                "error": f'Invalid action_taken. Must be one of: {", ".join(valid_actions)}'
+            },
+            status=400,
+        )
 
-    predicted_savings = request.data.get('predicted_savings')
+    predicted_savings = request.data.get("predicted_savings")
     if predicted_savings is not None:
         try:
             predicted_savings = Decimal(str(predicted_savings))
         except (ValueError, TypeError):
-            return Response({'error': 'predicted_savings must be a valid number'}, status=400)
+            return Response(
+                {"error": "predicted_savings must be a valid number"}, status=400
+            )
 
     feedback = InsightFeedback.objects.create(
         organization=organization,
-        insight_id=request.data.get('insight_id'),
-        insight_type=request.data.get('insight_type'),
-        insight_title=request.data.get('insight_title'),
-        insight_severity=request.data.get('insight_severity'),
+        insight_id=request.data.get("insight_id"),
+        insight_type=request.data.get("insight_type"),
+        insight_title=request.data.get("insight_title"),
+        insight_severity=request.data.get("insight_severity"),
         predicted_savings=predicted_savings,
         action_taken=action_taken,
         action_by=request.user,
-        action_notes=request.data.get('action_notes', '')
+        action_notes=request.data.get("action_notes", ""),
     )
 
     log_action(
         user=request.user,
-        action='create',
-        resource='insight_feedback',
+        action="create",
+        resource="insight_feedback",
         resource_id=str(feedback.id),
         request=request,
-        details={
-            'insight_type': feedback.insight_type,
-            'action_taken': feedback.action_taken,
-            'organization_id': organization.id
-        } if request.user.is_superuser else {
-            'insight_type': feedback.insight_type,
-            'action_taken': feedback.action_taken
-        }
+        details=(
+            {
+                "insight_type": feedback.insight_type,
+                "action_taken": feedback.action_taken,
+                "organization_id": organization.id,
+            }
+            if request.user.is_superuser
+            else {
+                "insight_type": feedback.insight_type,
+                "action_taken": feedback.action_taken,
+            }
+        ),
     )
 
-    return Response({
-        'id': str(feedback.id),
-        'insight_id': feedback.insight_id,
-        'insight_type': feedback.insight_type,
-        'insight_title': feedback.insight_title,
-        'action_taken': feedback.action_taken,
-        'action_date': feedback.action_date.isoformat(),
-        'outcome': feedback.outcome,
-        'message': 'Feedback recorded successfully'
-    }, status=201)
+    return Response(
+        {
+            "id": str(feedback.id),
+            "insight_id": feedback.insight_id,
+            "insight_type": feedback.insight_type,
+            "insight_title": feedback.insight_title,
+            "action_taken": feedback.action_taken,
+            "action_date": feedback.action_date.isoformat(),
+            "outcome": feedback.outcome,
+            "message": "Feedback recorded successfully",
+        },
+        status=201,
+    )
 
 
-@api_view(['PATCH'])
+@api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([InsightFeedbackThrottle])
 def update_insight_outcome(request, feedback_id):
@@ -2372,31 +2462,44 @@ def update_insight_outcome(request, feedback_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     try:
-        feedback = InsightFeedback.objects.get(id=feedback_id, organization=organization)
+        feedback = InsightFeedback.objects.get(
+            id=feedback_id, organization=organization
+        )
     except InsightFeedback.DoesNotExist:
-        return Response({'error': 'Feedback not found'}, status=404)
+        return Response({"error": "Feedback not found"}, status=404)
 
-    outcome = request.data.get('outcome')
+    outcome = request.data.get("outcome")
     if outcome:
-        valid_outcomes = ['pending', 'success', 'partial_success', 'no_change', 'failed']
+        valid_outcomes = [
+            "pending",
+            "success",
+            "partial_success",
+            "no_change",
+            "failed",
+        ]
         if outcome not in valid_outcomes:
-            return Response({
-                'error': f'Invalid outcome. Must be one of: {", ".join(valid_outcomes)}'
-            }, status=400)
+            return Response(
+                {
+                    "error": f'Invalid outcome. Must be one of: {", ".join(valid_outcomes)}'
+                },
+                status=400,
+            )
         feedback.outcome = outcome
         feedback.outcome_date = timezone.now()
 
-    actual_savings = request.data.get('actual_savings')
+    actual_savings = request.data.get("actual_savings")
     if actual_savings is not None:
         try:
             feedback.actual_savings = Decimal(str(actual_savings))
         except (ValueError, TypeError):
-            return Response({'error': 'actual_savings must be a valid number'}, status=400)
+            return Response(
+                {"error": "actual_savings must be a valid number"}, status=400
+            )
 
-    outcome_notes = request.data.get('outcome_notes')
+    outcome_notes = request.data.get("outcome_notes")
     if outcome_notes is not None:
         feedback.outcome_notes = outcome_notes
 
@@ -2404,36 +2507,54 @@ def update_insight_outcome(request, feedback_id):
 
     log_action(
         user=request.user,
-        action='update',
-        resource='insight_feedback',
+        action="update",
+        resource="insight_feedback",
         resource_id=str(feedback.id),
         request=request,
-        details={
-            'outcome': feedback.outcome,
-            'actual_savings': float(feedback.actual_savings) if feedback.actual_savings else None,
-            'organization_id': organization.id
-        } if request.user.is_superuser else {
-            'outcome': feedback.outcome,
-            'actual_savings': float(feedback.actual_savings) if feedback.actual_savings else None
+        details=(
+            {
+                "outcome": feedback.outcome,
+                "actual_savings": (
+                    float(feedback.actual_savings) if feedback.actual_savings else None
+                ),
+                "organization_id": organization.id,
+            }
+            if request.user.is_superuser
+            else {
+                "outcome": feedback.outcome,
+                "actual_savings": (
+                    float(feedback.actual_savings) if feedback.actual_savings else None
+                ),
+            }
+        ),
+    )
+
+    return Response(
+        {
+            "id": str(feedback.id),
+            "insight_id": feedback.insight_id,
+            "insight_type": feedback.insight_type,
+            "action_taken": feedback.action_taken,
+            "outcome": feedback.outcome,
+            "outcome_date": (
+                feedback.outcome_date.isoformat() if feedback.outcome_date else None
+            ),
+            "predicted_savings": (
+                float(feedback.predicted_savings)
+                if feedback.predicted_savings
+                else None
+            ),
+            "actual_savings": (
+                float(feedback.actual_savings) if feedback.actual_savings else None
+            ),
+            "savings_accuracy": feedback.savings_accuracy,
+            "savings_variance": feedback.savings_variance,
+            "message": "Outcome updated successfully",
         }
     )
 
-    return Response({
-        'id': str(feedback.id),
-        'insight_id': feedback.insight_id,
-        'insight_type': feedback.insight_type,
-        'action_taken': feedback.action_taken,
-        'outcome': feedback.outcome,
-        'outcome_date': feedback.outcome_date.isoformat() if feedback.outcome_date else None,
-        'predicted_savings': float(feedback.predicted_savings) if feedback.predicted_savings else None,
-        'actual_savings': float(feedback.actual_savings) if feedback.actual_savings else None,
-        'savings_accuracy': feedback.savings_accuracy,
-        'savings_variance': feedback.savings_variance,
-        'message': 'Outcome updated successfully'
-    })
 
-
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([InsightFeedbackThrottle])
 def get_insight_effectiveness(request):
@@ -2447,92 +2568,111 @@ def get_insight_effectiveness(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     feedback_qs = InsightFeedback.objects.filter(organization=organization)
 
     total_feedback = feedback_qs.count()
     if total_feedback == 0:
-        return Response({
-            'total_feedback': 0,
-            'message': 'No insight feedback recorded yet'
-        })
+        return Response(
+            {"total_feedback": 0, "message": "No insight feedback recorded yet"}
+        )
 
     action_breakdown = list(
-        feedback_qs.values('action_taken')
-        .annotate(count=Count('id'))
-        .order_by('-count')
+        feedback_qs.values("action_taken")
+        .annotate(count=Count("id"))
+        .order_by("-count")
     )
 
     outcome_breakdown = list(
-        feedback_qs.exclude(outcome='pending')
-        .values('outcome')
-        .annotate(count=Count('id'))
-        .order_by('-count')
+        feedback_qs.exclude(outcome="pending")
+        .values("outcome")
+        .annotate(count=Count("id"))
+        .order_by("-count")
     )
 
     type_breakdown = list(
-        feedback_qs.values('insight_type')
+        feedback_qs.values("insight_type")
         .annotate(
-            count=Count('id'),
-            total_predicted=Sum('predicted_savings'),
-            total_actual=Sum('actual_savings')
+            count=Count("id"),
+            total_predicted=Sum("predicted_savings"),
+            total_actual=Sum("actual_savings"),
         )
-        .order_by('-count')
+        .order_by("-count")
     )
 
     savings_metrics = feedback_qs.filter(
-        action_taken='implemented',
-        predicted_savings__isnull=False
+        action_taken="implemented", predicted_savings__isnull=False
     ).aggregate(
-        total_predicted=Sum('predicted_savings'),
-        total_actual=Sum('actual_savings'),
-        avg_predicted=Avg('predicted_savings'),
-        avg_actual=Avg('actual_savings'),
-        implemented_count=Count('id')
+        total_predicted=Sum("predicted_savings"),
+        total_actual=Sum("actual_savings"),
+        avg_predicted=Avg("predicted_savings"),
+        avg_actual=Avg("actual_savings"),
+        implemented_count=Count("id"),
     )
 
     successful_implementations = feedback_qs.filter(
-        action_taken='implemented',
-        outcome__in=['success', 'partial_success']
+        action_taken="implemented", outcome__in=["success", "partial_success"]
     ).count()
 
-    implemented_total = feedback_qs.filter(action_taken='implemented').count()
-    success_rate = (successful_implementations / implemented_total * 100) if implemented_total > 0 else 0
+    implemented_total = feedback_qs.filter(action_taken="implemented").count()
+    success_rate = (
+        (successful_implementations / implemented_total * 100)
+        if implemented_total > 0
+        else 0
+    )
 
-    total_predicted = savings_metrics['total_predicted'] or Decimal('0')
-    total_actual = savings_metrics['total_actual'] or Decimal('0')
-    roi_accuracy = (float(total_actual) / float(total_predicted) * 100) if total_predicted > 0 else None
+    total_predicted = savings_metrics["total_predicted"] or Decimal("0")
+    total_actual = savings_metrics["total_actual"] or Decimal("0")
+    roi_accuracy = (
+        (float(total_actual) / float(total_predicted) * 100)
+        if total_predicted > 0
+        else None
+    )
 
-    return Response({
-        'total_feedback': total_feedback,
-        'action_breakdown': action_breakdown,
-        'outcome_breakdown': outcome_breakdown,
-        'type_breakdown': [
-            {
-                'insight_type': item['insight_type'],
-                'count': item['count'],
-                'total_predicted': float(item['total_predicted']) if item['total_predicted'] else 0,
-                'total_actual': float(item['total_actual']) if item['total_actual'] else 0
-            }
-            for item in type_breakdown
-        ],
-        'savings_metrics': {
-            'total_predicted_savings': float(total_predicted),
-            'total_actual_savings': float(total_actual),
-            'avg_predicted_savings': float(savings_metrics['avg_predicted']) if savings_metrics['avg_predicted'] else 0,
-            'avg_actual_savings': float(savings_metrics['avg_actual']) if savings_metrics['avg_actual'] else 0,
-            'implemented_insights': savings_metrics['implemented_count'] or 0,
-            'roi_accuracy_percent': roi_accuracy,
-            'savings_variance': float(total_actual - total_predicted)
-        },
-        'implementation_success_rate': round(success_rate, 1),
-        'successful_implementations': successful_implementations,
-        'total_implemented': implemented_total
-    })
+    return Response(
+        {
+            "total_feedback": total_feedback,
+            "action_breakdown": action_breakdown,
+            "outcome_breakdown": outcome_breakdown,
+            "type_breakdown": [
+                {
+                    "insight_type": item["insight_type"],
+                    "count": item["count"],
+                    "total_predicted": (
+                        float(item["total_predicted"]) if item["total_predicted"] else 0
+                    ),
+                    "total_actual": (
+                        float(item["total_actual"]) if item["total_actual"] else 0
+                    ),
+                }
+                for item in type_breakdown
+            ],
+            "savings_metrics": {
+                "total_predicted_savings": float(total_predicted),
+                "total_actual_savings": float(total_actual),
+                "avg_predicted_savings": (
+                    float(savings_metrics["avg_predicted"])
+                    if savings_metrics["avg_predicted"]
+                    else 0
+                ),
+                "avg_actual_savings": (
+                    float(savings_metrics["avg_actual"])
+                    if savings_metrics["avg_actual"]
+                    else 0
+                ),
+                "implemented_insights": savings_metrics["implemented_count"] or 0,
+                "roi_accuracy_percent": roi_accuracy,
+                "savings_variance": float(total_actual - total_predicted),
+            },
+            "implementation_success_rate": round(success_rate, 1),
+            "successful_implementations": successful_implementations,
+            "total_implemented": implemented_total,
+        }
+    )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([InsightFeedbackThrottle])
 def list_insight_feedback(request):
@@ -2549,60 +2689,70 @@ def list_insight_feedback(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     feedback_qs = InsightFeedback.objects.filter(organization=organization)
 
-    insight_type = request.query_params.get('insight_type')
+    insight_type = request.query_params.get("insight_type")
     if insight_type:
         feedback_qs = feedback_qs.filter(insight_type=insight_type)
 
-    action_taken = request.query_params.get('action_taken')
+    action_taken = request.query_params.get("action_taken")
     if action_taken:
         feedback_qs = feedback_qs.filter(action_taken=action_taken)
 
-    outcome = request.query_params.get('outcome')
+    outcome = request.query_params.get("outcome")
     if outcome:
         feedback_qs = feedback_qs.filter(outcome=outcome)
 
     total_count = feedback_qs.count()
 
-    limit = validate_int_param(request, 'limit', 50, min_val=1, max_val=200)
-    offset = validate_int_param(request, 'offset', 0, min_val=0, max_val=10000)
+    limit = validate_int_param(request, "limit", 50, min_val=1, max_val=200)
+    offset = validate_int_param(request, "offset", 0, min_val=0, max_val=10000)
 
-    feedback_list = feedback_qs.order_by('-action_date')[offset:offset + limit]
+    feedback_list = feedback_qs.order_by("-action_date")[offset : offset + limit]
 
     results = []
     for fb in feedback_list:
-        results.append({
-            'id': str(fb.id),
-            'insight_id': fb.insight_id,
-            'insight_type': fb.insight_type,
-            'insight_title': fb.insight_title,
-            'insight_severity': fb.insight_severity,
-            'predicted_savings': float(fb.predicted_savings) if fb.predicted_savings else None,
-            'action_taken': fb.action_taken,
-            'action_date': fb.action_date.isoformat(),
-            'action_by': fb.action_by.username if fb.action_by else None,
-            'action_notes': fb.action_notes,
-            'outcome': fb.outcome,
-            'actual_savings': float(fb.actual_savings) if fb.actual_savings else None,
-            'outcome_date': fb.outcome_date.isoformat() if fb.outcome_date else None,
-            'outcome_notes': fb.outcome_notes,
-            'savings_accuracy': fb.savings_accuracy,
-            'savings_variance': fb.savings_variance
-        })
+        results.append(
+            {
+                "id": str(fb.id),
+                "insight_id": fb.insight_id,
+                "insight_type": fb.insight_type,
+                "insight_title": fb.insight_title,
+                "insight_severity": fb.insight_severity,
+                "predicted_savings": (
+                    float(fb.predicted_savings) if fb.predicted_savings else None
+                ),
+                "action_taken": fb.action_taken,
+                "action_date": fb.action_date.isoformat(),
+                "action_by": fb.action_by.username if fb.action_by else None,
+                "action_notes": fb.action_notes,
+                "outcome": fb.outcome,
+                "actual_savings": (
+                    float(fb.actual_savings) if fb.actual_savings else None
+                ),
+                "outcome_date": (
+                    fb.outcome_date.isoformat() if fb.outcome_date else None
+                ),
+                "outcome_notes": fb.outcome_notes,
+                "savings_accuracy": fb.savings_accuracy,
+                "savings_variance": fb.savings_variance,
+            }
+        )
 
-    return Response({
-        'feedback': results,
-        'count': len(results),
-        'total': total_count,
-        'limit': limit,
-        'offset': offset
-    })
+    return Response(
+        {
+            "feedback": results,
+            "count": len(results),
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+        }
+    )
 
 
-@api_view(['DELETE'])
+@api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([InsightFeedbackThrottle])
 def delete_insight_feedback(request, feedback_id):
@@ -2616,12 +2766,14 @@ def delete_insight_feedback(request, feedback_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     try:
-        feedback = InsightFeedback.objects.get(id=feedback_id, organization=organization)
+        feedback = InsightFeedback.objects.get(
+            id=feedback_id, organization=organization
+        )
     except InsightFeedback.DoesNotExist:
-        return Response({'error': 'Feedback not found'}, status=404)
+        return Response({"error": "Feedback not found"}, status=404)
 
     # Finding B9 (Phase 1 task 1.5b): membership-aware admin check, not legacy profile.role.
     is_owner = feedback.action_by == request.user
@@ -2629,23 +2781,25 @@ def delete_insight_feedback(request, feedback_id):
 
     if not is_owner and not is_admin:
         return Response(
-            {'error': 'Permission denied. Only the creator or an admin can delete this feedback.'},
-            status=403
+            {
+                "error": "Permission denied. Only the creator or an admin can delete this feedback."
+            },
+            status=403,
         )
 
     feedback_details = {
-        'insight_id': feedback.insight_id,
-        'insight_type': feedback.insight_type,
-        'action_taken': feedback.action_taken,
+        "insight_id": feedback.insight_id,
+        "insight_type": feedback.insight_type,
+        "action_taken": feedback.action_taken,
     }
 
     log_action(
         user=request.user,
-        action='delete',
-        resource='insight_feedback',
+        action="delete",
+        resource="insight_feedback",
         resource_id=str(feedback_id),
         request=request,
-        details=feedback_details
+        details=feedback_details,
     )
 
     feedback.delete()
@@ -2657,7 +2811,8 @@ def delete_insight_feedback(request, feedback_id):
 # RAG Document Management Views
 # =============================================================================
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def list_rag_documents(request):
     """
@@ -2675,36 +2830,38 @@ def list_rag_documents(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     qs = EmbeddedDocument.objects.filter(organization=organization)
 
-    doc_type = request.query_params.get('document_type')
+    doc_type = request.query_params.get("document_type")
     if doc_type:
         qs = qs.filter(document_type=doc_type)
 
-    is_active = request.query_params.get('is_active')
+    is_active = request.query_params.get("is_active")
     if is_active is not None:
-        qs = qs.filter(is_active=is_active.lower() == 'true')
+        qs = qs.filter(is_active=is_active.lower() == "true")
 
     total_count = qs.count()
 
-    limit = validate_int_param(request, 'limit', 50, min_val=1, max_val=200)
-    offset = validate_int_param(request, 'offset', 0, min_val=0, max_val=10000)
+    limit = validate_int_param(request, "limit", 50, min_val=1, max_val=200)
+    offset = validate_int_param(request, "offset", 0, min_val=0, max_val=10000)
 
-    documents = qs.order_by('-created_at')[offset:offset + limit]
+    documents = qs.order_by("-created_at")[offset : offset + limit]
     serializer = EmbeddedDocumentListSerializer(documents, many=True)
 
-    return Response({
-        'documents': serializer.data,
-        'count': len(serializer.data),
-        'total': total_count,
-        'limit': limit,
-        'offset': offset
-    })
+    return Response(
+        {
+            "documents": serializer.data,
+            "count": len(serializer.data),
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+        }
+    )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_rag_document(request, document_id):
     """
@@ -2718,21 +2875,20 @@ def get_rag_document(request, document_id):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     try:
         document = EmbeddedDocument.objects.get(
-            id=document_id,
-            organization=organization
+            id=document_id, organization=organization
         )
     except EmbeddedDocument.DoesNotExist:
-        return Response({'error': 'Document not found'}, status=404)
+        return Response({"error": "Document not found"}, status=404)
 
     serializer = EmbeddedDocumentSerializer(document)
     return Response(serializer.data)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_rag_document(request):
     """
@@ -2753,73 +2909,75 @@ def create_rag_document(request):
     Query params (superusers only):
     - organization_id: Create document for a specific organization
     """
-    from .serializers import DocumentIngestionSerializer
     from .document_ingestion import DocumentIngestionService
+    from .serializers import DocumentIngestionSerializer
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     serializer = DocumentIngestionSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
 
     data = serializer.validated_data
-    doc_type = data['document_type']
+    doc_type = data["document_type"]
 
     service = DocumentIngestionService(organization_id=organization.id)
 
     try:
-        if doc_type == 'policy':
+        if doc_type == "policy":
             doc = service.ingest_policy(
-                title=data['title'],
-                content=data['content'],
-                category_id=data.get('category_id'),
-                effective_date=data.get('effective_date')
+                title=data["title"],
+                content=data["content"],
+                category_id=data.get("category_id"),
+                effective_date=data.get("effective_date"),
             )
-        elif doc_type == 'contract':
+        elif doc_type == "contract":
             doc = service.ingest_contract_summary(
-                supplier_id=data['supplier_id'],
-                title=data['title'],
-                content=data['content'],
-                contract_start=data.get('contract_start'),
-                contract_end=data.get('contract_end'),
-                contract_value=data.get('contract_value')
+                supplier_id=data["supplier_id"],
+                title=data["title"],
+                content=data["content"],
+                contract_start=data.get("contract_start"),
+                contract_end=data.get("contract_end"),
+                contract_value=data.get("contract_value"),
             )
-        elif doc_type == 'best_practice':
+        elif doc_type == "best_practice":
             doc = service.ingest_best_practice(
-                title=data['title'],
-                content=data['content'],
-                category_id=data.get('category_id'),
-                source=data.get('source')
+                title=data["title"],
+                content=data["content"],
+                category_id=data.get("category_id"),
+                source=data.get("source"),
             )
         else:
-            return Response({'error': f'Unsupported document type: {doc_type}'}, status=400)
+            return Response(
+                {"error": f"Unsupported document type: {doc_type}"}, status=400
+            )
 
         log_action(
             user=request.user,
-            action='create',
-            resource='rag_document',
+            action="create",
+            resource="rag_document",
             resource_id=str(doc.id),
             request=request,
-            details={
-                'document_type': doc_type,
-                'title': data['title']
-            }
+            details={"document_type": doc_type, "title": data["title"]},
         )
 
-        return Response({
-            'id': str(doc.id),
-            'document_type': doc.document_type,
-            'title': doc.title,
-            'message': 'Document created successfully'
-        }, status=201)
+        return Response(
+            {
+                "id": str(doc.id),
+                "document_type": doc.document_type,
+                "title": doc.title,
+                "message": "Document created successfully",
+            },
+            status=201,
+        )
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
-@api_view(['DELETE'])
+@api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_rag_document(request, document_id):
     """
@@ -2834,42 +2992,38 @@ def delete_rag_document(request, document_id):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     profile = request.user.profile
-    if profile.role != 'admin':
+    if profile.role != "admin":
         return Response(
-            {'error': 'Permission denied. Only admins can delete documents.'},
-            status=403
+            {"error": "Permission denied. Only admins can delete documents."},
+            status=403,
         )
 
     try:
         document = EmbeddedDocument.objects.get(
-            id=document_id,
-            organization=organization
+            id=document_id, organization=organization
         )
     except EmbeddedDocument.DoesNotExist:
-        return Response({'error': 'Document not found'}, status=404)
+        return Response({"error": "Document not found"}, status=404)
 
-    doc_details = {
-        'document_type': document.document_type,
-        'title': document.title
-    }
+    doc_details = {"document_type": document.document_type, "title": document.title}
 
     log_action(
         user=request.user,
-        action='delete',
-        resource='rag_document',
+        action="delete",
+        resource="rag_document",
         resource_id=str(document_id),
         request=request,
-        details=doc_details
+        details=doc_details,
     )
 
     document.delete()
     return Response(status=204)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def search_rag_documents(request):
     """
@@ -2884,12 +3038,12 @@ def search_rag_documents(request):
     Query params (superusers only):
     - organization_id: Search documents for a specific organization
     """
-    from .serializers import RAGSearchSerializer
     from .rag_service import RAGService
+    from .serializers import RAGSearchSerializer
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     serializer = RAGSearchSerializer(data=request.data)
     if not serializer.is_valid():
@@ -2900,21 +3054,23 @@ def search_rag_documents(request):
     service = RAGService(organization_id=organization.id)
 
     results = service.search(
-        query=data['query'],
-        doc_types=data.get('document_types'),
-        top_k=data.get('top_k', 5),
-        threshold=data.get('threshold', 0.70)
+        query=data["query"],
+        doc_types=data.get("document_types"),
+        top_k=data.get("top_k", 5),
+        threshold=data.get("threshold", 0.70),
     )
 
-    return Response({
-        'results': results,
-        'count': len(results),
-        'query': data['query'],
-        'search_type': 'vector' if service._pgvector_available else 'keyword'
-    })
+    return Response(
+        {
+            "results": results,
+            "count": len(results),
+            "query": data["query"],
+            "search_type": "vector" if service._pgvector_available else "keyword",
+        }
+    )
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def ingest_supplier_profiles(request):
     """
@@ -2932,18 +3088,20 @@ def ingest_supplier_profiles(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     profile = request.user.profile
-    if profile.role not in ['admin', 'manager']:
+    if profile.role not in ["admin", "manager"]:
         return Response(
-            {'error': 'Permission denied. Only admins and managers can trigger ingestion.'},
-            status=403
+            {
+                "error": "Permission denied. Only admins and managers can trigger ingestion."
+            },
+            status=403,
         )
 
-    supplier_ids = request.data.get('supplier_ids')
+    supplier_ids = request.data.get("supplier_ids")
     if supplier_ids and not isinstance(supplier_ids, list):
-        return Response({'error': 'supplier_ids must be a list'}, status=400)
+        return Response({"error": "supplier_ids must be a list"}, status=400)
 
     service = DocumentIngestionService(organization_id=organization.id)
 
@@ -2952,23 +3110,20 @@ def ingest_supplier_profiles(request):
 
         log_action(
             user=request.user,
-            action='ingest',
-            resource='rag_supplier_profiles',
+            action="ingest",
+            resource="rag_supplier_profiles",
             resource_id=str(organization.id),
             request=request,
-            details=result
+            details=result,
         )
 
-        return Response({
-            **result,
-            'message': 'Supplier profile ingestion completed'
-        })
+        return Response({**result, "message": "Supplier profile ingestion completed"})
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def ingest_historical_insights(request):
     """
@@ -2987,27 +3142,29 @@ def ingest_historical_insights(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     profile = request.user.profile
-    if profile.role not in ['admin', 'manager']:
+    if profile.role not in ["admin", "manager"]:
         return Response(
-            {'error': 'Permission denied. Only admins and managers can trigger ingestion.'},
-            status=403
+            {
+                "error": "Permission denied. Only admins and managers can trigger ingestion."
+            },
+            status=403,
         )
 
-    outcomes = request.data.get('outcomes')
-    limit = request.data.get('limit', 100)
+    outcomes = request.data.get("outcomes")
+    limit = request.data.get("limit", 100)
 
     if outcomes and not isinstance(outcomes, list):
-        return Response({'error': 'outcomes must be a list'}, status=400)
+        return Response({"error": "outcomes must be a list"}, status=400)
 
     try:
         limit = int(limit)
         if limit < 1 or limit > 1000:
-            return Response({'error': 'limit must be between 1 and 1000'}, status=400)
+            return Response({"error": "limit must be between 1 and 1000"}, status=400)
     except (ValueError, TypeError):
-        return Response({'error': 'limit must be an integer'}, status=400)
+        return Response({"error": "limit must be an integer"}, status=400)
 
     service = DocumentIngestionService(organization_id=organization.id)
 
@@ -3016,23 +3173,20 @@ def ingest_historical_insights(request):
 
         log_action(
             user=request.user,
-            action='ingest',
-            resource='rag_historical_insights',
+            action="ingest",
+            resource="rag_historical_insights",
             resource_id=str(organization.id),
             request=request,
-            details=result
+            details=result,
         )
 
-        return Response({
-            **result,
-            'message': 'Historical insight ingestion completed'
-        })
+        return Response({**result, "message": "Historical insight ingestion completed"})
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def refresh_rag_documents(request):
     """
@@ -3047,13 +3201,13 @@ def refresh_rag_documents(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     profile = request.user.profile
-    if profile.role != 'admin':
+    if profile.role != "admin":
         return Response(
-            {'error': 'Permission denied. Only admins can trigger full refresh.'},
-            status=403
+            {"error": "Permission denied. Only admins can trigger full refresh."},
+            status=403,
         )
 
     service = DocumentIngestionService(organization_id=organization.id)
@@ -3063,23 +3217,22 @@ def refresh_rag_documents(request):
 
         log_action(
             user=request.user,
-            action='refresh',
-            resource='rag_documents',
+            action="refresh",
+            resource="rag_documents",
             resource_id=str(organization.id),
             request=request,
-            details=result
+            details=result,
         )
 
-        return Response({
-            'results': result,
-            'message': 'Full RAG document refresh completed'
-        })
+        return Response(
+            {"results": result, "message": "Full RAG document refresh completed"}
+        )
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def cleanup_orphaned_documents(request):
     """
@@ -3094,13 +3247,12 @@ def cleanup_orphaned_documents(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     profile = request.user.profile
-    if profile.role != 'admin':
+    if profile.role != "admin":
         return Response(
-            {'error': 'Permission denied. Only admins can trigger cleanup.'},
-            status=403
+            {"error": "Permission denied. Only admins can trigger cleanup."}, status=403
         )
 
     service = DocumentIngestionService(organization_id=organization.id)
@@ -3110,23 +3262,22 @@ def cleanup_orphaned_documents(request):
 
         log_action(
             user=request.user,
-            action='cleanup',
-            resource='rag_documents',
+            action="cleanup",
+            resource="rag_documents",
             resource_id=str(organization.id),
             request=request,
-            details={'deleted': deleted}
+            details={"deleted": deleted},
         )
 
-        return Response({
-            'deleted': deleted,
-            'message': f'Cleaned up {deleted} orphaned documents'
-        })
+        return Response(
+            {"deleted": deleted, "message": f"Cleaned up {deleted} orphaned documents"}
+        )
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_rag_stats(request):
     """
@@ -3139,7 +3290,7 @@ def get_rag_stats(request):
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     service = DocumentIngestionService(organization_id=organization.id)
     stats = service.get_stats()
@@ -3151,7 +3302,8 @@ def get_rag_stats(request):
 # AI Chat Streaming Endpoints
 # =============================================================================
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def ai_chat_stream(request):
@@ -3168,18 +3320,19 @@ def ai_chat_stream(request):
     Returns SSE stream with tokens.
     """
     import json
-    from django.http import StreamingHttpResponse
+
     from django.conf import settings
+    from django.http import StreamingHttpResponse
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    messages = request.data.get('messages', [])
-    context = request.data.get('context', {})
+    messages = request.data.get("messages", [])
+    context = request.data.get("context", {})
 
     if not messages:
-        return Response({'error': 'Messages are required'}, status=400)
+        return Response({"error": "Messages are required"}, status=400)
 
     # Finding #8 (Phase 4 task 4.2): model allowlist replaces the Phase 0
     # hardcode. Default applies when the client doesn't specify (or sends
@@ -3187,15 +3340,15 @@ def ai_chat_stream(request):
     # reject with 400. Falling back silently would hide misconfiguration
     # and let a stale client keep talking to a model the operator removed.
     allowed_models = getattr(
-        settings, 'AI_CHAT_ALLOWED_MODELS', ['claude-sonnet-4-20250514']
+        settings, "AI_CHAT_ALLOWED_MODELS", ["claude-sonnet-4-20250514"]
     )
     default_model = getattr(
-        settings, 'AI_CHAT_DEFAULT_MODEL', 'claude-sonnet-4-20250514'
+        settings, "AI_CHAT_DEFAULT_MODEL", "claude-sonnet-4-20250514"
     )
-    requested_model = request.data.get('model') or default_model
+    requested_model = request.data.get("model") or default_model
     if requested_model not in allowed_models:
         return Response(
-            {'error': f"Model '{requested_model}' is not in the allowlist."},
+            {"error": f"Model '{requested_model}' is not in the allowlist."},
             status=400,
         )
     model = requested_model
@@ -3203,42 +3356,44 @@ def ai_chat_stream(request):
     # Finding B10: settings-driven payload bounds. Combined with the per-call
     # AIInsightsThrottle (Finding #7), these block single-call cost-blast
     # attacks (e.g., one 10MB chat history → millions of input tokens).
-    max_messages = getattr(settings, 'AI_CHAT_MAX_MESSAGES', 50)
+    max_messages = getattr(settings, "AI_CHAT_MAX_MESSAGES", 50)
     if len(messages) > max_messages:
         return Response(
-            {'error': f'Too many messages (max {max_messages}, got {len(messages)})'},
+            {"error": f"Too many messages (max {max_messages}, got {len(messages)})"},
             status=400,
         )
 
-    max_chars = getattr(settings, 'AI_CHAT_MAX_MESSAGE_CONTENT_CHARS', 8000)
+    max_chars = getattr(settings, "AI_CHAT_MAX_MESSAGE_CONTENT_CHARS", 8000)
     for i, msg in enumerate(messages):
-        content = msg.get('content', '') if isinstance(msg, dict) else ''
+        content = msg.get("content", "") if isinstance(msg, dict) else ""
         if len(content) > max_chars:
             return Response(
-                {'error': f'Message {i} content exceeds max length ({max_chars} chars)'},
+                {
+                    "error": f"Message {i} content exceeds max length ({max_chars} chars)"
+                },
                 status=400,
             )
 
-    max_bytes = getattr(settings, 'AI_CHAT_MAX_PAYLOAD_BYTES', 200_000)
-    payload_size = len(json.dumps(request.data).encode('utf-8'))
+    max_bytes = getattr(settings, "AI_CHAT_MAX_PAYLOAD_BYTES", 200_000)
+    payload_size = len(json.dumps(request.data).encode("utf-8"))
     if payload_size > max_bytes:
         return Response(
-            {'error': f'Request payload too large ({payload_size} bytes, max {max_bytes})'},
+            {
+                "error": f"Request payload too large ({payload_size} bytes, max {max_bytes})"
+            },
             status=400,
         )
 
-    api_key = getattr(settings, 'ANTHROPIC_API_KEY', None)
+    api_key = getattr(settings, "ANTHROPIC_API_KEY", None)
     if not api_key:
-        return Response(
-            {'error': 'AI streaming not configured'},
-            status=503
-        )
+        return Response({"error": "AI streaming not configured"}, status=503)
 
     system_prompt = _build_chat_system_prompt(organization, context)
 
     def generate_stream():
         try:
             import anthropic
+
             client = anthropic.Anthropic(api_key=api_key)
 
             formatted_messages = [
@@ -3257,27 +3412,29 @@ def ai_chat_stream(request):
 
                 final_message = stream.get_final_message()
                 usage = {
-                    'input_tokens': final_message.usage.input_tokens,
-                    'output_tokens': final_message.usage.output_tokens,
+                    "input_tokens": final_message.usage.input_tokens,
+                    "output_tokens": final_message.usage.output_tokens,
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
         except Exception as e:
-            from .llm_error_codes import classify_anthropic_error, USER_FACING_MESSAGES
+            from .llm_error_codes import USER_FACING_MESSAGES, classify_anthropic_error
+
             code = classify_anthropic_error(e)
-            logger.exception("SSE streaming error: %s", code)  # Finding #6 — diagnostic capture
+            logger.exception(
+                "SSE streaming error: %s", code
+            )  # Finding #6 — diagnostic capture
             yield f"data: {json.dumps({'error_code': code, 'error': USER_FACING_MESSAGES[code]})}\n\n"
 
     response = StreamingHttpResponse(
-        generate_stream(),
-        content_type='text/event-stream'
+        generate_stream(), content_type="text/event-stream"
     )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
     return response
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AIInsightsThrottle])
 def ai_quick_query(request):
@@ -3293,44 +3450,44 @@ def ai_quick_query(request):
     Returns SSE stream with response.
     """
     import json
-    from django.http import StreamingHttpResponse
+
     from django.conf import settings
+    from django.http import StreamingHttpResponse
 
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    query = request.data.get('query', '')
-    include_context = request.data.get('include_context', True)
+    query = request.data.get("query", "")
+    include_context = request.data.get("include_context", True)
 
     if not query:
-        return Response({'error': 'Query is required'}, status=400)
+        return Response({"error": "Query is required"}, status=400)
 
     # Finding B10 (half-fix completion): same settings-driven payload bounds as
     # ai_chat_stream. The throttle gates calls/hour but not per-call cost — a
     # single oversized query still drives massive LLM spend per request.
     # AI_CHAT_MAX_MESSAGES is skipped (no messages array on this endpoint).
-    max_chars = getattr(settings, 'AI_CHAT_MAX_MESSAGE_CONTENT_CHARS', 8000)
+    max_chars = getattr(settings, "AI_CHAT_MAX_MESSAGE_CONTENT_CHARS", 8000)
     if len(query) > max_chars:
         return Response(
-            {'error': f'Query content exceeds max length ({max_chars} chars)'},
+            {"error": f"Query content exceeds max length ({max_chars} chars)"},
             status=400,
         )
 
-    max_bytes = getattr(settings, 'AI_CHAT_MAX_PAYLOAD_BYTES', 200_000)
-    payload_size = len(json.dumps(request.data).encode('utf-8'))
+    max_bytes = getattr(settings, "AI_CHAT_MAX_PAYLOAD_BYTES", 200_000)
+    payload_size = len(json.dumps(request.data).encode("utf-8"))
     if payload_size > max_bytes:
         return Response(
-            {'error': f'Request payload too large ({payload_size} bytes, max {max_bytes})'},
+            {
+                "error": f"Request payload too large ({payload_size} bytes, max {max_bytes})"
+            },
             status=400,
         )
 
-    api_key = getattr(settings, 'ANTHROPIC_API_KEY', None)
+    api_key = getattr(settings, "ANTHROPIC_API_KEY", None)
     if not api_key:
-        return Response(
-            {'error': 'AI streaming not configured'},
-            status=503
-        )
+        return Response({"error": "AI streaming not configured"}, status=503)
 
     context = {}
     if include_context:
@@ -3338,10 +3495,10 @@ def ai_quick_query(request):
             service = AnalyticsService(organization)
             overview = service.get_overview_stats()
             context = {
-                'total_spend': overview.get('total_spend', 0),
-                'transaction_count': overview.get('transaction_count', 0),
-                'supplier_count': overview.get('supplier_count', 0),
-                'category_count': overview.get('category_count', 0),
+                "total_spend": overview.get("total_spend", 0),
+                "transaction_count": overview.get("transaction_count", 0),
+                "supplier_count": overview.get("supplier_count", 0),
+                "category_count": overview.get("category_count", 0),
             }
         except Exception:
             pass
@@ -3351,10 +3508,11 @@ def ai_quick_query(request):
     def generate_stream():
         try:
             import anthropic
+
             client = anthropic.Anthropic(api_key=api_key)
 
             with client.messages.stream(
-                model='claude-sonnet-4-20250514',
+                model="claude-sonnet-4-20250514",
                 max_tokens=1000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": query}],
@@ -3364,23 +3522,25 @@ def ai_quick_query(request):
 
                 final_message = stream.get_final_message()
                 usage = {
-                    'input_tokens': final_message.usage.input_tokens,
-                    'output_tokens': final_message.usage.output_tokens,
+                    "input_tokens": final_message.usage.input_tokens,
+                    "output_tokens": final_message.usage.output_tokens,
                 }
                 yield f"data: {json.dumps({'done': True, 'usage': usage})}\n\n"
 
         except Exception as e:
-            from .llm_error_codes import classify_anthropic_error, USER_FACING_MESSAGES
+            from .llm_error_codes import USER_FACING_MESSAGES, classify_anthropic_error
+
             code = classify_anthropic_error(e)
-            logger.exception("SSE streaming error: %s", code)  # Finding #6 — diagnostic capture
+            logger.exception(
+                "SSE streaming error: %s", code
+            )  # Finding #6 — diagnostic capture
             yield f"data: {json.dumps({'error_code': code, 'error': USER_FACING_MESSAGES[code]})}\n\n"
 
     response = StreamingHttpResponse(
-        generate_stream(),
-        content_type='text/event-stream'
+        generate_stream(), content_type="text/event-stream"
     )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
     return response
 
 

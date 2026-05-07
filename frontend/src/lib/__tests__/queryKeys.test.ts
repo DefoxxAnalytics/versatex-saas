@@ -803,7 +803,12 @@ describe("Query Keys Factory", () => {
 
     it("should generate insightsAnomalies key with sensitivity", () => {
       const key = queryKeys.ai.insightsAnomalies(0.5, 1, undefined);
-      expect(key).toEqual(["ai", "insights-anomalies", 0.5, { orgId: 1, filters: undefined }]);
+      expect(key).toEqual([
+        "ai",
+        "insights-anomalies",
+        0.5,
+        { orgId: 1, filters: undefined },
+      ]);
     });
   });
 
@@ -818,12 +823,21 @@ describe("Query Keys Factory", () => {
     it("should generate spendingForecast key with months and filters", () => {
       const filters = { supplier_ids: [1, 2] };
       const key = queryKeys.predictions.spendingForecast(6, 1, filters);
-      expect(key).toEqual(["predictions", "spending-forecast", 6, { orgId: 1, filters }]);
+      expect(key).toEqual([
+        "predictions",
+        "spending-forecast",
+        6,
+        { orgId: 1, filters },
+      ]);
     });
 
     it("should generate trendAnalysis key with filters", () => {
       const key = queryKeys.predictions.trendAnalysis(1, undefined);
-      expect(key).toEqual(["predictions", "trend-analysis", { orgId: 1, filters: undefined }]);
+      expect(key).toEqual([
+        "predictions",
+        "trend-analysis",
+        { orgId: 1, filters: undefined },
+      ]);
     });
   });
 

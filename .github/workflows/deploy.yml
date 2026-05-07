@@ -8,8 +8,18 @@ name: Deploy
 # tags this workflow publishes.
 
 on:
+  # Branch deploys gated on CI green: workflow_run fires only after CI
+  # completes, and the job-level `if` checks conclusion == success. Without
+  # this gate, a commit that fails tests or Trivy scan still publishes a
+  # GHCR image tagged with its SHA, deployable via APP_VERSION rollout.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main, master]
+  # Tag pushes (intentional version releases) bypass the CI workflow_run gate
+  # because CI doesn't trigger on tags. These are deliberate, low-frequency,
+  # and operator-driven; the v* prefix is the human checkpoint.
   push:
-    branches: [master, main]
     tags:
       - 'v*'
 
@@ -22,6 +32,9 @@ jobs:
   build-and-push:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
+    # Branch path: only proceed if the source CI run was successful.
+    # Tag path: github.event_name == 'push' bypasses the workflow_run check.
+    if: ${{ github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write

@@ -2,6 +2,7 @@
 Celery tasks for procurement data processing.
 Handles background CSV upload processing for large files.
 """
+
 import csv
 import io
 import json
@@ -15,8 +16,8 @@ from django.utils import timezone
 
 from apps.authentication.models import UserOrganizationMembership
 
-from .models import DataUpload, Transaction, Supplier, Category
-from .services import get_or_create_supplier, get_or_create_category
+from .models import Category, DataUpload, Supplier, Transaction
+from .services import get_or_create_category, get_or_create_supplier
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,14 @@ CSV_BATCH_SIZE = 1000
 
 
 @shared_task(bind=True, soft_time_limit=600, max_retries=3, retry_backoff=True)
-def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplicates=False, strict_duplicates=False):
+def process_csv_upload(
+    self,
+    upload_id,
+    mapping,
+    skip_invalid=True,
+    skip_duplicates=False,
+    strict_duplicates=False,
+):
     """
     Background task for processing large CSV files.
 
@@ -47,7 +55,7 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
     try:
         upload = DataUpload.objects.get(id=upload_id)
     except DataUpload.DoesNotExist:
-        return {'error': 'Upload not found'}
+        return {"error": "Upload not found"}
 
     # Finding C4: re-verify the uploader's organization membership at execution
     # time. Between `delay()` and execution, the user may have been removed,
@@ -61,20 +69,20 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         logger.warning(
             "process_csv_upload aborted: user_id=%s no longer an active member "
             "of organization_id=%s (upload_id=%s, batch_id=%s)",
-            getattr(upload.uploaded_by, 'id', None),
+            getattr(upload.uploaded_by, "id", None),
             upload.organization_id,
             upload.id,
             upload.batch_id,
         )
-        upload.status = 'failed'
-        upload.error_log = json.dumps([{'message': MEMBERSHIP_REVOKED_ERROR}])
+        upload.status = "failed"
+        upload.error_log = json.dumps([{"message": MEMBERSHIP_REVOKED_ERROR}])
         upload.progress_message = MEMBERSHIP_REVOKED_ERROR
         upload.completed_at = timezone.now()
         upload.save()
         return {
-            'status': 'failed',
-            'error': MEMBERSHIP_REVOKED_ERROR,
-            'upload_id': upload.id,
+            "status": "failed",
+            "error": MEMBERSHIP_REVOKED_ERROR,
+            "upload_id": upload.id,
         }
 
     try:
@@ -87,44 +95,57 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         is_resumed_run = resume_from_batch > 0
 
         # Update status
-        upload.status = 'processing'
+        upload.status = "processing"
         upload.progress_percent = 0
         upload.progress_message = (
-            f'Resuming from batch {resume_from_batch}...'
-            if is_resumed_run else 'Starting processing...'
+            f"Resuming from batch {resume_from_batch}..."
+            if is_resumed_run
+            else "Starting processing..."
         )
         upload.save()
 
         # Read file content
         if not upload.stored_file:
-            raise ValueError('No file stored for processing')
+            raise ValueError("No file stored for processing")
 
-        content = upload.stored_file.read().decode('utf-8-sig')
+        content = upload.stored_file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(content))
         rows = list(reader)
         total_rows = len(rows)
 
         if total_rows == 0:
-            upload.status = 'failed'
-            upload.error_log = json.dumps([{'message': 'File contains no data rows'}])
+            upload.status = "failed"
+            upload.error_log = json.dumps([{"message": "File contains no data rows"}])
             upload.save()
-            return {'error': 'No data rows'}
+            return {"error": "No data rows"}
 
         upload.total_rows = total_rows
         upload.save()
 
         # Get column mappings
-        supplier_col = next((k for k, v in mapping.items() if v == 'supplier'), None)
-        category_col = next((k for k, v in mapping.items() if v == 'category'), None)
-        amount_col = next((k for k, v in mapping.items() if v == 'amount'), None)
-        date_col = next((k for k, v in mapping.items() if v == 'date'), None)
-        description_col = next((k for k, v in mapping.items() if v == 'description'), None)
-        invoice_col = next((k for k, v in mapping.items() if v == 'invoice_number'), None)
-        fiscal_year_col = next((k for k, v in mapping.items() if v == 'fiscal_year'), None)
-        subcategory_col = next((k for k, v in mapping.items() if v == 'subcategory'), None)
-        location_col = next((k for k, v in mapping.items() if v == 'location'), None)
-        spend_band_col = next((k for k, v in mapping.items() if v == 'spend_band'), None)
-        payment_method_col = next((k for k, v in mapping.items() if v == 'payment_method'), None)
+        supplier_col = next((k for k, v in mapping.items() if v == "supplier"), None)
+        category_col = next((k for k, v in mapping.items() if v == "category"), None)
+        amount_col = next((k for k, v in mapping.items() if v == "amount"), None)
+        date_col = next((k for k, v in mapping.items() if v == "date"), None)
+        description_col = next(
+            (k for k, v in mapping.items() if v == "description"), None
+        )
+        invoice_col = next(
+            (k for k, v in mapping.items() if v == "invoice_number"), None
+        )
+        fiscal_year_col = next(
+            (k for k, v in mapping.items() if v == "fiscal_year"), None
+        )
+        subcategory_col = next(
+            (k for k, v in mapping.items() if v == "subcategory"), None
+        )
+        location_col = next((k for k, v in mapping.items() if v == "location"), None)
+        spend_band_col = next(
+            (k for k, v in mapping.items() if v == "spend_band"), None
+        )
+        payment_method_col = next(
+            (k for k, v in mapping.items() if v == "payment_method"), None
+        )
 
         organization = upload.organization
         user = upload.uploaded_by
@@ -148,27 +169,26 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                         decoded = []
                 if not isinstance(decoded, list):
                     decoded = []
-                batch_log = [e for e in decoded if e.get('kind') == 'batch']
+                batch_log = [e for e in decoded if e.get("kind") == "batch"]
                 errors = [
-                    {k: v for k, v in e.items() if k != 'kind'}
-                    for e in decoded if e.get('kind') == 'row'
+                    {k: v for k, v in e.items() if k != "kind"}
+                    for e in decoded
+                    if e.get("kind") == "row"
                 ]
             else:
                 batch_log = []
                 errors = []
             batches_succeeded = sum(
-                1 for b in batch_log if b.get('status') == 'succeeded'
+                1 for b in batch_log if b.get("status") == "succeeded"
             )
-            batches_failed = sum(
-                1 for b in batch_log if b.get('status') == 'failed'
-            )
-            failed_entries = [b for b in batch_log if b.get('status') == 'failed']
+            batches_failed = sum(1 for b in batch_log if b.get("status") == "failed")
+            failed_entries = [b for b in batch_log if b.get("status") == "failed"]
             if failed_entries:
-                first = min(failed_entries, key=lambda b: b.get('batch_index', 0))
-                first_failed_batch_index = first.get('batch_index')
+                first = min(failed_entries, key=lambda b: b.get("batch_index", 0))
+                first_failed_batch_index = first.get("batch_index")
                 first_failed_batch_rows = (
-                    first.get('first_row_number'),
-                    first.get('last_row_number'),
+                    first.get("first_row_number"),
+                    first.get("last_row_number"),
                 )
             else:
                 first_failed_batch_index = None
@@ -212,8 +232,8 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
             DataUpload.objects.filter(pk=upload.pk).update(
                 progress_percent=progress,
                 progress_message=(
-                    f'Processing rows {batch_start + 1} to {batch_end} '
-                    f'of {total_rows}'
+                    f"Processing rows {batch_start + 1} to {batch_end} "
+                    f"of {total_rows}"
                 ),
             )
 
@@ -236,37 +256,49 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                             if row_errors:
                                 batch_row_errors.extend(row_errors)
                                 if not skip_invalid:
-                                    raise ValueError(f'Row {row_num} has validation errors')
+                                    raise ValueError(
+                                        f"Row {row_num} has validation errors"
+                                    )
                                 batch_failed += 1
                                 if first_failed_row_in_batch is None:
                                     first_failed_row_in_batch = row_num
                                 continue
 
                             # Check for duplicates (unless skip_duplicates is enabled)
-                            if not skip_duplicates and _is_duplicate_row(row, mapping, organization, strict_mode=strict_duplicates):
+                            if not skip_duplicates and _is_duplicate_row(
+                                row,
+                                mapping,
+                                organization,
+                                strict_mode=strict_duplicates,
+                            ):
                                 batch_duplicates += 1
                                 continue
 
                             # Get or create supplier (canonical-case race-safe)
-                            supplier_name = row.get(supplier_col, '').strip()
+                            supplier_name = row.get(supplier_col, "").strip()
                             supplier, _ = get_or_create_supplier(
                                 organization=organization,
                                 name=supplier_name,
                             )
 
                             # Get or create category (canonical-case race-safe)
-                            category_name = row.get(category_col, '').strip()
+                            category_name = row.get(category_col, "").strip()
                             category, _ = get_or_create_category(
                                 organization=organization,
                                 name=category_name,
                             )
 
                             # Parse amount
-                            amount_str = row.get(amount_col, '').strip().replace('$', '').replace(',', '')
+                            amount_str = (
+                                row.get(amount_col, "")
+                                .strip()
+                                .replace("$", "")
+                                .replace(",", "")
+                            )
                             amount = Decimal(amount_str)
 
                             # Parse date
-                            date_str = row.get(date_col, '').strip()
+                            date_str = row.get(date_col, "").strip()
                             date = _parse_date(date_str)
 
                             # Create transaction
@@ -276,15 +308,43 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                                 category=category,
                                 amount=amount,
                                 date=date,
-                                description=row.get(description_col, '').strip() if description_col else '',
-                                invoice_number=row.get(invoice_col, '').strip() if invoice_col else '',
-                                fiscal_year=row.get(fiscal_year_col, '').strip() if fiscal_year_col else str(date.year),
-                                subcategory=row.get(subcategory_col, '').strip() if subcategory_col else '',
-                                location=row.get(location_col, '').strip() if location_col else '',
-                                spend_band=row.get(spend_band_col, '').strip() if spend_band_col else '',
-                                payment_method=row.get(payment_method_col, '').strip() if payment_method_col else '',
+                                description=(
+                                    row.get(description_col, "").strip()
+                                    if description_col
+                                    else ""
+                                ),
+                                invoice_number=(
+                                    row.get(invoice_col, "").strip()
+                                    if invoice_col
+                                    else ""
+                                ),
+                                fiscal_year=(
+                                    row.get(fiscal_year_col, "").strip()
+                                    if fiscal_year_col
+                                    else str(date.year)
+                                ),
+                                subcategory=(
+                                    row.get(subcategory_col, "").strip()
+                                    if subcategory_col
+                                    else ""
+                                ),
+                                location=(
+                                    row.get(location_col, "").strip()
+                                    if location_col
+                                    else ""
+                                ),
+                                spend_band=(
+                                    row.get(spend_band_col, "").strip()
+                                    if spend_band_col
+                                    else ""
+                                ),
+                                payment_method=(
+                                    row.get(payment_method_col, "").strip()
+                                    if payment_method_col
+                                    else ""
+                                ),
                                 uploaded_by=user,
-                                upload_batch=upload.batch_id
+                                upload_batch=upload.batch_id,
                             )
                             batch_successful += 1
 
@@ -292,12 +352,14 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                             batch_failed += 1
                             if first_failed_row_in_batch is None:
                                 first_failed_row_in_batch = row_num
-                            batch_row_errors.append({
-                                'row': row_num,
-                                'field': 'general',
-                                'message': str(e)[:500],
-                                'value': ''
-                            })
+                            batch_row_errors.append(
+                                {
+                                    "row": row_num,
+                                    "field": "general",
+                                    "message": str(e)[:500],
+                                    "value": "",
+                                }
+                            )
                             if not skip_invalid:
                                 raise
             except Exception as e:
@@ -312,19 +374,24 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                 batches_failed += 1
                 if first_failed_batch_index is None:
                     first_failed_batch_index = batch_index
-                    first_failed_batch_rows = (batch_first_row_number, batch_last_row_number)
-                batch_log.append({
-                    'kind': 'batch',
-                    'batch_index': batch_index,
-                    'first_row_number': batch_first_row_number,
-                    'last_row_number': batch_last_row_number,
-                    'rows_in_batch': len(batch_rows),
-                    'status': 'failed',
-                    'rolled_back': True,
-                    'first_failed_row_number': first_failed_row_in_batch,
-                    'error_class': type(failure_exception).__name__,
-                    'message': str(failure_exception)[:500],
-                })
+                    first_failed_batch_rows = (
+                        batch_first_row_number,
+                        batch_last_row_number,
+                    )
+                batch_log.append(
+                    {
+                        "kind": "batch",
+                        "batch_index": batch_index,
+                        "first_row_number": batch_first_row_number,
+                        "last_row_number": batch_last_row_number,
+                        "rows_in_batch": len(batch_rows),
+                        "status": "failed",
+                        "rolled_back": True,
+                        "first_failed_row_number": first_failed_row_in_batch,
+                        "error_class": type(failure_exception).__name__,
+                        "message": str(failure_exception)[:500],
+                    }
+                )
                 if abort_after_batch:
                     # Hard abort under skip_invalid=False. Checkpoint stays
                     # at the failed batch index so a retry resumes here
@@ -335,7 +402,7 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                         failed_rows=failed,
                         duplicate_rows=duplicates,
                         error_log=json.dumps(
-                            batch_log + [{'kind': 'row', **e} for e in errors]
+                            batch_log + [{"kind": "row", **e} for e in errors]
                         ),
                     )
                     break
@@ -348,7 +415,7 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                     failed_rows=failed,
                     duplicate_rows=duplicates,
                     error_log=json.dumps(
-                        batch_log + [{'kind': 'row', **e} for e in errors]
+                        batch_log + [{"kind": "row", **e} for e in errors]
                     ),
                 )
                 continue
@@ -360,18 +427,20 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
             failed += batch_failed
             duplicates += batch_duplicates
             errors.extend(batch_row_errors)
-            batch_log.append({
-                'kind': 'batch',
-                'batch_index': batch_index,
-                'first_row_number': batch_first_row_number,
-                'last_row_number': batch_last_row_number,
-                'rows_in_batch': len(batch_rows),
-                'status': 'succeeded',
-                'rolled_back': False,
-                'rows_ingested': batch_successful,
-                'rows_skipped_invalid': batch_failed,
-                'rows_skipped_duplicate': batch_duplicates,
-            })
+            batch_log.append(
+                {
+                    "kind": "batch",
+                    "batch_index": batch_index,
+                    "first_row_number": batch_first_row_number,
+                    "last_row_number": batch_last_row_number,
+                    "rows_in_batch": len(batch_rows),
+                    "status": "succeeded",
+                    "rolled_back": False,
+                    "rows_ingested": batch_successful,
+                    "rows_skipped_invalid": batch_failed,
+                    "rows_skipped_duplicate": batch_duplicates,
+                }
+            )
 
             # Checkpoint advance after a clean batch commit. Use .update()
             # to bypass model signals (post_save fires Redis cache
@@ -385,7 +454,7 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                 failed_rows=failed,
                 duplicate_rows=duplicates,
                 error_log=json.dumps(
-                    batch_log + [{'kind': 'row', **e} for e in errors]
+                    batch_log + [{"kind": "row", **e} for e in errors]
                 ),
             )
 
@@ -397,32 +466,32 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         upload.successful_rows = successful
         upload.failed_rows = failed
         upload.duplicate_rows = duplicates
-        combined_log = batch_log + [{'kind': 'row', **err} for err in errors]
-        upload.error_log = json.dumps(combined_log) if combined_log else ''
+        combined_log = batch_log + [{"kind": "row", **err} for err in errors]
+        upload.error_log = json.dumps(combined_log) if combined_log else ""
         upload.completed_at = timezone.now()
         upload.progress_percent = 100
 
         if batches_failed:
             first_failed_start, first_failed_end = first_failed_batch_rows
             summary = (
-                f'{batches_succeeded} of {total_batches} batches succeeded; '
-                f'first failed batch: {first_failed_batch_index} '
-                f'(rows {first_failed_start}-{first_failed_end}); '
-                f'{batches_unprocessed} unprocessed; see error_log for details.'
+                f"{batches_succeeded} of {total_batches} batches succeeded; "
+                f"first failed batch: {first_failed_batch_index} "
+                f"(rows {first_failed_start}-{first_failed_end}); "
+                f"{batches_unprocessed} unprocessed; see error_log for details."
             )
         else:
             summary = (
-                f'Processing complete: {batches_succeeded} of '
-                f'{total_batches} batches succeeded.'
+                f"Processing complete: {batches_succeeded} of "
+                f"{total_batches} batches succeeded."
             )
         upload.progress_message = summary[:255]
 
         if batches_failed == 0 and failed == 0 and duplicates == 0:
-            upload.status = 'completed'
+            upload.status = "completed"
         elif successful > 0:
-            upload.status = 'partial'
+            upload.status = "partial"
         else:
-            upload.status = 'failed'
+            upload.status = "failed"
 
         # Reset idempotency checkpoint on terminal completion. Any future
         # invocation of this task with the same upload_id is treated as a
@@ -435,10 +504,10 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
             upload.stored_file.delete(save=True)
 
         return {
-            'status': upload.status,
-            'successful_rows': successful,
-            'failed_rows': failed,
-            'duplicate_rows': duplicates
+            "status": upload.status,
+            "successful_rows": successful,
+            "failed_rows": failed,
+            "duplicate_rows": duplicates,
         }
 
     except Exception as e:
@@ -451,99 +520,121 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
         # Retries exhausted: finalize as failed. Do NOT clobber the
         # error_log if checkpointed data is already present (resume
         # state has higher diagnostic value than a single bare message).
-        upload.status = 'failed'
+        upload.status = "failed"
         if not upload.error_log:
-            upload.error_log = json.dumps([{'message': str(e)}])
-        upload.progress_message = f'Error: {str(e)}'[:255]
+            upload.error_log = json.dumps([{"message": str(e)}])
+        upload.progress_message = f"Error: {str(e)}"[:255]
         upload.completed_at = timezone.now()
         upload.save()
-        return {'error': str(e)}
+        return {"error": str(e)}
 
 
 def _validate_row(row, mapping, row_num):
     """Validate a single row and return list of errors."""
     errors = []
 
-    supplier_col = next((k for k, v in mapping.items() if v == 'supplier'), None)
-    category_col = next((k for k, v in mapping.items() if v == 'category'), None)
-    amount_col = next((k for k, v in mapping.items() if v == 'amount'), None)
-    date_col = next((k for k, v in mapping.items() if v == 'date'), None)
+    supplier_col = next((k for k, v in mapping.items() if v == "supplier"), None)
+    category_col = next((k for k, v in mapping.items() if v == "category"), None)
+    amount_col = next((k for k, v in mapping.items() if v == "amount"), None)
+    date_col = next((k for k, v in mapping.items() if v == "date"), None)
 
     # Validate supplier
     if supplier_col:
-        supplier_val = row.get(supplier_col, '').strip()
+        supplier_val = row.get(supplier_col, "").strip()
         if not supplier_val:
-            errors.append({
-                'row': row_num,
-                'field': 'supplier',
-                'message': 'Supplier is required',
-                'value': ''
-            })
+            errors.append(
+                {
+                    "row": row_num,
+                    "field": "supplier",
+                    "message": "Supplier is required",
+                    "value": "",
+                }
+            )
 
     # Validate category
     if category_col:
-        category_val = row.get(category_col, '').strip()
+        category_val = row.get(category_col, "").strip()
         if not category_val:
-            errors.append({
-                'row': row_num,
-                'field': 'category',
-                'message': 'Category is required',
-                'value': ''
-            })
+            errors.append(
+                {
+                    "row": row_num,
+                    "field": "category",
+                    "message": "Category is required",
+                    "value": "",
+                }
+            )
 
     # Validate amount
     if amount_col:
-        amount_val = row.get(amount_col, '').strip()
+        amount_val = row.get(amount_col, "").strip()
         if not amount_val:
-            errors.append({
-                'row': row_num,
-                'field': 'amount',
-                'message': 'Amount is required',
-                'value': ''
-            })
+            errors.append(
+                {
+                    "row": row_num,
+                    "field": "amount",
+                    "message": "Amount is required",
+                    "value": "",
+                }
+            )
         else:
             try:
-                clean_amount = amount_val.replace('$', '').replace(',', '').strip()
+                clean_amount = amount_val.replace("$", "").replace(",", "").strip()
                 Decimal(clean_amount)
             except (InvalidOperation, ValueError):
-                errors.append({
-                    'row': row_num,
-                    'field': 'amount',
-                    'message': 'Invalid amount format',
-                    'value': amount_val
-                })
+                errors.append(
+                    {
+                        "row": row_num,
+                        "field": "amount",
+                        "message": "Invalid amount format",
+                        "value": amount_val,
+                    }
+                )
 
     # Validate date
     if date_col:
-        date_val = row.get(date_col, '').strip()
+        date_val = row.get(date_col, "").strip()
         if not date_val:
-            errors.append({
-                'row': row_num,
-                'field': 'date',
-                'message': 'Date is required',
-                'value': ''
-            })
+            errors.append(
+                {
+                    "row": row_num,
+                    "field": "date",
+                    "message": "Date is required",
+                    "value": "",
+                }
+            )
         else:
             if not _parse_date(date_val):
-                errors.append({
-                    'row': row_num,
-                    'field': 'date',
-                    'message': 'Invalid date format',
-                    'value': date_val
-                })
+                errors.append(
+                    {
+                        "row": row_num,
+                        "field": "date",
+                        "message": "Invalid date format",
+                        "value": date_val,
+                    }
+                )
 
     return errors
 
 
 def _parse_date(date_str):
-    """Try to parse a date string in various formats."""
+    """Try to parse a date string in various formats.
+
+    v3.1 Phase 2 (P-M1): only documented formats are accepted. The prior
+    list also included `%d/%m/%Y` and `%m-%d-%Y`, which collide with
+    `%m/%d/%Y` and `%d-%m-%Y` for any value with both day and month <= 12
+    (e.g. ``05/03/2024`` always parsed as US format May 3, silently
+    misclassifying European-format inputs). Convention is now:
+      - ISO  (`YYYY-MM-DD` or `YYYY/MM/DD`) — unambiguous, preferred
+      - US slash (`MM/DD/YYYY`) — explicit US ordering
+      - EU dash  (`DD-MM-YYYY`) — explicit European ordering
+    Mismatched orderings raise a clear validation error rather than
+    silently parsing wrong.
+    """
     formats = [
-        '%Y-%m-%d',
-        '%m/%d/%Y',
-        '%d/%m/%Y',
-        '%m-%d-%Y',
-        '%d-%m-%Y',
-        '%Y/%m/%d',
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%m/%d/%Y",
+        "%d-%m-%Y",
     ]
 
     for fmt in formats:
@@ -565,20 +656,20 @@ def _is_duplicate_row(row, mapping, organization, strict_mode=False):
         strict_mode: If True, use all mapped fields for duplicate detection.
                     If False (default), use only core fields.
     """
-    supplier_col = next((k for k, v in mapping.items() if v == 'supplier'), None)
-    category_col = next((k for k, v in mapping.items() if v == 'category'), None)
-    amount_col = next((k for k, v in mapping.items() if v == 'amount'), None)
-    date_col = next((k for k, v in mapping.items() if v == 'date'), None)
-    invoice_col = next((k for k, v in mapping.items() if v == 'invoice_number'), None)
+    supplier_col = next((k for k, v in mapping.items() if v == "supplier"), None)
+    category_col = next((k for k, v in mapping.items() if v == "category"), None)
+    amount_col = next((k for k, v in mapping.items() if v == "amount"), None)
+    date_col = next((k for k, v in mapping.items() if v == "date"), None)
+    invoice_col = next((k for k, v in mapping.items() if v == "invoice_number"), None)
 
     if not all([supplier_col, category_col, amount_col, date_col]):
         return False
 
-    supplier_name = row.get(supplier_col, '').strip()
-    category_name = row.get(category_col, '').strip()
-    amount_str = row.get(amount_col, '').strip().replace('$', '').replace(',', '')
-    date_str = row.get(date_col, '').strip()
-    invoice_number = row.get(invoice_col, '').strip() if invoice_col else ''
+    supplier_name = row.get(supplier_col, "").strip()
+    category_name = row.get(category_col, "").strip()
+    amount_str = row.get(amount_col, "").strip().replace("$", "").replace(",", "")
+    date_str = row.get(date_col, "").strip()
+    invoice_number = row.get(invoice_col, "").strip() if invoice_col else ""
 
     try:
         amount = Decimal(amount_str)
@@ -592,7 +683,7 @@ def _is_duplicate_row(row, mapping, organization, strict_mode=False):
             supplier__name__iexact=supplier_name,
             category__name__iexact=category_name,
             amount=amount,
-            date=date
+            date=date,
         )
 
         if invoice_number:
@@ -600,36 +691,48 @@ def _is_duplicate_row(row, mapping, organization, strict_mode=False):
 
         # In strict mode, also check all other mapped fields
         if strict_mode:
-            description_col = next((k for k, v in mapping.items() if v == 'description'), None)
-            fiscal_year_col = next((k for k, v in mapping.items() if v == 'fiscal_year'), None)
-            subcategory_col = next((k for k, v in mapping.items() if v == 'subcategory'), None)
-            location_col = next((k for k, v in mapping.items() if v == 'location'), None)
-            spend_band_col = next((k for k, v in mapping.items() if v == 'spend_band'), None)
-            payment_method_col = next((k for k, v in mapping.items() if v == 'payment_method'), None)
+            description_col = next(
+                (k for k, v in mapping.items() if v == "description"), None
+            )
+            fiscal_year_col = next(
+                (k for k, v in mapping.items() if v == "fiscal_year"), None
+            )
+            subcategory_col = next(
+                (k for k, v in mapping.items() if v == "subcategory"), None
+            )
+            location_col = next(
+                (k for k, v in mapping.items() if v == "location"), None
+            )
+            spend_band_col = next(
+                (k for k, v in mapping.items() if v == "spend_band"), None
+            )
+            payment_method_col = next(
+                (k for k, v in mapping.items() if v == "payment_method"), None
+            )
 
             if description_col:
-                description = row.get(description_col, '').strip()
+                description = row.get(description_col, "").strip()
                 query = query.filter(description=description)
 
             if fiscal_year_col:
-                fiscal_year = row.get(fiscal_year_col, '').strip()
+                fiscal_year = row.get(fiscal_year_col, "").strip()
                 if fiscal_year:
                     query = query.filter(fiscal_year=fiscal_year)
 
             if subcategory_col:
-                subcategory = row.get(subcategory_col, '').strip()
+                subcategory = row.get(subcategory_col, "").strip()
                 query = query.filter(subcategory=subcategory)
 
             if location_col:
-                location = row.get(location_col, '').strip()
+                location = row.get(location_col, "").strip()
                 query = query.filter(location=location)
 
             if spend_band_col:
-                spend_band = row.get(spend_band_col, '').strip()
+                spend_band = row.get(spend_band_col, "").strip()
                 query = query.filter(spend_band=spend_band)
 
             if payment_method_col:
-                payment_method = row.get(payment_method_col, '').strip()
+                payment_method = row.get(payment_method_col, "").strip()
                 query = query.filter(payment_method=payment_method)
 
         return query.exists()

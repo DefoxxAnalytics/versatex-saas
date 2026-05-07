@@ -9,6 +9,7 @@ also fails after the first succeeds, the user is left with ZERO primaries.
 
 See docs/codebase-review-2026-05-04-v2.md Finding #11.
 """
+
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -34,7 +35,9 @@ class TestSwitchOrgAtomicity(APITestCase):
 
         self.user = User.objects.create_user(username="multiuser_soa", password="pw")
         # post_save signal on UserProfile auto-creates a primary membership in org_a.
-        UserProfile.objects.create(user=self.user, organization=self.org_a, role="admin")
+        UserProfile.objects.create(
+            user=self.user, organization=self.org_a, role="admin"
+        )
 
         # Add a second active (non-primary) membership in org_b.
         UserOrganizationMembership.objects.create(

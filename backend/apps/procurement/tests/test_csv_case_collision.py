@@ -16,6 +16,7 @@ creates a silent duplicate. This module asserts the canonical-case fix:
   - End-to-end: a CSV with two rows that differ only in supplier name case
     produces exactly ONE Supplier row in the canonical (lowercase) form.
 """
+
 import io
 from decimal import Decimal
 from unittest.mock import patch
@@ -79,9 +80,7 @@ class TestGetOrCreateSupplierCanonical:
         assert supplier.name == "acme corp"
 
     def test_returns_existing_for_case_variant(self, organization):
-        first, _ = get_or_create_supplier(
-            organization=organization, name="ACME Corp"
-        )
+        first, _ = get_or_create_supplier(organization=organization, name="ACME Corp")
         second, created = get_or_create_supplier(
             organization=organization, name="acme corp"
         )
@@ -89,9 +88,7 @@ class TestGetOrCreateSupplierCanonical:
         assert second.pk == first.pk
 
     def test_returns_existing_for_whitespace_variant(self, organization):
-        first, _ = get_or_create_supplier(
-            organization=organization, name="ACME Corp"
-        )
+        first, _ = get_or_create_supplier(organization=organization, name="ACME Corp")
         second, created = get_or_create_supplier(
             organization=organization, name="  acme   corp  "
         )
@@ -128,9 +125,7 @@ class TestGetOrCreateSupplierCanonical:
         (mimicking the lost race), and asserting the helper recovers
         via the .get() retry path.
         """
-        existing = Supplier.objects.create(
-            organization=organization, name="acme corp"
-        )
+        existing = Supplier.objects.create(organization=organization, name="acme corp")
 
         original_get_or_create = Supplier.objects.get_or_create
 
@@ -260,13 +255,10 @@ class TestCSVProcessorCaseCollision:
     ):
         """A pre-existing canonical-form supplier must be reused, not duplicated,
         when the CSV provides a case-variant name."""
-        existing = Supplier.objects.create(
-            organization=organization, name="vendor a"
-        )
+        existing = Supplier.objects.create(organization=organization, name="vendor a")
 
         csv_content = (
-            "supplier,category,amount,date\n"
-            "VENDOR A,Office,100.00,2024-03-01\n"
+            "supplier,category,amount,date\n" "VENDOR A,Office,100.00,2024-03-01\n"
         )
         processor = CSVProcessor(
             organization=organization,

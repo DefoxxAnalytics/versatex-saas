@@ -7,14 +7,24 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('authentication', '0001_initial'),
-        ('procurement', '0001_initial'),
+        ("authentication", "0001_initial"),
+        ("procurement", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='transaction',
-            constraint=models.UniqueConstraint(fields=('organization', 'supplier', 'category', 'amount', 'date', 'invoice_number'), name='unique_transaction_with_invoice'),
+            model_name="transaction",
+            constraint=models.UniqueConstraint(
+                fields=(
+                    "organization",
+                    "supplier",
+                    "category",
+                    "amount",
+                    "date",
+                    "invoice_number",
+                ),
+                name="unique_transaction_with_invoice",
+            ),
         ),
     ]

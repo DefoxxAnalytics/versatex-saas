@@ -3,17 +3,21 @@
 Multi-org user is admin in Org A and viewer in Org B. Permission classes
 that require admin/manager must grant for Org A targets and deny for Org B.
 """
-from rest_framework.test import APIRequestFactory
-from django.test import TestCase
+
 from django.contrib.auth import get_user_model
+from django.test import TestCase
+from rest_framework.test import APIRequestFactory
+
 from apps.authentication.models import (
-    Organization, UserProfile, UserOrganizationMembership
+    Organization,
+    UserOrganizationMembership,
+    UserProfile,
 )
 from apps.authentication.permissions import (
-    CanResolveExceptions,
-    CanViewPaymentData,
     CanApprovePO,
     CanApprovePR,
+    CanResolveExceptions,
+    CanViewPaymentData,
 )
 
 User = get_user_model()
@@ -36,15 +40,22 @@ class TestP2PPermissionsMembershipAware(TestCase):
 
         # Multi-org user: admin in A, viewer in B.
         self.user = User.objects.create_user(username="p2puser", password="pw")
-        UserProfile.objects.create(user=self.user, organization=self.org_a, role="admin")
+        UserProfile.objects.create(
+            user=self.user, organization=self.org_a, role="admin"
+        )
         # post_save signal creates membership (user, org_a, admin).
         UserOrganizationMembership.objects.create(
-            user=self.user, organization=self.org_b,
-            role="viewer", is_active=True, is_primary=False,
+            user=self.user,
+            organization=self.org_b,
+            role="viewer",
+            is_active=True,
+            is_primary=False,
         )
 
     def _request_for_org(self, org):
-        request = self.factory.post("/whatever/", {"organization": org.id}, format="json")
+        request = self.factory.post(
+            "/whatever/", {"organization": org.id}, format="json"
+        )
         request.user = self.user
         request.data = {"organization": org.id}
         return request
@@ -54,8 +65,9 @@ class TestP2PPermissionsMembershipAware(TestCase):
         view = _StubView()
         actual = perm_class().has_permission(request, view)
         self.assertEqual(
-            actual, expected,
-            f"{perm_class.__name__} for {org.slug}: expected {expected}, got {actual}"
+            actual,
+            expected,
+            f"{perm_class.__name__} for {org.slug}: expected {expected}, got {actual}",
         )
 
     # --- CanResolveExceptions: admin OR manager ---

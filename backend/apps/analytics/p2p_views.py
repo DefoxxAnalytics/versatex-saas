@@ -4,74 +4,78 @@ P2P (Procure-to-Pay) Analytics API views
 Provides endpoints for P2P cycle analysis, 3-way matching, invoice aging,
 purchase requisition/order analytics, and supplier payment performance.
 """
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework import status
-from rest_framework.exceptions import ValidationError
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
-from drf_spectacular.types import OpenApiTypes
 
-from apps.authentication.utils import log_action
 from apps.authentication.permissions import (
-    HasP2PAccess,
-    CanResolveExceptions,
-    CanViewPaymentData,
     CanApprovePO,
     CanApprovePR,
+    CanResolveExceptions,
+    CanViewPaymentData,
+    HasP2PAccess,
 )
+from apps.authentication.utils import log_action
 from apps.procurement.models import Invoice
-from .views import get_target_organization, validate_int_param, parse_filter_params
-from .p2p_services import P2PAnalyticsService
 
+from .p2p_services import P2PAnalyticsService
+from .views import get_target_organization, parse_filter_params, validate_int_param
 
 # =============================================================================
 # Common OpenAPI Parameters
 # =============================================================================
 ORGANIZATION_ID_PARAM = OpenApiParameter(
-    name='organization_id',
+    name="organization_id",
     type=OpenApiTypes.INT,
     location=OpenApiParameter.QUERY,
-    description='Organization ID (superusers only)',
+    description="Organization ID (superusers only)",
     required=False,
 )
 
 MONTHS_PARAM = OpenApiParameter(
-    name='months',
+    name="months",
     type=OpenApiTypes.INT,
     location=OpenApiParameter.QUERY,
-    description='Number of months to analyze (default: 12, range: 1-36)',
+    description="Number of months to analyze (default: 12, range: 1-36)",
     required=False,
 )
 
 LIMIT_PARAM = OpenApiParameter(
-    name='limit',
+    name="limit",
     type=OpenApiTypes.INT,
     location=OpenApiParameter.QUERY,
-    description='Maximum number of results to return',
+    description="Maximum number of results to return",
     required=False,
 )
 
 
 class P2PAnalyticsThrottle(ScopedRateThrottle):
     """Throttle for P2P analytics endpoints."""
-    scope = 'p2p_analytics'
+
+    scope = "p2p_analytics"
 
 
 class P2PWriteThrottle(ScopedRateThrottle):
     """Throttle for P2P write operations (more restrictive)."""
-    scope = 'p2p_write'
+
+    scope = "p2p_write"
 
 
 # =============================================================================
 # P2P Cycle Time Analysis Endpoints
 # =============================================================================
 
+
 @extend_schema(
-    tags=['P2P Analytics - Cycle Time'],
-    summary='Get P2P cycle overview',
-    description='''
+    tags=["P2P Analytics - Cycle Time"],
+    summary="Get P2P cycle overview",
+    description="""
 Get end-to-end P2P cycle time metrics.
 
 Returns average days for each stage:
@@ -80,14 +84,14 @@ Returns average days for each stage:
 - **GR to Invoice**: Average days from receipt to invoice received
 - **Invoice to Payment**: Average days from invoice to payment
 - **Total Cycle**: End-to-end average cycle time
-    ''',
+    """,
     parameters=[ORGANIZATION_ID_PARAM],
     responses={
         200: OpenApiTypes.OBJECT,
         400: OpenApiTypes.OBJECT,
     },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def p2p_cycle_overview(request):
@@ -106,7 +110,7 @@ def p2p_cycle_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -114,23 +118,25 @@ def p2p_cycle_overview(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='p2p_cycle_overview',
+        action="view",
+        resource="p2p_cycle_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Cycle Time'],
-    summary='Get P2P cycle times by category',
-    description='Returns P2P cycle time metrics broken down by spend category.',
+    tags=["P2P Analytics - Cycle Time"],
+    summary="Get P2P cycle times by category",
+    description="Returns P2P cycle time metrics broken down by spend category.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def p2p_cycle_by_category(request):
@@ -147,7 +153,7 @@ def p2p_cycle_by_category(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -157,13 +163,13 @@ def p2p_cycle_by_category(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Cycle Time'],
-    summary='Get P2P cycle times by supplier',
-    description='Returns P2P cycle time metrics broken down by supplier.',
+    tags=["P2P Analytics - Cycle Time"],
+    summary="Get P2P cycle times by supplier",
+    description="Returns P2P cycle time metrics broken down by supplier.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def p2p_cycle_by_supplier(request):
@@ -180,7 +186,7 @@ def p2p_cycle_by_supplier(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -190,13 +196,13 @@ def p2p_cycle_by_supplier(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Cycle Time'],
-    summary='Get P2P cycle time trends',
-    description='Returns monthly trend of P2P cycle times over the specified period.',
+    tags=["P2P Analytics - Cycle Time"],
+    summary="Get P2P cycle time trends",
+    description="Returns monthly trend of P2P cycle times over the specified period.",
     parameters=[MONTHS_PARAM, ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def p2p_cycle_trends(request):
@@ -209,9 +215,9 @@ def p2p_cycle_trends(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 12, min_val=1, max_val=36)
+    months = validate_int_param(request, "months", 12, min_val=1, max_val=36)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -221,13 +227,13 @@ def p2p_cycle_trends(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Cycle Time'],
-    summary='Get P2P process bottlenecks',
-    description='Identifies bottlenecks in the P2P process with variance analysis and recommendations.',
+    tags=["P2P Analytics - Cycle Time"],
+    summary="Get P2P process bottlenecks",
+    description="Identifies bottlenecks in the P2P process with variance analysis and recommendations.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def p2p_bottlenecks(request):
@@ -244,7 +250,7 @@ def p2p_bottlenecks(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -252,23 +258,25 @@ def p2p_bottlenecks(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='p2p_bottlenecks',
+        action="view",
+        resource="p2p_bottlenecks",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Cycle Time'],
-    summary='Get P2P process funnel',
-    description='Returns process funnel visualization data showing document flow (PRs → POs → GRs → Paid).',
+    tags=["P2P Analytics - Cycle Time"],
+    summary="Get P2P process funnel",
+    description="Returns process funnel visualization data showing document flow (PRs → POs → GRs → Paid).",
     parameters=[MONTHS_PARAM, ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def p2p_process_funnel(request):
@@ -284,9 +292,9 @@ def p2p_process_funnel(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 12, min_val=1, max_val=36)
+    months = validate_int_param(request, "months", 12, min_val=1, max_val=36)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -296,22 +304,22 @@ def p2p_process_funnel(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Cycle Time'],
-    summary='Get P2P stage drilldown',
-    description='Returns detailed breakdown for a specific P2P stage with the top 10 slowest items.',
+    tags=["P2P Analytics - Cycle Time"],
+    summary="Get P2P stage drilldown",
+    description="Returns detailed breakdown for a specific P2P stage with the top 10 slowest items.",
     parameters=[
         OpenApiParameter(
-            name='stage',
+            name="stage",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.PATH,
-            description='Stage: pr_to_po, po_to_gr, gr_to_invoice, or invoice_to_payment',
-            enum=['pr_to_po', 'po_to_gr', 'gr_to_invoice', 'invoice_to_payment'],
+            description="Stage: pr_to_po, po_to_gr, gr_to_invoice, or invoice_to_payment",
+            enum=["pr_to_po", "po_to_gr", "gr_to_invoice", "invoice_to_payment"],
         ),
         ORGANIZATION_ID_PARAM,
     ],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def p2p_stage_drilldown(request, stage):
@@ -328,13 +336,16 @@ def p2p_stage_drilldown(request, stage):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    valid_stages = ['pr_to_po', 'po_to_gr', 'gr_to_invoice', 'invoice_to_payment']
+    valid_stages = ["pr_to_po", "po_to_gr", "gr_to_invoice", "invoice_to_payment"]
     if stage not in valid_stages:
-        return Response({
-            'error': f"Invalid stage: {stage}. Must be one of: {', '.join(valid_stages)}"
-        }, status=400)
+        return Response(
+            {
+                "error": f"Invalid stage: {stage}. Must be one of: {', '.join(valid_stages)}"
+            },
+            status=400,
+        )
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -347,10 +358,11 @@ def p2p_stage_drilldown(request, stage):
 # 3-Way Matching Analysis Endpoints
 # =============================================================================
 
+
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Get matching overview',
-    description='''
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Get matching overview",
+    description="""
 Get 3-way match rates and exception metrics.
 
 Returns:
@@ -359,11 +371,11 @@ Returns:
 - 2-way matched percentage
 - Exception rate and amount
 - Average resolution time
-    ''',
+    """,
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def matching_overview(request):
@@ -382,7 +394,7 @@ def matching_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -390,48 +402,57 @@ def matching_overview(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='matching_overview',
+        action="view",
+        resource="matching_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Get invoice exceptions',
-    description='Returns list of invoice exceptions with filtering options.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Get invoice exceptions",
+    description="Returns list of invoice exceptions with filtering options.",
     parameters=[
         OpenApiParameter(
-            name='status',
+            name="status",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
-            description='Filter by status (default: open)',
-            enum=['open', 'resolved', 'all'],
+            description="Filter by status (default: open)",
+            enum=["open", "resolved", "all"],
             required=False,
         ),
         OpenApiParameter(
-            name='exception_type',
+            name="exception_type",
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
-            description='Filter by exception type',
-            enum=['price_variance', 'quantity_variance', 'no_po', 'duplicate', 'missing_gr', 'other'],
+            description="Filter by exception type",
+            enum=[
+                "price_variance",
+                "quantity_variance",
+                "no_po",
+                "duplicate",
+                "missing_gr",
+                "other",
+            ],
             required=False,
         ),
         OpenApiParameter(
-            name='limit',
+            name="limit",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.QUERY,
-            description='Maximum results (default: 100, max: 500)',
+            description="Maximum results (default: 100, max: 500)",
             required=False,
         ),
         ORGANIZATION_ID_PARAM,
     ],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def matching_exceptions(request):
@@ -446,46 +467,50 @@ def matching_exceptions(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     # Parse filters
-    status_filter = request.query_params.get('status', 'open')
-    if status_filter not in ['open', 'resolved', 'all']:
-        status_filter = 'open'
+    status_filter = request.query_params.get("status", "open")
+    if status_filter not in ["open", "resolved", "all"]:
+        status_filter = "open"
 
-    exception_type = request.query_params.get('exception_type')
-    valid_types = ['price_variance', 'quantity_variance', 'no_po', 'duplicate', 'missing_gr', 'other']
+    exception_type = request.query_params.get("exception_type")
+    valid_types = [
+        "price_variance",
+        "quantity_variance",
+        "no_po",
+        "duplicate",
+        "missing_gr",
+        "other",
+    ]
     if exception_type and exception_type not in valid_types:
         exception_type = None
 
-    limit = validate_int_param(request, 'limit', 100, min_val=1, max_val=500)
+    limit = validate_int_param(request, "limit", 100, min_val=1, max_val=500)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_matching_exceptions(
-        status=status_filter,
-        exception_type=exception_type,
-        limit=limit
+        status=status_filter, exception_type=exception_type, limit=limit
     )
 
-    return Response({
-        'exceptions': data,
-        'count': len(data),
-        'filters': {
-            'status': status_filter,
-            'exception_type': exception_type
+    return Response(
+        {
+            "exceptions": data,
+            "count": len(data),
+            "filters": {"status": status_filter, "exception_type": exception_type},
         }
-    })
+    )
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Get exceptions by type',
-    description='Returns breakdown of exceptions by type with count and amount.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Get exceptions by type",
+    description="Returns breakdown of exceptions by type with count and amount.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def exceptions_by_type(request):
@@ -504,7 +529,7 @@ def exceptions_by_type(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -514,13 +539,13 @@ def exceptions_by_type(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Get exceptions by supplier',
-    description='Returns suppliers ranked by exception rate with detailed metrics.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Get exceptions by supplier",
+    description="Returns suppliers ranked by exception rate with detailed metrics.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def exceptions_by_supplier(request):
@@ -538,7 +563,7 @@ def exceptions_by_supplier(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -548,13 +573,13 @@ def exceptions_by_supplier(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Get price variance analysis',
-    description='Analyzes PO price vs Invoice price variances with trends.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Get price variance analysis",
+    description="Analyzes PO price vs Invoice price variances with trends.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def price_variance_analysis(request):
@@ -571,7 +596,7 @@ def price_variance_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -581,13 +606,13 @@ def price_variance_analysis(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Get quantity variance analysis',
-    description='Analyzes PO qty vs GR qty vs Invoice qty variances with supplier metrics.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Get quantity variance analysis",
+    description="Analyzes PO qty vs GR qty vs Invoice qty variances with supplier metrics.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def quantity_variance_analysis(request):
@@ -604,7 +629,7 @@ def quantity_variance_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -614,21 +639,25 @@ def quantity_variance_analysis(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Get invoice match detail',
-    description='Returns detailed match information for a specific invoice.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Get invoice match detail",
+    description="Returns detailed match information for a specific invoice.",
     parameters=[
         OpenApiParameter(
-            name='invoice_id',
+            name="invoice_id",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.PATH,
-            description='Invoice ID',
+            description="Invoice ID",
         ),
         ORGANIZATION_ID_PARAM,
     ],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def invoice_match_detail(request, invoice_id):
@@ -646,46 +675,50 @@ def invoice_match_detail(request, invoice_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_invoice_match_detail(invoice_id)
 
     if data is None:
-        return Response({'error': 'Invoice not found'}, status=404)
+        return Response({"error": "Invoice not found"}, status=404)
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Resolve invoice exception',
-    description='Resolves an invoice exception. Only managers and admins can resolve exceptions.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Resolve invoice exception",
+    description="Resolves an invoice exception. Only managers and admins can resolve exceptions.",
     parameters=[
         OpenApiParameter(
-            name='invoice_id',
+            name="invoice_id",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.PATH,
-            description='Invoice ID',
+            description="Invoice ID",
         ),
         ORGANIZATION_ID_PARAM,
     ],
     request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'resolution_notes': {
-                    'type': 'string',
-                    'description': 'Notes explaining the resolution (required, max 2000 chars)',
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "resolution_notes": {
+                    "type": "string",
+                    "description": "Notes explaining the resolution (required, max 2000 chars)",
                 },
             },
-            'required': ['resolution_notes'],
+            "required": ["resolution_notes"],
         }
     },
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated, CanResolveExceptions])
 @throttle_classes([P2PWriteThrottle])
 def resolve_exception(request, invoice_id):
@@ -702,67 +735,75 @@ def resolve_exception(request, invoice_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    resolution_notes = request.data.get('resolution_notes', '')
+    resolution_notes = request.data.get("resolution_notes", "")
     if not resolution_notes or not resolution_notes.strip():
-        return Response({'error': 'resolution_notes is required'}, status=400)
+        return Response({"error": "resolution_notes is required"}, status=400)
 
     # Validate resolution_notes length
     if len(resolution_notes) > 2000:
-        return Response({'error': 'resolution_notes must be 2000 characters or less'}, status=400)
+        return Response(
+            {"error": "resolution_notes must be 2000 characters or less"}, status=400
+        )
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.resolve_exception(
         invoice_id=invoice_id,
         user=request.user,
-        resolution_notes=resolution_notes.strip()
+        resolution_notes=resolution_notes.strip(),
     )
 
     if data is None:
-        return Response({'error': 'Invoice not found or no exception to resolve'}, status=404)
+        return Response(
+            {"error": "Invoice not found or no exception to resolve"}, status=404
+        )
 
     log_action(
         user=request.user,
-        action='resolve',
-        resource='invoice_exception',
+        action="resolve",
+        resource="invoice_exception",
         resource_id=invoice_id,
         request=request,
-        details={
-            'resolution_notes': resolution_notes[:200],  # Truncate for log
-            'organization_id': organization.id
-        } if request.user.is_superuser else {'resolution_notes': resolution_notes[:200]}
+        details=(
+            {
+                "resolution_notes": resolution_notes[:200],  # Truncate for log
+                "organization_id": organization.id,
+            }
+            if request.user.is_superuser
+            else {"resolution_notes": resolution_notes[:200]}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - 3-Way Matching'],
-    summary='Bulk resolve exceptions',
-    description='Resolves multiple invoice exceptions at once. Only managers and admins can resolve exceptions.',
+    tags=["P2P Analytics - 3-Way Matching"],
+    summary="Bulk resolve exceptions",
+    description="Resolves multiple invoice exceptions at once. Only managers and admins can resolve exceptions.",
     parameters=[ORGANIZATION_ID_PARAM],
     request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'invoice_ids': {
-                    'type': 'array',
-                    'items': {'type': 'integer'},
-                    'description': 'List of invoice IDs to resolve (max 50)',
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "invoice_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "List of invoice IDs to resolve (max 50)",
                 },
-                'resolution_notes': {
-                    'type': 'string',
-                    'description': 'Notes explaining the resolution (required, max 2000 chars)',
+                "resolution_notes": {
+                    "type": "string",
+                    "description": "Notes explaining the resolution (required, max 2000 chars)",
                 },
             },
-            'required': ['invoice_ids', 'resolution_notes'],
+            "required": ["invoice_ids", "resolution_notes"],
         }
     },
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated, CanResolveExceptions])
 @throttle_classes([P2PWriteThrottle])
 def bulk_resolve_exceptions(request):
@@ -780,54 +821,62 @@ def bulk_resolve_exceptions(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    invoice_ids = request.data.get('invoice_ids', [])
-    resolution_notes = request.data.get('resolution_notes', '')
+    invoice_ids = request.data.get("invoice_ids", [])
+    resolution_notes = request.data.get("resolution_notes", "")
 
     # Validate inputs
     if not invoice_ids:
-        return Response({'error': 'invoice_ids is required'}, status=400)
+        return Response({"error": "invoice_ids is required"}, status=400)
 
     if not isinstance(invoice_ids, list):
-        return Response({'error': 'invoice_ids must be a list'}, status=400)
+        return Response({"error": "invoice_ids must be a list"}, status=400)
 
     if len(invoice_ids) > 50:
-        return Response({'error': 'Maximum 50 invoices can be resolved at once'}, status=400)
+        return Response(
+            {"error": "Maximum 50 invoices can be resolved at once"}, status=400
+        )
 
     if not resolution_notes or not resolution_notes.strip():
-        return Response({'error': 'resolution_notes is required'}, status=400)
+        return Response({"error": "resolution_notes is required"}, status=400)
 
     if len(resolution_notes) > 2000:
-        return Response({'error': 'resolution_notes must be 2000 characters or less'}, status=400)
+        return Response(
+            {"error": "resolution_notes must be 2000 characters or less"}, status=400
+        )
 
     # Validate all IDs are integers
     try:
         invoice_ids = [int(id) for id in invoice_ids]
     except (ValueError, TypeError):
-        return Response({'error': 'All invoice_ids must be integers'}, status=400)
+        return Response({"error": "All invoice_ids must be integers"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.bulk_resolve_exceptions(
         invoice_ids=invoice_ids,
         user=request.user,
-        resolution_notes=resolution_notes.strip()
+        resolution_notes=resolution_notes.strip(),
     )
 
     log_action(
         user=request.user,
-        action='bulk_resolve',
-        resource='invoice_exceptions',
+        action="bulk_resolve",
+        resource="invoice_exceptions",
         request=request,
-        details={
-            'invoice_count': len(invoice_ids),
-            'resolved_count': data.get('resolved_count', 0),
-            'organization_id': organization.id
-        } if request.user.is_superuser else {
-            'invoice_count': len(invoice_ids),
-            'resolved_count': data.get('resolved_count', 0)
-        }
+        details=(
+            {
+                "invoice_count": len(invoice_ids),
+                "resolved_count": data.get("resolved_count", 0),
+                "organization_id": organization.id,
+            }
+            if request.user.is_superuser
+            else {
+                "invoice_count": len(invoice_ids),
+                "resolved_count": data.get("resolved_count", 0),
+            }
+        ),
     )
 
     return Response(data)
@@ -837,10 +886,11 @@ def bulk_resolve_exceptions(request):
 # Invoice Aging / AP Analysis Endpoints
 # =============================================================================
 
+
 @extend_schema(
-    tags=['P2P Analytics - Invoice Aging'],
-    summary='Get invoice aging overview',
-    description='''
+    tags=["P2P Analytics - Invoice Aging"],
+    summary="Get invoice aging overview",
+    description="""
 Get invoice aging overview with bucket totals.
 
 Aging buckets:
@@ -850,11 +900,11 @@ Aging buckets:
 - **90+ days**: Significantly overdue
 
 Plus total AP, overdue amount, and avg days to pay.
-    ''',
+    """,
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def aging_overview(request):
@@ -874,7 +924,7 @@ def aging_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -882,23 +932,25 @@ def aging_overview(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='aging_overview',
+        action="view",
+        resource="aging_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Invoice Aging'],
-    summary='Get aging by supplier',
-    description='Returns invoice aging breakdown by supplier with AP balances and payment metrics.',
+    tags=["P2P Analytics - Invoice Aging"],
+    summary="Get aging by supplier",
+    description="Returns invoice aging breakdown by supplier with AP balances and payment metrics.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def aging_by_supplier(request):
@@ -916,7 +968,7 @@ def aging_by_supplier(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -926,13 +978,17 @@ def aging_by_supplier(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Invoice Aging'],
-    summary='Get payment terms compliance',
-    description='Analyzes payment terms compliance. **Manager/Admin access required.**',
+    tags=["P2P Analytics - Invoice Aging"],
+    summary="Get payment terms compliance",
+    description="Analyzes payment terms compliance. **Manager/Admin access required.**",
     parameters=[ORGANIZATION_ID_PARAM],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess, CanViewPaymentData])
 @throttle_classes([P2PAnalyticsThrottle])
 def payment_terms_compliance(request):
@@ -952,7 +1008,7 @@ def payment_terms_compliance(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -962,13 +1018,13 @@ def payment_terms_compliance(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Invoice Aging'],
-    summary='Get avg days-to-pay trends (legacy: DPO)',
-    description='Returns monthly average days-from-invoice-to-payment (formerly labeled DPO). URL path preserved for caller stability.',
+    tags=["P2P Analytics - Invoice Aging"],
+    summary="Get avg days-to-pay trends (legacy: DPO)",
+    description="Returns monthly average days-from-invoice-to-payment (formerly labeled DPO). URL path preserved for caller stability.",
     parameters=[MONTHS_PARAM, ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def dpo_trends(request):
@@ -981,9 +1037,9 @@ def dpo_trends(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 12, min_val=1, max_val=36)
+    months = validate_int_param(request, "months", 12, min_val=1, max_val=36)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -993,22 +1049,26 @@ def dpo_trends(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Invoice Aging'],
-    summary='Get cash flow forecast',
-    description='Returns projected payments by week/month. **Manager/Admin access required.**',
+    tags=["P2P Analytics - Invoice Aging"],
+    summary="Get cash flow forecast",
+    description="Returns projected payments by week/month. **Manager/Admin access required.**",
     parameters=[
         OpenApiParameter(
-            name='weeks',
+            name="weeks",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.QUERY,
-            description='Number of weeks to forecast (default: 4, range: 1-12)',
+            description="Number of weeks to forecast (default: 4, range: 1-12)",
             required=False,
         ),
         ORGANIZATION_ID_PARAM,
     ],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess, CanViewPaymentData])
 @throttle_classes([P2PAnalyticsThrottle])
 def cash_flow_forecast(request):
@@ -1023,9 +1083,9 @@ def cash_flow_forecast(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    weeks = validate_int_param(request, 'weeks', 4, min_val=1, max_val=12)
+    weeks = validate_int_param(request, "weeks", 4, min_val=1, max_val=12)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1033,13 +1093,14 @@ def cash_flow_forecast(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='cash_flow_forecast',
+        action="view",
+        resource="cash_flow_forecast",
         request=request,
-        details={
-            'weeks': weeks,
-            'organization_id': organization.id
-        } if request.user.is_superuser else {'weeks': weeks}
+        details=(
+            {"weeks": weeks, "organization_id": organization.id}
+            if request.user.is_superuser
+            else {"weeks": weeks}
+        ),
     )
 
     return Response(data)
@@ -1049,10 +1110,11 @@ def cash_flow_forecast(request):
 # Purchase Requisition Analysis Endpoints
 # =============================================================================
 
+
 @extend_schema(
-    tags=['P2P Analytics - Requisitions'],
-    summary='Get PR overview',
-    description='''
+    tags=["P2P Analytics - Requisitions"],
+    summary="Get PR overview",
+    description="""
 Get Purchase Requisition overview metrics.
 
 Returns:
@@ -1060,11 +1122,11 @@ Returns:
 - Conversion rate (PR to PO)
 - Average approval time
 - Rejection rate
-    ''',
+    """,
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def pr_overview(request):
@@ -1082,7 +1144,7 @@ def pr_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1090,23 +1152,25 @@ def pr_overview(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='pr_overview',
+        action="view",
+        resource="pr_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Requisitions'],
-    summary='Get PR approval analysis',
-    description='Analyzes PR approval bottlenecks and patterns.',
+    tags=["P2P Analytics - Requisitions"],
+    summary="Get PR approval analysis",
+    description="Analyzes PR approval bottlenecks and patterns.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def pr_approval_analysis(request):
@@ -1124,7 +1188,7 @@ def pr_approval_analysis(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1134,13 +1198,13 @@ def pr_approval_analysis(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Requisitions'],
-    summary='Get PRs by department',
-    description='Returns requisition patterns grouped by department.',
+    tags=["P2P Analytics - Requisitions"],
+    summary="Get PRs by department",
+    description="Returns requisition patterns grouped by department.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def pr_by_department(request):
@@ -1157,7 +1221,7 @@ def pr_by_department(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1167,13 +1231,13 @@ def pr_by_department(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Requisitions'],
-    summary='Get pending PRs',
-    description='Returns PRs pending approval sorted by age.',
+    tags=["P2P Analytics - Requisitions"],
+    summary="Get pending PRs",
+    description="Returns PRs pending approval sorted by age.",
     parameters=[LIMIT_PARAM, ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def pr_pending(request):
@@ -1188,36 +1252,37 @@ def pr_pending(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    limit = validate_int_param(request, 'limit', 50, min_val=1, max_val=200)
+    limit = validate_int_param(request, "limit", 50, min_val=1, max_val=200)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_pr_pending(limit=limit)
 
-    return Response({
-        'pending_prs': data,
-        'count': len(data)
-    })
+    return Response({"pending_prs": data, "count": len(data)})
 
 
 @extend_schema(
-    tags=['P2P Analytics - Requisitions'],
-    summary='Get PR detail',
-    description='Returns detailed information for a specific purchase requisition.',
+    tags=["P2P Analytics - Requisitions"],
+    summary="Get PR detail",
+    description="Returns detailed information for a specific purchase requisition.",
     parameters=[
         OpenApiParameter(
-            name='pr_id',
+            name="pr_id",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.PATH,
-            description='Purchase Requisition ID',
+            description="Purchase Requisition ID",
         ),
         ORGANIZATION_ID_PARAM,
     ],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def pr_detail(request, pr_id):
@@ -1229,14 +1294,14 @@ def pr_detail(request, pr_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_pr_detail(pr_id)
 
     if data is None:
-        return Response({'error': 'Purchase Requisition not found'}, status=404)
+        return Response({"error": "Purchase Requisition not found"}, status=404)
 
     return Response(data)
 
@@ -1245,10 +1310,11 @@ def pr_detail(request, pr_id):
 # Purchase Order Analysis Endpoints
 # =============================================================================
 
+
 @extend_schema(
-    tags=['P2P Analytics - Purchase Orders'],
-    summary='Get PO overview',
-    description='''
+    tags=["P2P Analytics - Purchase Orders"],
+    summary="Get PO overview",
+    description="""
 Get Purchase Order overview metrics.
 
 Returns:
@@ -1256,11 +1322,11 @@ Returns:
 - Contract coverage percentage
 - Amendment rate
 - Average PO value
-    ''',
+    """,
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def po_overview(request):
@@ -1278,7 +1344,7 @@ def po_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1286,23 +1352,25 @@ def po_overview(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='po_overview',
+        action="view",
+        resource="po_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Purchase Orders'],
-    summary='Get PO leakage analysis',
-    description='Identifies off-contract PO spending (maverick spend) with consolidation recommendations.',
+    tags=["P2P Analytics - Purchase Orders"],
+    summary="Get PO leakage analysis",
+    description="Identifies off-contract PO spending (maverick spend) with consolidation recommendations.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def po_leakage(request):
@@ -1320,7 +1388,7 @@ def po_leakage(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1328,23 +1396,25 @@ def po_leakage(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='po_leakage',
+        action="view",
+        resource="po_leakage",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Purchase Orders'],
-    summary='Get PO amendments analysis',
-    description='Analyzes PO amendment/change order patterns.',
+    tags=["P2P Analytics - Purchase Orders"],
+    summary="Get PO amendments analysis",
+    description="Analyzes PO amendment/change order patterns.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def po_amendments(request):
@@ -1362,7 +1432,7 @@ def po_amendments(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1372,13 +1442,13 @@ def po_amendments(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Purchase Orders'],
-    summary='Get POs by supplier',
-    description='Returns PO metrics grouped by supplier.',
+    tags=["P2P Analytics - Purchase Orders"],
+    summary="Get POs by supplier",
+    description="Returns PO metrics grouped by supplier.",
     parameters=[ORGANIZATION_ID_PARAM],
     responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT},
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def po_by_supplier(request):
@@ -1396,7 +1466,7 @@ def po_by_supplier(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1406,21 +1476,25 @@ def po_by_supplier(request):
 
 
 @extend_schema(
-    tags=['P2P Analytics - Purchase Orders'],
-    summary='Get PO detail',
-    description='Returns detailed information for a specific purchase order.',
+    tags=["P2P Analytics - Purchase Orders"],
+    summary="Get PO detail",
+    description="Returns detailed information for a specific purchase order.",
     parameters=[
         OpenApiParameter(
-            name='po_id',
+            name="po_id",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.PATH,
-            description='Purchase Order ID',
+            description="Purchase Order ID",
         ),
         ORGANIZATION_ID_PARAM,
     ],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess])
 @throttle_classes([P2PAnalyticsThrottle])
 def po_detail(request, po_id):
@@ -1438,14 +1512,14 @@ def po_detail(request, po_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_po_detail(po_id)
 
     if data is None:
-        return Response({'error': 'Purchase Order not found'}, status=404)
+        return Response({"error": "Purchase Order not found"}, status=404)
 
     return Response(data)
 
@@ -1454,10 +1528,11 @@ def po_detail(request, po_id):
 # Supplier Payment Performance Endpoints
 # =============================================================================
 
+
 @extend_schema(
-    tags=['P2P Analytics - Supplier Payments'],
-    summary='Get supplier payments overview',
-    description='''
+    tags=["P2P Analytics - Supplier Payments"],
+    summary="Get supplier payments overview",
+    description="""
 Get supplier payment performance overview. **Admin access required.**
 
 Returns:
@@ -1465,11 +1540,15 @@ Returns:
 - Overall on-time payment rate
 - Average days to pay by supplier
 - Exception rate overview
-    ''',
+    """,
     parameters=[ORGANIZATION_ID_PARAM],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess, CanViewPaymentData])
 @throttle_classes([P2PAnalyticsThrottle])
 def supplier_payments_overview(request):
@@ -1489,7 +1568,7 @@ def supplier_payments_overview(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
@@ -1497,32 +1576,38 @@ def supplier_payments_overview(request):
 
     log_action(
         user=request.user,
-        action='view',
-        resource='supplier_payments_overview',
+        action="view",
+        resource="supplier_payments_overview",
         request=request,
-        details={'organization_id': organization.id} if request.user.is_superuser else {}
+        details=(
+            {"organization_id": organization.id} if request.user.is_superuser else {}
+        ),
     )
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Supplier Payments'],
-    summary='Get supplier payments scorecard',
-    description='Returns suppliers ranked by payment performance score. **Admin access required.**',
+    tags=["P2P Analytics - Supplier Payments"],
+    summary="Get supplier payments scorecard",
+    description="Returns suppliers ranked by payment performance score. **Admin access required.**",
     parameters=[
         OpenApiParameter(
-            name='limit',
+            name="limit",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.QUERY,
-            description='Maximum results (default: 50, max: 200)',
+            description="Maximum results (default: 50, max: 200)",
             required=False,
         ),
         ORGANIZATION_ID_PARAM,
     ],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess, CanViewPaymentData])
 @throttle_classes([P2PAnalyticsThrottle])
 def supplier_payments_scorecard(request):
@@ -1544,36 +1629,38 @@ def supplier_payments_scorecard(request):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    limit = validate_int_param(request, 'limit', 50, min_val=1, max_val=200)
+    limit = validate_int_param(request, "limit", 50, min_val=1, max_val=200)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_supplier_payments_scorecard(limit=limit)
 
-    return Response({
-        'suppliers': data,
-        'count': len(data)
-    })
+    return Response({"suppliers": data, "count": len(data)})
 
 
 @extend_schema(
-    tags=['P2P Analytics - Supplier Payments'],
-    summary='Get supplier payment detail',
-    description='Returns detailed payment information for a specific supplier. **Admin access required.**',
+    tags=["P2P Analytics - Supplier Payments"],
+    summary="Get supplier payment detail",
+    description="Returns detailed payment information for a specific supplier. **Admin access required.**",
     parameters=[
         OpenApiParameter(
-            name='supplier_id',
+            name="supplier_id",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.PATH,
-            description='Supplier ID',
+            description="Supplier ID",
         ),
         ORGANIZATION_ID_PARAM,
     ],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess, CanViewPaymentData])
 @throttle_classes([P2PAnalyticsThrottle])
 def supplier_payment_detail(request, supplier_id):
@@ -1593,35 +1680,40 @@ def supplier_payment_detail(request, supplier_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_supplier_payment_detail(supplier_id)
 
     if data is None:
-        return Response({'error': 'Supplier not found'}, status=404)
+        return Response({"error": "Supplier not found"}, status=404)
 
     return Response(data)
 
 
 @extend_schema(
-    tags=['P2P Analytics - Supplier Payments'],
-    summary='Get supplier payment history',
-    description='Returns payment history for a specific supplier. **Admin access required.**',
+    tags=["P2P Analytics - Supplier Payments"],
+    summary="Get supplier payment history",
+    description="Returns payment history for a specific supplier. **Admin access required.**",
     parameters=[
         OpenApiParameter(
-            name='supplier_id',
+            name="supplier_id",
             type=OpenApiTypes.INT,
             location=OpenApiParameter.PATH,
-            description='Supplier ID',
+            description="Supplier ID",
         ),
         MONTHS_PARAM,
         ORGANIZATION_ID_PARAM,
     ],
-    responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT, 404: OpenApiTypes.OBJECT},
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+    },
 )
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, HasP2PAccess, CanViewPaymentData])
 @throttle_classes([P2PAnalyticsThrottle])
 def supplier_payment_history(request, supplier_id):
@@ -1641,15 +1733,15 @@ def supplier_payment_history(request, supplier_id):
     """
     organization = get_target_organization(request)
     if organization is None:
-        return Response({'error': 'User profile not found'}, status=400)
+        return Response({"error": "User profile not found"}, status=400)
 
-    months = validate_int_param(request, 'months', 12, min_val=1, max_val=36)
+    months = validate_int_param(request, "months", 12, min_val=1, max_val=36)
 
     filters = parse_filter_params(request)
     service = P2PAnalyticsService(organization, filters=filters)
     data = service.get_supplier_payment_history(supplier_id, months=months)
 
     if data is None:
-        return Response({'error': 'Supplier not found'}, status=404)
+        return Response({"error": "Supplier not found"}, status=404)
 
     return Response(data)

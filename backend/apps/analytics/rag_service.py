@@ -8,8 +8,9 @@ more accurate and grounded AI-generated insights.
 Uses OpenAI text-embedding-3-small (1536 dimensions) for embeddings
 and pgvector for efficient similarity search.
 """
+
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 from django.conf import settings
 from django.db import connection
@@ -43,7 +44,7 @@ class RAGService:
         """
         self.organization_id = organization_id
         self.openai_api_key = openai_api_key or getattr(
-            settings, 'OPENAI_API_KEY', None
+            settings, "OPENAI_API_KEY", None
         )
         self._openai_client = None
         self._pgvector_available = self._check_pgvector()
@@ -52,9 +53,7 @@ class RAGService:
         """Check if pgvector extension is available."""
         try:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT 1 FROM pg_extension WHERE extname = 'vector'"
-                )
+                cursor.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
                 return cursor.fetchone() is not None
         except Exception as e:
             logger.warning(f"pgvector check failed: {e}")
@@ -66,6 +65,7 @@ class RAGService:
         if self._openai_client is None and self.openai_api_key:
             try:
                 import openai
+
                 self._openai_client = openai.OpenAI(api_key=self.openai_api_key)
             except ImportError:
                 logger.warning("openai package not installed")
@@ -90,7 +90,7 @@ class RAGService:
             response = self.openai_client.embeddings.create(
                 model=self.EMBEDDING_MODEL,
                 input=truncated,
-                dimensions=self.EMBEDDING_DIMENSIONS
+                dimensions=self.EMBEDDING_DIMENSIONS,
             )
 
             return response.data[0].embedding
@@ -104,7 +104,7 @@ class RAGService:
         query: str,
         doc_types: List[str] = None,
         top_k: int = None,
-        threshold: float = None
+        threshold: float = None,
     ) -> List[dict]:
         """
         Search for documents relevant to the query.
@@ -128,9 +128,7 @@ class RAGService:
             embedding = self._get_embedding(query)
             if embedding:
                 try:
-                    return self._vector_search(
-                        embedding, doc_types, top_k, threshold
-                    )
+                    return self._vector_search(embedding, doc_types, top_k, threshold)
                 except Exception:
                     logger.exception(
                         "Vector search failed; falling back to keyword search"
@@ -140,11 +138,7 @@ class RAGService:
         return self._keyword_search(query, doc_types, top_k)
 
     def _vector_search(
-        self,
-        embedding: list,
-        doc_types: List[str],
-        top_k: int,
-        threshold: float
+        self, embedding: list, doc_types: List[str], top_k: int, threshold: float
     ) -> List[dict]:
         """Perform vector similarity search using pgvector.
 
@@ -157,7 +151,7 @@ class RAGService:
         params = [embedding, self.organization_id]
 
         if doc_types:
-            placeholders = ', '.join(['%s'] * len(doc_types))
+            placeholders = ", ".join(["%s"] * len(doc_types))
             type_filter = f"AND document_type IN ({placeholders})"
             params.extend(doc_types)
 
@@ -181,7 +175,7 @@ class RAGService:
                 ORDER BY content_embedding <=> %s::vector
                 LIMIT %s
                 """,
-                params[:-1] + [params[-2], params[-1]]
+                params[:-1] + [params[-2], params[-1]],
             )
 
             columns = [col[0] for col in cursor.description]
@@ -189,15 +183,17 @@ class RAGService:
 
             for row in cursor.fetchall():
                 row_dict = dict(zip(columns, row))
-                if row_dict['similarity'] >= threshold:
-                    results.append({
-                        'id': str(row_dict['id']),
-                        'document_type': row_dict['document_type'],
-                        'title': row_dict['title'],
-                        'content': row_dict['content'],
-                        'metadata': row_dict['metadata'],
-                        'similarity': round(row_dict['similarity'], 4),
-                    })
+                if row_dict["similarity"] >= threshold:
+                    results.append(
+                        {
+                            "id": str(row_dict["id"]),
+                            "document_type": row_dict["document_type"],
+                            "title": row_dict["title"],
+                            "content": row_dict["content"],
+                            "metadata": row_dict["metadata"],
+                            "similarity": round(row_dict["similarity"], 4),
+                        }
+                    )
 
             logger.info(
                 f"RAG vector search: {len(results)} docs found "
@@ -206,17 +202,13 @@ class RAGService:
             return results
 
     def _keyword_search(
-        self,
-        query: str,
-        doc_types: List[str],
-        top_k: int
+        self, query: str, doc_types: List[str], top_k: int
     ) -> List[dict]:
         """Fallback keyword-based search when vector search unavailable."""
         from .models import EmbeddedDocument
 
         qs = EmbeddedDocument.objects.filter(
-            organization_id=self.organization_id,
-            is_active=True
+            organization_id=self.organization_id, is_active=True
         )
 
         if doc_types:
@@ -224,6 +216,7 @@ class RAGService:
 
         words = query.lower().split()[:5]
         from django.db.models import Q
+
         q_filter = Q()
         for word in words:
             if len(word) > 2:
@@ -234,14 +227,16 @@ class RAGService:
 
         results = []
         for doc in qs[:top_k]:
-            results.append({
-                'id': str(doc.id),
-                'document_type': doc.document_type,
-                'title': doc.title,
-                'content': doc.content,
-                'metadata': doc.metadata,
-                'similarity': 0.5,
-            })
+            results.append(
+                {
+                    "id": str(doc.id),
+                    "document_type": doc.document_type,
+                    "title": doc.title,
+                    "content": doc.content,
+                    "metadata": doc.metadata,
+                    "similarity": 0.5,
+                }
+            )
 
         logger.info(f"RAG keyword search: {len(results)} docs found")
         return results
@@ -251,7 +246,7 @@ class RAGService:
         query: str,
         base_context: dict,
         doc_types: List[str] = None,
-        max_content_length: int = 500
+        max_content_length: int = 500,
     ) -> dict:
         """
         Augment LLM context with relevant documents.
@@ -271,13 +266,13 @@ class RAGService:
         docs = self.search(query, doc_types)
 
         if docs:
-            base_context['relevant_documents'] = [
+            base_context["relevant_documents"] = [
                 {
-                    'type': d['document_type'],
-                    'title': d['title'],
-                    'content': d['content'][:max_content_length],
-                    'relevance': f"{d['similarity']:.0%}",
-                    'metadata': d.get('metadata', {}),
+                    "type": d["document_type"],
+                    "title": d["title"],
+                    "content": d["content"][:max_content_length],
+                    "relevance": f"{d['similarity']:.0%}",
+                    "metadata": d.get("metadata", {}),
                 }
                 for d in docs
             ]
@@ -286,9 +281,7 @@ class RAGService:
         return base_context
 
     def get_supplier_context(
-        self,
-        supplier_ids: List[int],
-        include_contracts: bool = True
+        self, supplier_ids: List[int], include_contracts: bool = True
     ) -> List[dict]:
         """
         Get document context for specific suppliers.
@@ -302,9 +295,9 @@ class RAGService:
         """
         from .models import EmbeddedDocument
 
-        doc_types = ['supplier_profile']
+        doc_types = ["supplier_profile"]
         if include_contracts:
-            doc_types.append('contract')
+            doc_types.append("contract")
 
         results = []
         for supplier_id in supplier_ids:
@@ -312,17 +305,19 @@ class RAGService:
                 organization_id=self.organization_id,
                 document_type__in=doc_types,
                 is_active=True,
-                metadata__supplier_id=supplier_id
+                metadata__supplier_id=supplier_id,
             )[:3]
 
             for doc in docs:
-                results.append({
-                    'id': str(doc.id),
-                    'document_type': doc.document_type,
-                    'title': doc.title,
-                    'content': doc.content[:500],
-                    'metadata': doc.metadata,
-                })
+                results.append(
+                    {
+                        "id": str(doc.id),
+                        "document_type": doc.document_type,
+                        "title": doc.title,
+                        "content": doc.content[:500],
+                        "metadata": doc.metadata,
+                    }
+                )
 
         return results
 
@@ -342,26 +337,26 @@ class RAGService:
         for category_id in category_ids:
             docs = EmbeddedDocument.objects.filter(
                 organization_id=self.organization_id,
-                document_type__in=['policy', 'best_practice'],
+                document_type__in=["policy", "best_practice"],
                 is_active=True,
-                metadata__category_id=category_id
+                metadata__category_id=category_id,
             )[:2]
 
             for doc in docs:
-                results.append({
-                    'id': str(doc.id),
-                    'document_type': doc.document_type,
-                    'title': doc.title,
-                    'content': doc.content[:500],
-                    'metadata': doc.metadata,
-                })
+                results.append(
+                    {
+                        "id": str(doc.id),
+                        "document_type": doc.document_type,
+                        "title": doc.title,
+                        "content": doc.content[:500],
+                        "metadata": doc.metadata,
+                    }
+                )
 
         return results
 
     def get_historical_insights(
-        self,
-        insight_type: str = None,
-        limit: int = 5
+        self, insight_type: str = None, limit: int = 5
     ) -> List[dict]:
         """
         Get historical successful insights for context.
@@ -377,22 +372,24 @@ class RAGService:
 
         qs = EmbeddedDocument.objects.filter(
             organization_id=self.organization_id,
-            document_type='historical_insight',
-            is_active=True
+            document_type="historical_insight",
+            is_active=True,
         )
 
         if insight_type:
             qs = qs.filter(metadata__insight_type=insight_type)
 
         results = []
-        for doc in qs.order_by('-updated_at')[:limit]:
-            results.append({
-                'id': str(doc.id),
-                'document_type': doc.document_type,
-                'title': doc.title,
-                'content': doc.content[:500],
-                'metadata': doc.metadata,
-            })
+        for doc in qs.order_by("-updated_at")[:limit]:
+            results.append(
+                {
+                    "id": str(doc.id),
+                    "document_type": doc.document_type,
+                    "title": doc.title,
+                    "content": doc.content[:500],
+                    "metadata": doc.metadata,
+                }
+            )
 
         return results
 
@@ -401,7 +398,7 @@ class RAGService:
         from .models import EmbeddedDocument
 
         stats = EmbeddedDocument.get_document_stats(self.organization_id)
-        stats['pgvector_available'] = self._pgvector_available
-        stats['openai_configured'] = self.openai_client is not None
+        stats["pgvector_available"] = self._pgvector_available
+        stats["openai_configured"] = self.openai_client is not None
 
         return stats

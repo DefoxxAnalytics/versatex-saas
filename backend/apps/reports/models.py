@@ -2,11 +2,14 @@
 Report models for the reporting module.
 Adapted from REPORTING_MODULE_REPLICATION_GUIDE.md
 """
+
 import uuid
 from datetime import timedelta
-from django.db import models
+
 from django.conf import settings
+from django.db import models
 from django.utils import timezone
+
 from apps.authentication.models import Organization
 
 
@@ -18,47 +21,47 @@ class Report(models.Model):
 
     # Report Types
     REPORT_TYPE_CHOICES = [
-        ('spend_analysis', 'Spend Analysis'),
-        ('supplier_performance', 'Supplier Performance'),
-        ('savings_opportunities', 'Savings Opportunities'),
-        ('price_trends', 'Price Trends'),
-        ('contract_compliance', 'Contract Compliance'),
-        ('executive_summary', 'Executive Summary'),
-        ('pareto_analysis', 'Pareto Analysis'),
-        ('stratification', 'Spend Stratification'),
-        ('seasonality', 'Seasonality & Trends'),
-        ('year_over_year', 'Year-over-Year Analysis'),
-        ('tail_spend', 'Tail Spend Analysis'),
-        ('custom', 'Custom Report'),
+        ("spend_analysis", "Spend Analysis"),
+        ("supplier_performance", "Supplier Performance"),
+        ("savings_opportunities", "Savings Opportunities"),
+        ("price_trends", "Price Trends"),
+        ("contract_compliance", "Contract Compliance"),
+        ("executive_summary", "Executive Summary"),
+        ("pareto_analysis", "Pareto Analysis"),
+        ("stratification", "Spend Stratification"),
+        ("seasonality", "Seasonality & Trends"),
+        ("year_over_year", "Year-over-Year Analysis"),
+        ("tail_spend", "Tail Spend Analysis"),
+        ("custom", "Custom Report"),
         # P2P Report Types
-        ('p2p_pr_status', 'PR Status Report'),
-        ('p2p_po_compliance', 'PO Compliance Report'),
-        ('p2p_ap_aging', 'AP Aging Report'),
+        ("p2p_pr_status", "PR Status Report"),
+        ("p2p_po_compliance", "PO Compliance Report"),
+        ("p2p_ap_aging", "AP Aging Report"),
     ]
 
     # Export Formats
     REPORT_FORMAT_CHOICES = [
-        ('pdf', 'PDF Document'),
-        ('xlsx', 'Excel Spreadsheet'),
-        ('csv', 'CSV File'),
+        ("pdf", "PDF Document"),
+        ("xlsx", "Excel Spreadsheet"),
+        ("csv", "CSV File"),
     ]
 
     # Status Tracking
     STATUS_CHOICES = [
-        ('draft', 'Draft'),
-        ('generating', 'Generating'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed'),
-        ('scheduled', 'Scheduled'),
+        ("draft", "Draft"),
+        ("generating", "Generating"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("scheduled", "Scheduled"),
     ]
 
     # Schedule Frequencies
     SCHEDULE_FREQUENCY_CHOICES = [
-        ('daily', 'Daily'),
-        ('weekly', 'Weekly'),
-        ('bi_weekly', 'Bi-Weekly'),
-        ('monthly', 'Monthly'),
-        ('quarterly', 'Quarterly'),
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("bi_weekly", "Bi-Weekly"),
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
     ]
 
     # Primary Key - UUID for security
@@ -69,16 +72,12 @@ class Report(models.Model):
     description = models.TextField(blank=True)
     report_type = models.CharField(max_length=50, choices=REPORT_TYPE_CHOICES)
     report_format = models.CharField(
-        max_length=20,
-        choices=REPORT_FORMAT_CHOICES,
-        default='pdf'
+        max_length=20, choices=REPORT_FORMAT_CHOICES, default="pdf"
     )
 
     # Organization (multi-tenant)
     organization = models.ForeignKey(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name='reports'
+        Organization, on_delete=models.CASCADE, related_name="reports"
     )
 
     # Ownership
@@ -86,7 +85,7 @@ class Report(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='created_reports'
+        related_name="created_reports",
     )
 
     # Date Range for Report Data
@@ -98,11 +97,7 @@ class Report(models.Model):
     parameters = models.JSONField(default=dict, blank=True)
 
     # Status
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='draft'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     error_message = models.TextField(blank=True)
 
     # Generated Output
@@ -113,17 +108,13 @@ class Report(models.Model):
     # Sharing
     is_public = models.BooleanField(default=False)
     shared_with = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        related_name='shared_reports',
-        blank=True
+        settings.AUTH_USER_MODEL, related_name="shared_reports", blank=True
     )
 
     # Scheduling
     is_scheduled = models.BooleanField(default=False)
     schedule_frequency = models.CharField(
-        max_length=20,
-        choices=SCHEDULE_FREQUENCY_CHOICES,
-        blank=True
+        max_length=20, choices=SCHEDULE_FREQUENCY_CHOICES, blank=True
     )
     next_run = models.DateTimeField(null=True, blank=True)
     last_run = models.DateTimeField(null=True, blank=True)
@@ -134,13 +125,13 @@ class Report(models.Model):
     generated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        db_table = 'reports'
-        ordering = ['-created_at']
+        db_table = "reports"
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['organization', 'report_type']),
-            models.Index(fields=['created_by']),
-            models.Index(fields=['status']),
-            models.Index(fields=['is_scheduled', 'next_run']),
+            models.Index(fields=["organization", "report_type"]),
+            models.Index(fields=["created_by"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["is_scheduled", "next_run"]),
         ]
 
     def __str__(self):
@@ -163,11 +154,11 @@ class Report(models.Model):
         """Calculate next scheduled run time based on frequency."""
         now = timezone.now()
         frequency_deltas = {
-            'daily': timedelta(days=1),
-            'weekly': timedelta(weeks=1),
-            'bi_weekly': timedelta(weeks=2),
-            'monthly': timedelta(days=30),
-            'quarterly': timedelta(days=90),
+            "daily": timedelta(days=1),
+            "weekly": timedelta(weeks=1),
+            "bi_weekly": timedelta(weeks=2),
+            "monthly": timedelta(days=30),
+            "quarterly": timedelta(days=90),
         }
         delta = frequency_deltas.get(self.schedule_frequency, timedelta(days=1))
         self.next_run = now + delta
@@ -175,7 +166,7 @@ class Report(models.Model):
 
     def mark_completed(self, summary_data=None):
         """Mark report as completed with optional summary data."""
-        self.status = 'completed'
+        self.status = "completed"
         self.generated_at = timezone.now()
         if summary_data:
             self.summary_data = summary_data
@@ -183,12 +174,23 @@ class Report(models.Model):
 
     def mark_failed(self, error_message):
         """Mark report as failed with error message."""
-        self.status = 'failed'
+        self.status = "failed"
         self.error_message = error_message
         self.save()
 
     def can_access(self, user):
-        """Check if user can access this report."""
+        """Check if user can access this report.
+
+        v3.1 Phase 1 (R-H1): the `shared_with` query is now scoped to users
+        whose primary org matches this report's org OR who hold a membership
+        in this report's org. Without the org guard, a user added to
+        `shared_with` (e.g. by a former org admin) retained access after
+        leaving the org, since the bare ``id=user.id`` filter ignored
+        organisation context entirely.
+        """
+        from django.db.models import Q
+
+        from apps.authentication.models import UserOrganizationMembership
         from apps.authentication.organization_utils import user_can_access_org
 
         if user.is_superuser:
@@ -197,8 +199,19 @@ class Report(models.Model):
             return True
         if self.is_public:
             return True
-        if self.shared_with.filter(id=user.id).exists():
+
+        # Org-guarded shared_with: user must still belong to this report's
+        # org via primary profile OR active membership.
+        org_member_ids = UserOrganizationMembership.objects.filter(
+            organization=self.organization,
+            is_active=True,
+        ).values_list("user_id", flat=True)
+        if self.shared_with.filter(
+            Q(id=user.id)
+            & (Q(profile__organization=self.organization) | Q(id__in=org_member_ids))
+        ).exists():
             return True
+
         # Check organization membership using multi-org aware utility
         # This supports users with multiple organization memberships
         if user_can_access_org(user, self.organization):

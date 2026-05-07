@@ -13,10 +13,10 @@ back (FK violation, partial batch failure, etc.). When no transaction is active
 import logging
 
 from django.db import transaction
-from django.db.models.signals import post_save, post_delete, m2m_changed
+from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Transaction, DataUpload
+from .models import DataUpload, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ def _invalidate_ai_cache(organization_id: int, reason: str) -> None:
     """
     try:
         from apps.analytics.ai_cache import AIInsightsCache
+
         invalidated = AIInsightsCache.invalidate_org_cache(organization_id)
         logger.info(
             f"AI cache invalidated for org {organization_id}: "
@@ -49,9 +50,7 @@ def _schedule_invalidation(organization_id: int, reason: str) -> None:
     the callback is discarded — the cache is never touched, preserving the
     pre-rollback state.
     """
-    transaction.on_commit(
-        lambda: _invalidate_ai_cache(organization_id, reason)
-    )
+    transaction.on_commit(lambda: _invalidate_ai_cache(organization_id, reason))
 
 
 @receiver(post_save, sender=DataUpload)
@@ -61,10 +60,9 @@ def invalidate_ai_cache_on_upload(sender, instance, created, **kwargs):
 
     Only triggers on completed uploads to avoid premature invalidation.
     """
-    if instance.status == 'completed':
+    if instance.status == "completed":
         _schedule_invalidation(
-            instance.organization_id,
-            f"DataUpload completed (id={instance.id})"
+            instance.organization_id, f"DataUpload completed (id={instance.id})"
         )
 
 
@@ -72,8 +70,7 @@ def invalidate_ai_cache_on_upload(sender, instance, created, **kwargs):
 def invalidate_ai_cache_on_transaction_delete(sender, instance, **kwargs):
     """Invalidate AI insights cache when transactions are deleted."""
     _schedule_invalidation(
-        instance.organization_id,
-        f"Transaction deleted (id={instance.id})"
+        instance.organization_id, f"Transaction deleted (id={instance.id})"
     )
 
 
@@ -87,6 +84,5 @@ def invalidate_ai_cache_on_transaction_save(sender, instance, created, **kwargs)
     """
     if not created:
         _schedule_invalidation(
-            instance.organization_id,
-            f"Transaction updated (id={instance.id})"
+            instance.organization_id, f"Transaction updated (id={instance.id})"
         )

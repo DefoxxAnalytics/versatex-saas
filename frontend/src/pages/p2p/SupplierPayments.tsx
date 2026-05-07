@@ -582,7 +582,10 @@ export default function SupplierPayments() {
                 <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
                   <Clock className="h-5 w-5 text-purple-600 mb-2" />
                   <div className="text-xl font-bold text-purple-900 dark:text-purple-100">
-                    {supplierDetail.avg_days_to_pay?.toFixed(0) ?? supplierDetail.avg_dpo?.toFixed(0) ?? "-"} days
+                    {supplierDetail.avg_days_to_pay?.toFixed(0) ??
+                      supplierDetail.avg_dpo?.toFixed(0) ??
+                      "-"}{" "}
+                    days
                   </div>
                   <div className="text-sm text-purple-700 dark:text-purple-300">
                     Avg Days to Pay

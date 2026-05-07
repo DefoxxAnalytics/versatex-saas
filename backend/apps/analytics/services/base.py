@@ -13,7 +13,9 @@ Jun = FY month 12). Per-organization overrides are not implemented; a future
 below and the filter queryset. Any service that needs fiscal math MUST call
 `_get_fiscal_year` / `_get_fiscal_month` rather than reimplementing the logic.
 """
-from datetime import date as _date, datetime
+
+from datetime import date as _date
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from apps.procurement.models import Transaction
@@ -59,16 +61,16 @@ class BaseAnalyticsService:
 
     def _validate_filters(self):
         """Validate filter values that would otherwise fail silently or crash later."""
-        date_from = self._coerce_date(self.filters.get('date_from'))
-        date_to = self._coerce_date(self.filters.get('date_to'))
+        date_from = self._coerce_date(self.filters.get("date_from"))
+        date_to = self._coerce_date(self.filters.get("date_to"))
         if date_from and date_to and date_from > date_to:
             raise ValueError(
                 f"date_from ({date_from.isoformat()}) must be <= date_to ({date_to.isoformat()})"
             )
 
-        for key in ('min_amount', 'max_amount'):
+        for key in ("min_amount", "max_amount"):
             value = self.filters.get(key)
-            if value is None or value == '':
+            if value is None or value == "":
                 continue
             try:
                 Decimal(str(value))
@@ -77,14 +79,14 @@ class BaseAnalyticsService:
 
     @staticmethod
     def _coerce_date(value):
-        if value is None or value == '':
+        if value is None or value == "":
             return None
         if isinstance(value, _date) and not isinstance(value, datetime):
             return value
         if isinstance(value, datetime):
             return value.date()
         if isinstance(value, str):
-            return datetime.strptime(value, '%Y-%m-%d').date()
+            return datetime.strptime(value, "%Y-%m-%d").date()
         raise ValueError(f"Unsupported date value: {value!r}")
 
     def _build_filtered_queryset(self):
@@ -92,46 +94,46 @@ class BaseAnalyticsService:
         qs = Transaction.objects.filter(organization=self.organization)
 
         # Date range filters
-        if date_from := self.filters.get('date_from'):
+        if date_from := self.filters.get("date_from"):
             if isinstance(date_from, str):
-                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                date_from = datetime.strptime(date_from, "%Y-%m-%d").date()
             qs = qs.filter(date__gte=date_from)
 
-        if date_to := self.filters.get('date_to'):
+        if date_to := self.filters.get("date_to"):
             if isinstance(date_to, str):
-                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                date_to = datetime.strptime(date_to, "%Y-%m-%d").date()
             qs = qs.filter(date__lte=date_to)
 
         # Supplier filter
-        if supplier_ids := self.filters.get('supplier_ids'):
+        if supplier_ids := self.filters.get("supplier_ids"):
             if isinstance(supplier_ids, list) and supplier_ids:
                 qs = qs.filter(supplier_id__in=supplier_ids)
 
         # Category filter
-        if category_ids := self.filters.get('category_ids'):
+        if category_ids := self.filters.get("category_ids"):
             if isinstance(category_ids, list) and category_ids:
                 qs = qs.filter(category_id__in=category_ids)
 
         # Subcategory filter (string names)
-        if subcategories := self.filters.get('subcategories'):
+        if subcategories := self.filters.get("subcategories"):
             if isinstance(subcategories, list) and subcategories:
                 qs = qs.filter(subcategory__in=subcategories)
 
         # Location filter (string names)
-        if locations := self.filters.get('locations'):
+        if locations := self.filters.get("locations"):
             if isinstance(locations, list) and locations:
                 qs = qs.filter(location__in=locations)
 
         # Fiscal year filter
-        if years := self.filters.get('years'):
+        if years := self.filters.get("years"):
             if isinstance(years, list) and years:
                 qs = qs.filter(fiscal_year__in=years)
 
         # Amount range filters
-        if min_amount := self.filters.get('min_amount'):
+        if min_amount := self.filters.get("min_amount"):
             qs = qs.filter(amount__gte=min_amount)
 
-        if max_amount := self.filters.get('max_amount'):
+        if max_amount := self.filters.get("max_amount"):
             qs = qs.filter(amount__lte=max_amount)
 
         return qs

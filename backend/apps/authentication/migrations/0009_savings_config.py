@@ -6,13 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('authentication', '0008_add_insight_feedback'),
+        ("authentication", "0008_add_insight_feedback"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='organization',
-            name='savings_config',
-            field=models.JSONField(blank=True, default=dict, help_text='Configurable savings rates for AI Insights (industry benchmarks)'),
+            model_name="organization",
+            name="savings_config",
+            field=models.JSONField(
+                blank=True,
+                default=dict,
+                help_text="Configurable savings rates for AI Insights (industry benchmarks)",
+            ),
         ),
     ]

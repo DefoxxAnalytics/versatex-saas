@@ -2,17 +2,25 @@
 Excel Renderer for reports.
 Uses openpyxl for Excel generation with styled worksheets.
 """
+
 from io import BytesIO
+
 from .base import BaseRenderer
 
 try:
     from openpyxl import Workbook
+    from openpyxl.chart import BarChart, LineChart, PieChart, Reference
     from openpyxl.styles import (
-        Font, Fill, PatternFill, Border, Side,
-        Alignment, NamedStyle
+        Alignment,
+        Border,
+        Fill,
+        Font,
+        NamedStyle,
+        PatternFill,
+        Side,
     )
     from openpyxl.utils import get_column_letter
-    from openpyxl.chart import BarChart, PieChart, LineChart, Reference
+
     OPENPYXL_AVAILABLE = True
 except ImportError:
     OPENPYXL_AVAILABLE = False
@@ -25,18 +33,18 @@ class ExcelRenderer(BaseRenderer):
     """
 
     # Brand colors
-    HEADER_BG = '1E3A5F'  # Navy blue
-    HEADER_TEXT = 'FFFFFF'  # White
-    ACCENT_COLOR = '2563EB'  # Blue accent
-    ALT_ROW_BG = 'F5F7FA'  # Light gray
+    HEADER_BG = "1E3A5F"  # Navy blue
+    HEADER_TEXT = "FFFFFF"  # White
+    ACCENT_COLOR = "2563EB"  # Blue accent
+    ALT_ROW_BG = "F5F7FA"  # Light gray
 
     @property
     def content_type(self) -> str:
-        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     @property
     def file_extension(self) -> str:
-        return '.xlsx'
+        return ".xlsx"
 
     def render(self) -> BytesIO:
         """Render report data as Excel workbook."""
@@ -70,28 +78,32 @@ class ExcelRenderer(BaseRenderer):
     def _create_header_style(self):
         """Create header cell style."""
         return {
-            'font': Font(bold=True, color=self.HEADER_TEXT, size=11),
-            'fill': PatternFill(start_color=self.HEADER_BG, end_color=self.HEADER_BG, fill_type='solid'),
-            'alignment': Alignment(horizontal='center', vertical='center', wrap_text=True),
-            'border': Border(
-                left=Side(style='thin'),
-                right=Side(style='thin'),
-                top=Side(style='thin'),
-                bottom=Side(style='thin')
-            )
+            "font": Font(bold=True, color=self.HEADER_TEXT, size=11),
+            "fill": PatternFill(
+                start_color=self.HEADER_BG, end_color=self.HEADER_BG, fill_type="solid"
+            ),
+            "alignment": Alignment(
+                horizontal="center", vertical="center", wrap_text=True
+            ),
+            "border": Border(
+                left=Side(style="thin"),
+                right=Side(style="thin"),
+                top=Side(style="thin"),
+                bottom=Side(style="thin"),
+            ),
         }
 
     def _create_data_style(self):
         """Create data cell style."""
         return {
-            'font': Font(size=10),
-            'alignment': Alignment(vertical='center'),
-            'border': Border(
-                left=Side(style='thin', color='DDDDDD'),
-                right=Side(style='thin', color='DDDDDD'),
-                top=Side(style='thin', color='DDDDDD'),
-                bottom=Side(style='thin', color='DDDDDD')
-            )
+            "font": Font(size=10),
+            "alignment": Alignment(vertical="center"),
+            "border": Border(
+                left=Side(style="thin", color="DDDDDD"),
+                right=Side(style="thin", color="DDDDDD"),
+                top=Side(style="thin", color="DDDDDD"),
+                bottom=Side(style="thin", color="DDDDDD"),
+            ),
         }
 
     def _apply_style(self, cell, style_dict):
@@ -104,56 +116,64 @@ class ExcelRenderer(BaseRenderer):
         ws = wb.create_sheet("Summary")
 
         # Title
-        ws['A1'] = self.metadata.get('report_title', self.report_name)
-        ws['A1'].font = Font(bold=True, size=16, color=self.HEADER_BG)
-        ws.merge_cells('A1:D1')
+        ws["A1"] = self.metadata.get("report_title", self.report_name)
+        ws["A1"].font = Font(bold=True, size=16, color=self.HEADER_BG)
+        ws.merge_cells("A1:D1")
 
         # Metadata
-        ws['A3'] = 'Organization:'
-        ws['B3'] = self.metadata.get('organization', 'N/A')
-        ws['A4'] = 'Period:'
-        ws['B4'] = f"{self.metadata.get('period_start', 'N/A')} to {self.metadata.get('period_end', 'N/A')}"
-        ws['A5'] = 'Generated:'
-        ws['B5'] = self.metadata.get('generated_at', 'N/A')
-        ws['A6'] = 'Report Type:'
-        ws['B6'] = self.metadata.get('report_type', 'N/A')
+        ws["A3"] = "Organization:"
+        ws["B3"] = self.metadata.get("organization", "N/A")
+        ws["A4"] = "Period:"
+        ws["B4"] = (
+            f"{self.metadata.get('period_start', 'N/A')} to {self.metadata.get('period_end', 'N/A')}"
+        )
+        ws["A5"] = "Generated:"
+        ws["B5"] = self.metadata.get("generated_at", "N/A")
+        ws["A6"] = "Report Type:"
+        ws["B6"] = self.metadata.get("report_type", "N/A")
 
         for row in range(3, 7):
-            ws[f'A{row}'].font = Font(bold=True)
+            ws[f"A{row}"].font = Font(bold=True)
 
         # Overview data
-        overview = self.report_data.get('overview', {})
+        overview = self.report_data.get("overview", {})
         if not overview:
-            overview = self.report_data.get('summary', {})
+            overview = self.report_data.get("summary", {})
             if not overview:
-                overview = self.report_data.get('kpis', {})
+                overview = self.report_data.get("kpis", {})
 
         if overview:
             row = 8
-            ws[f'A{row}'] = 'Key Metrics'
-            ws[f'A{row}'].font = Font(bold=True, size=12, color=self.HEADER_BG)
+            ws[f"A{row}"] = "Key Metrics"
+            ws[f"A{row}"].font = Font(bold=True, size=12, color=self.HEADER_BG)
             row += 1
 
             # Headers
-            ws[f'A{row}'] = 'Metric'
-            ws[f'B{row}'] = 'Value'
-            self._apply_style(ws[f'A{row}'], header_style)
-            self._apply_style(ws[f'B{row}'], header_style)
+            ws[f"A{row}"] = "Metric"
+            ws[f"B{row}"] = "Value"
+            self._apply_style(ws[f"A{row}"], header_style)
+            self._apply_style(ws[f"B{row}"], header_style)
             row += 1
 
             for key, value in overview.items():
-                ws[f'A{row}'] = key.replace('_', ' ').title()
-                if 'spend' in key.lower() or 'amount' in key.lower() or 'savings' in key.lower():
-                    ws[f'B{row}'] = value
-                    ws[f'B{row}'].number_format = '$#,##0.00'
-                elif 'percentage' in key.lower() or 'rate' in key.lower():
-                    ws[f'B{row}'] = value / 100 if isinstance(value, (int, float)) else value
-                    ws[f'B{row}'].number_format = '0.0%'
+                ws[f"A{row}"] = key.replace("_", " ").title()
+                if (
+                    "spend" in key.lower()
+                    or "amount" in key.lower()
+                    or "savings" in key.lower()
+                ):
+                    ws[f"B{row}"] = value
+                    ws[f"B{row}"].number_format = "$#,##0.00"
+                elif "percentage" in key.lower() or "rate" in key.lower():
+                    ws[f"B{row}"] = (
+                        value / 100 if isinstance(value, (int, float)) else value
+                    )
+                    ws[f"B{row}"].number_format = "0.0%"
                 elif isinstance(value, (int, float)):
-                    ws[f'B{row}'] = value
-                    ws[f'B{row}'].number_format = '#,##0'
+                    ws[f"B{row}"] = value
+                    ws[f"B{row}"].number_format = "#,##0"
                 else:
-                    ws[f'B{row}'] = str(value)
+                    ws[f"B{row}"] = str(value)
                 row += 1
 
         # Auto-fit columns
@@ -163,22 +183,22 @@ class ExcelRenderer(BaseRenderer):
         """Add data sheets for various report sections."""
         # Map of data keys to sheet names (max 31 chars for Excel)
         data_sections = {
-            'spend_by_category': 'Spend by Category',
-            'spend_by_supplier': 'Spend by Supplier',
-            'top_suppliers': 'Top Suppliers',
-            'top_categories': 'Top Categories',
-            'monthly_trend': 'Monthly Trend',
-            'pareto_data': 'Pareto Analysis',
-            'tail_suppliers': 'Tail Suppliers',
-            'consolidation_opportunities': 'Consolidation Opps',
-            'category_opportunities': 'Category Opps',
-            'stratification': 'Stratification',
-            'compliance_summary': 'Compliance Summary',
-            'violations': 'Violations',
-            'savings_by_type': 'Savings by Type',
-            'action_plan': 'Action Plan',
-            'categories': 'Categories',
-            'suppliers': 'Suppliers',
+            "spend_by_category": "Spend by Category",
+            "spend_by_supplier": "Spend by Supplier",
+            "top_suppliers": "Top Suppliers",
+            "top_categories": "Top Categories",
+            "monthly_trend": "Monthly Trend",
+            "pareto_data": "Pareto Analysis",
+            "tail_suppliers": "Tail Suppliers",
+            "consolidation_opportunities": "Consolidation Opps",
+            "category_opportunities": "Category Opps",
+            "stratification": "Stratification",
+            "compliance_summary": "Compliance Summary",
+            "violations": "Violations",
+            "savings_by_type": "Savings by Type",
+            "action_plan": "Action Plan",
+            "categories": "Categories",
+            "suppliers": "Suppliers",
         }
 
         for key, sheet_name in data_sections.items():
@@ -198,45 +218,49 @@ class ExcelRenderer(BaseRenderer):
 
         # Write headers
         for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=header.replace('_', ' ').title())
+            cell = ws.cell(row=1, column=col, value=header.replace("_", " ").title())
             self._apply_style(cell, header_style)
 
         # Write data
         for row_idx, item in enumerate(data, 2):
             for col_idx, header in enumerate(headers, 1):
-                value = item.get(header, '')
+                value = item.get(header, "")
                 cell = ws.cell(row=row_idx, column=col_idx, value=value)
 
                 # Apply number format based on header
-                if 'amount' in header.lower() or 'spend' in header.lower() or 'savings' in header.lower():
-                    cell.number_format = '$#,##0.00'
-                elif 'percentage' in header.lower() or 'rate' in header.lower():
+                if (
+                    "amount" in header.lower()
+                    or "spend" in header.lower()
+                    or "savings" in header.lower()
+                ):
+                    cell.number_format = "$#,##0.00"
+                elif "percentage" in header.lower() or "rate" in header.lower():
                     if isinstance(value, (int, float)) and value > 1:
                         cell.value = value / 100
-                    cell.number_format = '0.0%'
+                    cell.number_format = "0.0%"
                 elif isinstance(value, (int, float)) and not isinstance(value, bool):
                     if isinstance(value, float):
-                        cell.number_format = '#,##0.00'
+                        cell.number_format = "#,##0.00"
                     else:
-                        cell.number_format = '#,##0'
+                        cell.number_format = "#,##0"
 
                 # Alternating row colors
                 if row_idx % 2 == 0:
                     cell.fill = PatternFill(
                         start_color=self.ALT_ROW_BG,
                         end_color=self.ALT_ROW_BG,
-                        fill_type='solid'
+                        fill_type="solid",
                     )
 
         # Auto-fit columns
         self._auto_fit_columns(ws)
 
         # Freeze header row
-        ws.freeze_panes = 'A2'
+        ws.freeze_panes = "A2"
 
         # Add chart for certain data types
         if len(data) >= 3 and len(data) <= 20:
-            if 'amount' in headers or 'spend' in headers:
+            if "amount" in headers or "spend" in headers:
                 self._add_chart(ws, headers, len(data))
 
     def _auto_fit_columns(self, ws):
@@ -247,9 +271,9 @@ class ExcelRenderer(BaseRenderer):
             for cell in column_cells:
                 try:
                     # Get column letter - handle merged cells
-                    if column is None and hasattr(cell, 'column_letter'):
+                    if column is None and hasattr(cell, "column_letter"):
                         column = cell.column_letter
-                    elif column is None and hasattr(cell, 'column'):
+                    elif column is None and hasattr(cell, "column"):
                         column = get_column_letter(cell.column)
 
                     if cell.value is not None:
@@ -270,7 +294,7 @@ class ExcelRenderer(BaseRenderer):
         label_col = 1
 
         for i, header in enumerate(headers, 1):
-            if header in ['amount', 'spend', 'total_spend', 'estimated_savings']:
+            if header in ["amount", "spend", "total_spend", "estimated_savings"]:
                 value_col = i
                 break
 

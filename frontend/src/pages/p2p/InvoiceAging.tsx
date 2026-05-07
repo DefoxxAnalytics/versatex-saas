@@ -295,7 +295,12 @@ export default function InvoiceAging() {
   const daysToPayTrendData =
     dpoTrends?.map((trend) => ({
       month: trend.month,
-      days: trend.avg_days_to_pay ?? trend.days_to_pay ?? trend.avg_dpo ?? trend.dpo ?? 0,
+      days:
+        trend.avg_days_to_pay ??
+        trend.days_to_pay ??
+        trend.avg_dpo ??
+        trend.dpo ??
+        0,
       target: 45, // Aspirational benchmark; not payment-terms-aware
     })) || [];
 

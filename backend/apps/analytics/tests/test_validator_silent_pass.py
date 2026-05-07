@@ -14,6 +14,7 @@ The fix: initialize `response['_validation']` to the failure-state marker
 BEFORE the try block; the try overwrites on success. A crash leaves the
 marker visible.
 """
+
 from unittest.mock import MagicMock
 
 from django.test import TestCase

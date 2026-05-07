@@ -16,56 +16,55 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('procurement', '0006_p2p_analytics_models'),
+        ("procurement", "0006_p2p_analytics_models"),
     ]
 
     operations = [
         # Composite index for supplier + date queries (Pareto, supplier trends)
         migrations.AddIndex(
-            model_name='transaction',
+            model_name="transaction",
             index=models.Index(
-                fields=['organization', 'supplier', 'date'],
-                name='proc_trans_org_sup_date_idx'
+                fields=["organization", "supplier", "date"],
+                name="proc_trans_org_sup_date_idx",
             ),
         ),
         # Composite index for category + date queries (stratification, seasonality)
         migrations.AddIndex(
-            model_name='transaction',
+            model_name="transaction",
             index=models.Index(
-                fields=['organization', 'category', 'date'],
-                name='proc_trans_org_cat_date_idx'
+                fields=["organization", "category", "date"],
+                name="proc_trans_org_cat_date_idx",
             ),
         ),
         # Index for invoice aging analysis by paid date
         migrations.AddIndex(
-            model_name='invoice',
+            model_name="invoice",
             index=models.Index(
-                fields=['organization', 'paid_date'],
-                name='proc_inv_org_paid_date_idx'
+                fields=["organization", "paid_date"], name="proc_inv_org_paid_date_idx"
             ),
         ),
         # Index for invoice matching status queries
         migrations.AddIndex(
-            model_name='invoice',
+            model_name="invoice",
             index=models.Index(
-                fields=['organization', 'match_status'],
-                name='proc_inv_org_match_status_idx'
+                fields=["organization", "match_status"],
+                name="proc_inv_org_match_status_idx",
             ),
         ),
         # Index for PO contract coverage analysis
         migrations.AddIndex(
-            model_name='purchaseorder',
+            model_name="purchaseorder",
             index=models.Index(
-                fields=['organization', 'contract', 'created_date'],
-                name='proc_po_org_contract_date_idx'
+                fields=["organization", "contract", "created_date"],
+                name="proc_po_org_contract_date_idx",
             ),
         ),
         # Index for PR approval workflow
         migrations.AddIndex(
-            model_name='purchaserequisition',
+            model_name="purchaserequisition",
             index=models.Index(
-                fields=['organization', 'status', 'created_at'],
-                name='proc_pr_org_status_created_idx'
+                fields=["organization", "status", "created_at"],
+                name="proc_pr_org_status_created_idx",
             ),
         ),
     ]

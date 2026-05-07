@@ -6,36 +6,36 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('procurement', '0007_add_analytics_composite_indexes'),
+        ("procurement", "0007_add_analytics_composite_indexes"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='transaction',
-            name='unique_transaction_with_invoice',
+            model_name="transaction",
+            name="unique_transaction_with_invoice",
         ),
         migrations.RemoveIndex(
-            model_name='invoice',
-            name='proc_inv_org_paid_date_idx',
+            model_name="invoice",
+            name="proc_inv_org_paid_date_idx",
         ),
         migrations.RemoveIndex(
-            model_name='invoice',
-            name='proc_inv_org_match_status_idx',
+            model_name="invoice",
+            name="proc_inv_org_match_status_idx",
         ),
         migrations.RemoveIndex(
-            model_name='purchaseorder',
-            name='proc_po_org_contract_date_idx',
+            model_name="purchaseorder",
+            name="proc_po_org_contract_date_idx",
         ),
         migrations.RemoveIndex(
-            model_name='purchaserequisition',
-            name='proc_pr_org_status_created_idx',
+            model_name="purchaserequisition",
+            name="proc_pr_org_status_created_idx",
         ),
         migrations.RemoveIndex(
-            model_name='transaction',
-            name='proc_trans_org_sup_date_idx',
+            model_name="transaction",
+            name="proc_trans_org_sup_date_idx",
         ),
         migrations.RemoveIndex(
-            model_name='transaction',
-            name='proc_trans_org_cat_date_idx',
+            model_name="transaction",
+            name="proc_trans_org_cat_date_idx",
         ),
     ]

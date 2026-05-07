@@ -11,30 +11,41 @@ Features:
 - Professional footer with page numbers
 - Color-coded status indicators
 """
-from io import BytesIO
+
 from datetime import datetime
+from io import BytesIO
+
 from django.utils import timezone
+
 from .base import BaseRenderer
 
 # ReportLab imports - handle gracefully if not installed
 REPORTLAB_AVAILABLE = False
 
 try:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter, A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch, cm
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-        PageBreak, KeepTogether, HRFlowable, Image
-    )
-    from reportlab.platypus.flowables import Flowable
-    from reportlab.graphics.shapes import Drawing, Rect, String, Line
-    from reportlab.graphics.charts.piecharts import Pie
     from reportlab.graphics.charts.barcharts import VerticalBarChart
     from reportlab.graphics.charts.legends import Legend
+    from reportlab.graphics.charts.piecharts import Pie
+    from reportlab.graphics.shapes import Drawing, Line, Rect, String
     from reportlab.graphics.widgets.markers import makeMarker
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import A4, letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm, inch
+    from reportlab.platypus import (
+        HRFlowable,
+        Image,
+        KeepTogether,
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+    from reportlab.platypus.flowables import Flowable
+
     REPORTLAB_AVAILABLE = True
 except ImportError:
     pass
@@ -43,14 +54,22 @@ except ImportError:
 class RoundedRect(Flowable):
     """A rounded rectangle flowable for KPI cards."""
 
-    def __init__(self, width, height, radius=10, fill_color=None, stroke_color=None,
-                 stroke_width=1, content=None):
+    def __init__(
+        self,
+        width,
+        height,
+        radius=10,
+        fill_color=None,
+        stroke_color=None,
+        stroke_width=1,
+        content=None,
+    ):
         Flowable.__init__(self)
         self.width = width
         self.height = height
         self.radius = radius
         self.fill_color = fill_color or colors.white
-        self.stroke_color = stroke_color or colors.HexColor('#e5e7eb')
+        self.stroke_color = stroke_color or colors.HexColor("#e5e7eb")
         self.stroke_width = stroke_width
         self.content = content or []
 
@@ -59,16 +78,25 @@ class RoundedRect(Flowable):
         self.canv.setStrokeColor(self.stroke_color)
         self.canv.setLineWidth(self.stroke_width)
         self.canv.setFillColor(self.fill_color)
-        self.canv.roundRect(0, 0, self.width, self.height, self.radius,
-                           stroke=1, fill=1)
+        self.canv.roundRect(
+            0, 0, self.width, self.height, self.radius, stroke=1, fill=1
+        )
         self.canv.restoreState()
 
 
 class KPICard(Flowable):
     """A styled KPI card with label, value, and optional change indicator."""
 
-    def __init__(self, label, value, change=None, change_positive=True,
-                 width=150, height=80, accent_color=None):
+    def __init__(
+        self,
+        label,
+        value,
+        change=None,
+        change_positive=True,
+        width=150,
+        height=80,
+        accent_color=None,
+    ):
         Flowable.__init__(self)
         self.label = label
         self.value = value
@@ -76,19 +104,19 @@ class KPICard(Flowable):
         self.change_positive = change_positive
         self.width = width
         self.height = height
-        self.accent_color = accent_color or colors.HexColor('#2563eb')
+        self.accent_color = accent_color or colors.HexColor("#2563eb")
 
     def draw(self):
         canvas = self.canv
         canvas.saveState()
 
         # Card background with shadow effect
-        canvas.setFillColor(colors.HexColor('#f8fafc'))
+        canvas.setFillColor(colors.HexColor("#f8fafc"))
         canvas.roundRect(2, -2, self.width, self.height, 8, stroke=0, fill=1)
 
         # Main card
         canvas.setFillColor(colors.white)
-        canvas.setStrokeColor(colors.HexColor('#e2e8f0'))
+        canvas.setStrokeColor(colors.HexColor("#e2e8f0"))
         canvas.setLineWidth(1)
         canvas.roundRect(0, 0, self.width, self.height, 8, stroke=1, fill=1)
 
@@ -97,12 +125,12 @@ class KPICard(Flowable):
         canvas.roundRect(0, self.height - 4, self.width, 4, 2, stroke=0, fill=1)
 
         # Label
-        canvas.setFillColor(colors.HexColor('#64748b'))
-        canvas.setFont('Helvetica', 9)
+        canvas.setFillColor(colors.HexColor("#64748b"))
+        canvas.setFont("Helvetica", 9)
         canvas.drawString(12, self.height - 24, self.label)
 
         # Value - auto-size font based on length
-        canvas.setFillColor(colors.HexColor('#1e293b'))
+        canvas.setFillColor(colors.HexColor("#1e293b"))
         display_value = str(self.value)
 
         # Determine font size based on value length to fit in card
@@ -113,18 +141,18 @@ class KPICard(Flowable):
         else:
             font_size = 18
 
-        canvas.setFont('Helvetica-Bold', font_size)
+        canvas.setFont("Helvetica-Bold", font_size)
         canvas.drawString(12, self.height - 50, display_value)
 
         # Change indicator
         if self.change is not None:
             if self.change_positive:
-                canvas.setFillColor(colors.HexColor('#10b981'))
-                arrow = '▲'
+                canvas.setFillColor(colors.HexColor("#10b981"))
+                arrow = "▲"
             else:
-                canvas.setFillColor(colors.HexColor('#ef4444'))
-                arrow = '▼'
-            canvas.setFont('Helvetica', 10)
+                canvas.setFillColor(colors.HexColor("#ef4444"))
+                arrow = "▼"
+            canvas.setFont("Helvetica", 10)
             canvas.drawString(12, 12, f"{arrow} {self.change}")
 
         canvas.restoreState()
@@ -142,27 +170,37 @@ class PDFRenderer(BaseRenderer):
     """
 
     # Default brand colors (can be overridden by organization branding)
-    DEFAULT_NAVY = '#1e3a5f'
-    DEFAULT_BLUE = '#2563eb'
-    LIGHT_BLUE = '#3b82f6'
-    TEAL = '#0d9488'
-    GREEN = '#10b981'
-    AMBER = '#f59e0b'
-    RED = '#ef4444'
-    GRAY_50 = '#f8fafc'
-    GRAY_100 = '#f1f5f9'
-    GRAY_200 = '#e2e8f0'
-    GRAY_500 = '#64748b'
-    GRAY_700 = '#334155'
-    GRAY_900 = '#0f172a'
+    DEFAULT_NAVY = "#1e3a5f"
+    DEFAULT_BLUE = "#2563eb"
+    LIGHT_BLUE = "#3b82f6"
+    TEAL = "#0d9488"
+    GREEN = "#10b981"
+    AMBER = "#f59e0b"
+    RED = "#ef4444"
+    GRAY_50 = "#f8fafc"
+    GRAY_100 = "#f1f5f9"
+    GRAY_200 = "#e2e8f0"
+    GRAY_500 = "#64748b"
+    GRAY_700 = "#334155"
+    GRAY_900 = "#0f172a"
 
     # Chart colors palette
     CHART_COLORS = [
-        '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-        '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'
+        "#2563eb",
+        "#10b981",
+        "#f59e0b",
+        "#ef4444",
+        "#8b5cf6",
+        "#06b6d4",
+        "#ec4899",
+        "#84cc16",
+        "#f97316",
+        "#6366f1",
     ]
 
-    def __init__(self, report_data: dict, report_name: str = "Report", branding: dict = None):
+    def __init__(
+        self, report_data: dict, report_name: str = "Report", branding: dict = None
+    ):
         """
         Initialize PDF renderer with optional organization branding.
 
@@ -180,16 +218,16 @@ class PDFRenderer(BaseRenderer):
         super().__init__(report_data, report_name, branding)
 
         # Apply branding colors if provided
-        self.NAVY = self.branding.get('primary_color') or self.DEFAULT_NAVY
-        self.BLUE = self.branding.get('secondary_color') or self.DEFAULT_BLUE
+        self.NAVY = self.branding.get("primary_color") or self.DEFAULT_NAVY
+        self.BLUE = self.branding.get("secondary_color") or self.DEFAULT_BLUE
 
     @property
     def content_type(self) -> str:
-        return 'application/pdf'
+        return "application/pdf"
 
     @property
     def file_extension(self) -> str:
-        return '.pdf'
+        return ".pdf"
 
     def _get_hex_color(self, hex_str):
         """Convert hex string to ReportLab color."""
@@ -212,7 +250,7 @@ class PDFRenderer(BaseRenderer):
             rightMargin=0.5 * inch,
             leftMargin=0.5 * inch,
             topMargin=0.75 * inch,
-            bottomMargin=0.75 * inch
+            bottomMargin=0.75 * inch,
         )
 
         # Build the PDF content
@@ -222,7 +260,7 @@ class PDFRenderer(BaseRenderer):
         doc.build(
             story,
             onFirstPage=self._add_page_header_footer,
-            onLaterPages=self._add_page_header_footer
+            onLaterPages=self._add_page_header_footer,
         )
 
         buffer.seek(0)
@@ -231,6 +269,7 @@ class PDFRenderer(BaseRenderer):
     def _add_page_header_footer(self, canvas, doc):
         """Add branded header and footer to each page."""
         import os
+
         canvas.saveState()
 
         page_width = letter[0]
@@ -239,34 +278,40 @@ class PDFRenderer(BaseRenderer):
         # =================== HEADER ===================
         # Header background gradient effect (subtle)
         canvas.setFillColor(self._get_hex_color(self.NAVY))
-        canvas.rect(0, page_height - 0.6 * inch, page_width, 0.6 * inch, stroke=0, fill=1)
+        canvas.rect(
+            0, page_height - 0.6 * inch, page_width, 0.6 * inch, stroke=0, fill=1
+        )
 
         # Try to add logo if available
-        logo_path = self.branding.get('logo_path')
+        logo_path = self.branding.get("logo_path")
         header_x = 0.5 * inch
 
         if logo_path and os.path.exists(logo_path):
             try:
                 # Add logo image (max height 0.4 inch)
-                logo_img = Image(logo_path, height=0.4 * inch, kind='proportional')
+                logo_img = Image(logo_path, height=0.4 * inch, kind="proportional")
                 logo_img.drawOn(canvas, header_x, page_height - 0.5 * inch)
                 header_x += 2.0 * inch  # Shift text after logo
             except Exception:
                 pass  # Skip logo if there's an error
 
         # Organization name in header
-        org_name = self.branding.get('name') or self.metadata.get('organization', 'Versatex Analytics')
-        canvas.setFont('Helvetica-Bold', 12)
+        org_name = self.branding.get("name") or self.metadata.get(
+            "organization", "Versatex Analytics"
+        )
+        canvas.setFont("Helvetica-Bold", 12)
         canvas.setFillColor(colors.white)
         canvas.drawString(header_x, page_height - 0.38 * inch, org_name)
 
         # Report type in header right
-        report_type = self.metadata.get('report_type_display',
-                                        self.metadata.get('report_type', 'Report'))
-        canvas.setFont('Helvetica', 10)
+        report_type = self.metadata.get(
+            "report_type_display", self.metadata.get("report_type", "Report")
+        )
+        canvas.setFont("Helvetica", 10)
         canvas.setFillColor(colors.white)
-        canvas.drawRightString(page_width - 0.5 * inch, page_height - 0.38 * inch,
-                               report_type)
+        canvas.drawRightString(
+            page_width - 0.5 * inch, page_height - 0.38 * inch, report_type
+        )
 
         # =================== FOOTER ===================
         # Footer accent line
@@ -276,21 +321,23 @@ class PDFRenderer(BaseRenderer):
 
         # Page number (centered)
         page_num = canvas.getPageNumber()
-        canvas.setFont('Helvetica-Bold', 9)
+        canvas.setFont("Helvetica-Bold", 9)
         canvas.setFillColor(self._get_hex_color(self.NAVY))
         canvas.drawCentredString(page_width / 2, 0.35 * inch, f"Page {page_num}")
 
         # Generation date (left)
         # Finding D2: TZ-aware fallback so production timestamps reflect
         # configured TIME_ZONE, not the server's local clock.
-        generated = self.metadata.get('generated_at', timezone.now().strftime('%Y-%m-%d'))
-        canvas.setFont('Helvetica', 8)
+        generated = self.metadata.get(
+            "generated_at", timezone.now().strftime("%Y-%m-%d")
+        )
+        canvas.setFont("Helvetica", 8)
         canvas.setFillColor(self._get_hex_color(self.GRAY_500))
         canvas.drawString(0.5 * inch, 0.35 * inch, f"Generated: {generated}")
 
         # Custom footer text or default confidential notice (right)
-        footer_text = self.branding.get('footer') or "Confidential - Internal Use Only"
-        canvas.setFont('Helvetica', 8)
+        footer_text = self.branding.get("footer") or "Confidential - Internal Use Only"
+        canvas.setFont("Helvetica", 8)
         canvas.setFillColor(self._get_hex_color(self.GRAY_500))
         # Truncate if too long
         if len(footer_text) > 50:
@@ -298,9 +345,9 @@ class PDFRenderer(BaseRenderer):
         canvas.drawRightString(page_width - 0.5 * inch, 0.35 * inch, footer_text)
 
         # Website URL if provided (very bottom, centered)
-        website = self.branding.get('website')
+        website = self.branding.get("website")
         if website:
-            canvas.setFont('Helvetica', 7)
+            canvas.setFont("Helvetica", 7)
             canvas.setFillColor(self._get_hex_color(self.BLUE))
             canvas.drawCentredString(page_width / 2, 0.2 * inch, website)
 
@@ -345,67 +392,79 @@ class PDFRenderer(BaseRenderer):
         styles = getSampleStyleSheet()
 
         # Title style
-        styles.add(ParagraphStyle(
-            'ReportTitle',
-            parent=styles['Heading1'],
-            fontSize=24,
-            spaceAfter=6,
-            textColor=self._get_hex_color(self.NAVY),
-            fontName='Helvetica-Bold'
-        ))
+        styles.add(
+            ParagraphStyle(
+                "ReportTitle",
+                parent=styles["Heading1"],
+                fontSize=24,
+                spaceAfter=6,
+                textColor=self._get_hex_color(self.NAVY),
+                fontName="Helvetica-Bold",
+            )
+        )
 
         # Subtitle
-        styles.add(ParagraphStyle(
-            'ReportSubtitle',
-            parent=styles['Normal'],
-            fontSize=11,
-            textColor=self._get_hex_color(self.GRAY_500),
-            spaceAfter=20
-        ))
+        styles.add(
+            ParagraphStyle(
+                "ReportSubtitle",
+                parent=styles["Normal"],
+                fontSize=11,
+                textColor=self._get_hex_color(self.GRAY_500),
+                spaceAfter=20,
+            )
+        )
 
         # Section Header
-        styles.add(ParagraphStyle(
-            'SectionHeader',
-            parent=styles['Heading2'],
-            fontSize=16,
-            spaceBefore=20,
-            spaceAfter=12,
-            textColor=self._get_hex_color(self.NAVY),
-            fontName='Helvetica-Bold',
-            borderPadding=(0, 0, 8, 0),
-            borderWidth=0,
-            borderColor=self._get_hex_color(self.BLUE)
-        ))
+        styles.add(
+            ParagraphStyle(
+                "SectionHeader",
+                parent=styles["Heading2"],
+                fontSize=16,
+                spaceBefore=20,
+                spaceAfter=12,
+                textColor=self._get_hex_color(self.NAVY),
+                fontName="Helvetica-Bold",
+                borderPadding=(0, 0, 8, 0),
+                borderWidth=0,
+                borderColor=self._get_hex_color(self.BLUE),
+            )
+        )
 
         # Subsection Header
-        styles.add(ParagraphStyle(
-            'SubsectionHeader',
-            parent=styles['Heading3'],
-            fontSize=13,
-            spaceBefore=15,
-            spaceAfter=8,
-            textColor=self._get_hex_color(self.GRAY_700),
-            fontName='Helvetica-Bold'
-        ))
+        styles.add(
+            ParagraphStyle(
+                "SubsectionHeader",
+                parent=styles["Heading3"],
+                fontSize=13,
+                spaceBefore=15,
+                spaceAfter=8,
+                textColor=self._get_hex_color(self.GRAY_700),
+                fontName="Helvetica-Bold",
+            )
+        )
 
         # Body text (using custom name to avoid conflict with default BodyText)
-        styles.add(ParagraphStyle(
-            'ReportBody',
-            parent=styles['Normal'],
-            fontSize=10,
-            textColor=self._get_hex_color(self.GRAY_700),
-            spaceAfter=8,
-            leading=14
-        ))
+        styles.add(
+            ParagraphStyle(
+                "ReportBody",
+                parent=styles["Normal"],
+                fontSize=10,
+                textColor=self._get_hex_color(self.GRAY_700),
+                spaceAfter=8,
+                leading=14,
+            )
+        )
 
         # Highlight text
-        styles.add(ParagraphStyle(
-            'Highlight',
-            parent=styles['Normal'],
-            fontSize=10,
-            textColor=self._get_hex_color(self.BLUE),
-            fontName='Helvetica-Bold'
-        ))
+        styles.add(
+            ParagraphStyle(
+                "Highlight",
+                parent=styles["Normal"],
+                fontSize=10,
+                textColor=self._get_hex_color(self.BLUE),
+                fontName="Helvetica-Bold",
+            )
+        )
 
         return styles
 
@@ -414,57 +473,72 @@ class PDFRenderer(BaseRenderer):
         elements = []
 
         # Report title
-        report_title = self.metadata.get('report_title', self.report_name)
-        elements.append(Paragraph(report_title, styles['ReportTitle']))
+        report_title = self.metadata.get("report_title", self.report_name)
+        elements.append(Paragraph(report_title, styles["ReportTitle"]))
 
         # Subtitle with metadata
-        org_name = self.metadata.get('organization', 'N/A')
-        period_start = self.metadata.get('period_start', 'N/A')
-        period_end = self.metadata.get('period_end', 'N/A')
+        org_name = self.metadata.get("organization", "N/A")
+        period_start = self.metadata.get("period_start", "N/A")
+        period_end = self.metadata.get("period_end", "N/A")
 
         subtitle_parts = [f"<b>Organization:</b> {org_name}"]
-        if period_start != 'N/A' or period_end != 'N/A':
+        if period_start != "N/A" or period_end != "N/A":
             subtitle_parts.append(f"<b>Period:</b> {period_start} to {period_end}")
 
         subtitle_text = " &nbsp;|&nbsp; ".join(subtitle_parts)
-        elements.append(Paragraph(subtitle_text, styles['ReportSubtitle']))
+        elements.append(Paragraph(subtitle_text, styles["ReportSubtitle"]))
 
         # Horizontal rule
-        elements.append(HRFlowable(
-            width="100%",
-            thickness=2,
-            color=self._get_hex_color(self.NAVY),
-            spaceBefore=0,
-            spaceAfter=15
-        ))
+        elements.append(
+            HRFlowable(
+                width="100%",
+                thickness=2,
+                color=self._get_hex_color(self.NAVY),
+                spaceBefore=0,
+                spaceAfter=15,
+            )
+        )
 
         return elements
 
     def _create_kpi_section(self, styles):
         """Create KPI cards section."""
-        overview = self.report_data.get('overview', {})
+        overview = self.report_data.get("overview", {})
         if not overview:
-            overview = self.report_data.get('summary', {})
+            overview = self.report_data.get("summary", {})
         if not overview:
-            overview = self.report_data.get('kpis', {})
+            overview = self.report_data.get("kpis", {})
 
         if not overview:
             return None
 
         elements = []
-        elements.append(Paragraph("Key Performance Indicators", styles['SectionHeader']))
+        elements.append(
+            Paragraph("Key Performance Indicators", styles["SectionHeader"])
+        )
 
         # Create KPI cards
         kpi_cards = []
-        card_colors = [self.BLUE, self.TEAL, self.GREEN, self.AMBER, self.NAVY, self.LIGHT_BLUE]
+        card_colors = [
+            self.BLUE,
+            self.TEAL,
+            self.GREEN,
+            self.AMBER,
+            self.NAVY,
+            self.LIGHT_BLUE,
+        ]
 
         for idx, (key, value) in enumerate(list(overview.items())[:6]):
-            label = key.replace('_', ' ').title()
+            label = key.replace("_", " ").title()
 
             # Format value
-            if 'spend' in key.lower() or 'amount' in key.lower() or 'savings' in key.lower():
+            if (
+                "spend" in key.lower()
+                or "amount" in key.lower()
+                or "savings" in key.lower()
+            ):
                 formatted_value = self.format_currency(value)
-            elif 'percentage' in key.lower() or 'rate' in key.lower():
+            elif "percentage" in key.lower() or "rate" in key.lower():
                 formatted_value = self.format_percentage(value)
             elif isinstance(value, (int, float)):
                 formatted_value = self.format_number(value)
@@ -472,18 +546,20 @@ class PDFRenderer(BaseRenderer):
                 formatted_value = str(value)
 
             accent = self._get_hex_color(card_colors[idx % len(card_colors)])
-            kpi_cards.append(KPICard(
-                label=label,
-                value=formatted_value,
-                width=160,
-                height=75,
-                accent_color=accent
-            ))
+            kpi_cards.append(
+                KPICard(
+                    label=label,
+                    value=formatted_value,
+                    width=160,
+                    height=75,
+                    accent_color=accent,
+                )
+            )
 
         # Arrange cards in rows of 3
         rows = []
         for i in range(0, len(kpi_cards), 3):
-            row_cards = kpi_cards[i:i+3]
+            row_cards = kpi_cards[i : i + 3]
             # Pad with empty cells if needed
             while len(row_cards) < 3:
                 row_cards.append(Spacer(160, 75))
@@ -491,12 +567,16 @@ class PDFRenderer(BaseRenderer):
 
         if rows:
             kpi_table = Table(rows, colWidths=[170, 170, 170])
-            kpi_table.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('TOPPADDING', (0, 0), (-1, -1), 10),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-            ]))
+            kpi_table.setStyle(
+                TableStyle(
+                    [
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("TOPPADDING", (0, 0), (-1, -1), 10),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                    ]
+                )
+            )
             elements.append(kpi_table)
 
         return elements
@@ -506,20 +586,22 @@ class PDFRenderer(BaseRenderer):
         elements = []
 
         # Try to find chartable data
-        spend_by_category = self.report_data.get('spend_by_category', [])
-        spend_by_supplier = self.report_data.get('spend_by_supplier', [])
-        monthly_trend = self.report_data.get('monthly_trend', [])
-        pareto_data = self.report_data.get('pareto_data', [])
+        spend_by_category = self.report_data.get("spend_by_category", [])
+        spend_by_supplier = self.report_data.get("spend_by_supplier", [])
+        monthly_trend = self.report_data.get("monthly_trend", [])
+        pareto_data = self.report_data.get("pareto_data", [])
 
         charts_added = False
 
         # Category pie chart
         if spend_by_category and len(spend_by_category) >= 2:
-            elements.append(Paragraph("Spend Distribution by Category", styles['SectionHeader']))
+            elements.append(
+                Paragraph("Spend Distribution by Category", styles["SectionHeader"])
+            )
             pie_chart = self._create_pie_chart(
                 spend_by_category[:8],  # Top 8 categories
-                label_key='category',
-                value_key='spend'
+                label_key="category",
+                value_key="spend",
             )
             if pie_chart:
                 elements.append(pie_chart)
@@ -528,11 +610,13 @@ class PDFRenderer(BaseRenderer):
 
         # Monthly trend bar chart
         if monthly_trend and len(monthly_trend) >= 2:
-            elements.append(Paragraph("Monthly Spending Trend", styles['SectionHeader']))
+            elements.append(
+                Paragraph("Monthly Spending Trend", styles["SectionHeader"])
+            )
             bar_chart = self._create_bar_chart(
                 monthly_trend[:12],  # Last 12 months
-                label_key='month',
-                value_key='spend'
+                label_key="month",
+                value_key="spend",
             )
             if bar_chart:
                 elements.append(bar_chart)
@@ -542,7 +626,11 @@ class PDFRenderer(BaseRenderer):
         # Pareto analysis - supplier concentration
         if pareto_data and len(pareto_data) >= 2:
             if not charts_added or len(elements) < 5:
-                elements.append(Paragraph("Supplier Concentration (Pareto)", styles['SectionHeader']))
+                elements.append(
+                    Paragraph(
+                        "Supplier Concentration (Pareto)", styles["SectionHeader"]
+                    )
+                )
                 pareto_chart = self._create_pareto_chart(pareto_data[:10])
                 if pareto_chart:
                     elements.append(pareto_chart)
@@ -550,7 +638,7 @@ class PDFRenderer(BaseRenderer):
 
         return elements if charts_added else None
 
-    def _create_pie_chart(self, data, label_key='name', value_key='value'):
+    def _create_pie_chart(self, data, label_key="name", value_key="value"):
         """Create a professional pie chart."""
         if not data:
             return None
@@ -569,10 +657,12 @@ class PDFRenderer(BaseRenderer):
             labels = []
             values = []
             for item in data:
-                label = item.get(label_key, item.get('name', item.get('category', 'Unknown')))
-                value = item.get(value_key, item.get('amount', item.get('spend', 0)))
+                label = item.get(
+                    label_key, item.get("name", item.get("category", "Unknown"))
+                )
+                value = item.get(value_key, item.get("amount", item.get("spend", 0)))
                 if isinstance(label, str) and len(label) > 20:
-                    label = label[:18] + '...'
+                    label = label[:18] + "..."
                 labels.append(label)
                 values.append(float(value) if value else 0)
 
@@ -592,7 +682,7 @@ class PDFRenderer(BaseRenderer):
 
             pie.sideLabels = True
             pie.simpleLabels = False
-            pie.slices.fontName = 'Helvetica'
+            pie.slices.fontName = "Helvetica"
             pie.slices.fontSize = 8
             pie.slices.labelRadius = 1.3
 
@@ -604,9 +694,9 @@ class PDFRenderer(BaseRenderer):
             legend.y = 150
             legend.dx = 8
             legend.dy = 8
-            legend.fontName = 'Helvetica'
+            legend.fontName = "Helvetica"
             legend.fontSize = 8
-            legend.boxAnchor = 'nw'
+            legend.boxAnchor = "nw"
             legend.columnMaximum = 8
             legend.strokeWidth = 0.5
             legend.strokeColor = self._get_hex_color(self.GRAY_200)
@@ -615,8 +705,8 @@ class PDFRenderer(BaseRenderer):
             legend.autoXPadding = 5
             legend.yGap = 0
             legend.dxTextSpace = 5
-            legend.alignment = 'right'
-            legend.dividerLines = 1|2|4
+            legend.alignment = "right"
+            legend.dividerLines = 1 | 2 | 4
             legend.dividerOffsY = 4.5
             legend.subCols.rpad = 30
 
@@ -626,7 +716,9 @@ class PDFRenderer(BaseRenderer):
             for i, (label, value) in enumerate(zip(labels, values)):
                 pct = (value / total * 100) if total > 0 else 0
                 color_hex = self.CHART_COLORS[i % len(self.CHART_COLORS)]
-                legend_items.append((self._get_hex_color(color_hex), f"{label} ({pct:.1f}%)"))
+                legend_items.append(
+                    (self._get_hex_color(color_hex), f"{label} ({pct:.1f}%)")
+                )
 
             legend.colorNamePairs = legend_items
             drawing.add(legend)
@@ -636,7 +728,7 @@ class PDFRenderer(BaseRenderer):
             # Return None if chart creation fails
             return None
 
-    def _create_bar_chart(self, data, label_key='month', value_key='spend'):
+    def _create_bar_chart(self, data, label_key="month", value_key="spend"):
         """Create a professional bar chart."""
         if not data:
             return None
@@ -654,8 +746,8 @@ class PDFRenderer(BaseRenderer):
             labels = []
             values = []
             for item in data:
-                label = item.get(label_key, item.get('name', ''))
-                value = item.get(value_key, item.get('amount', 0))
+                label = item.get(label_key, item.get("name", ""))
+                value = item.get(value_key, item.get("amount", 0))
                 # Shorten month labels
                 if isinstance(label, str) and len(label) > 7:
                     label = label[:7]
@@ -675,16 +767,18 @@ class PDFRenderer(BaseRenderer):
 
             bc.valueAxis.valueMin = 0
             bc.valueAxis.valueMax = max(values) * 1.1 if values else 100
-            bc.valueAxis.valueStep = max(values) / 5 if values and max(values) > 0 else 20
+            bc.valueAxis.valueStep = (
+                max(values) / 5 if values and max(values) > 0 else 20
+            )
 
-            bc.categoryAxis.labels.boxAnchor = 'ne'
+            bc.categoryAxis.labels.boxAnchor = "ne"
             bc.categoryAxis.labels.dx = -5
             bc.categoryAxis.labels.dy = -2
             bc.categoryAxis.labels.angle = 30
-            bc.categoryAxis.labels.fontName = 'Helvetica'
+            bc.categoryAxis.labels.fontName = "Helvetica"
             bc.categoryAxis.labels.fontSize = 7
 
-            bc.valueAxis.labels.fontName = 'Helvetica'
+            bc.valueAxis.labels.fontName = "Helvetica"
             bc.valueAxis.labels.fontSize = 8
 
             bc.barWidth = 20
@@ -714,10 +808,10 @@ class PDFRenderer(BaseRenderer):
             labels = []
             values = []
             for item in data:
-                name = item.get('supplier', item.get('name', 'Unknown'))
-                spend = item.get('spend', item.get('amount', 0))
+                name = item.get("supplier", item.get("name", "Unknown"))
+                spend = item.get("spend", item.get("amount", 0))
                 if isinstance(name, str) and len(name) > 15:
-                    name = name[:13] + '...'
+                    name = name[:13] + "..."
                 labels.append(name)
                 values.append(float(spend) if spend else 0)
 
@@ -733,13 +827,13 @@ class PDFRenderer(BaseRenderer):
                 r = int(37 * intensity)
                 g = int(99 * intensity)
                 b = int(235 * intensity)
-                bc.bars[0].fillColor = colors.Color(r/255, g/255, b/255)
+                bc.bars[0].fillColor = colors.Color(r / 255, g / 255, b / 255)
 
             bc.bars[0].fillColor = self._get_hex_color(self.BLUE)
             bc.categoryAxis.labels.angle = 45
-            bc.categoryAxis.labels.boxAnchor = 'ne'
+            bc.categoryAxis.labels.boxAnchor = "ne"
             bc.categoryAxis.labels.fontSize = 7
-            bc.categoryAxis.labels.fontName = 'Helvetica'
+            bc.categoryAxis.labels.fontName = "Helvetica"
             bc.valueAxis.labels.fontSize = 8
             bc.barWidth = 25
 
@@ -755,18 +849,18 @@ class PDFRenderer(BaseRenderer):
 
         # Map of data keys to section titles
         data_sections = {
-            'spend_by_category': ('Spend by Category', 15),
-            'spend_by_supplier': ('Top Suppliers by Spend', 15),
-            'top_suppliers': ('Supplier Analysis', 15),
-            'top_categories': ('Category Analysis', 15),
-            'monthly_trend': ('Monthly Spending Details', 12),
-            'pareto_data': ('Pareto Analysis Details', 15),
-            'tail_suppliers': ('Tail Spend Suppliers', 20),
-            'consolidation_opportunities': ('Consolidation Opportunities', 10),
-            'stratification': ('Spend Stratification', 10),
-            'compliance_summary': ('Compliance Summary', 10),
-            'violations': ('Policy Violations', 15),
-            'savings_by_type': ('Savings by Type', 10),
+            "spend_by_category": ("Spend by Category", 15),
+            "spend_by_supplier": ("Top Suppliers by Spend", 15),
+            "top_suppliers": ("Supplier Analysis", 15),
+            "top_categories": ("Category Analysis", 15),
+            "monthly_trend": ("Monthly Spending Details", 12),
+            "pareto_data": ("Pareto Analysis Details", 15),
+            "tail_suppliers": ("Tail Spend Suppliers", 20),
+            "consolidation_opportunities": ("Consolidation Opportunities", 10),
+            "stratification": ("Spend Stratification", 10),
+            "compliance_summary": ("Compliance Summary", 10),
+            "violations": ("Policy Violations", 15),
+            "savings_by_type": ("Savings by Type", 10),
         }
 
         tables_added = 0
@@ -778,7 +872,7 @@ class PDFRenderer(BaseRenderer):
                 if tables_added > 0 and tables_added % 2 == 0:
                     elements.append(PageBreak())
 
-                elements.append(Paragraph(title, styles['SectionHeader']))
+                elements.append(Paragraph(title, styles["SectionHeader"]))
                 table = self._create_styled_data_table(data[:max_rows])
                 if table:
                     elements.append(table)
@@ -799,42 +893,67 @@ class PDFRenderer(BaseRenderer):
         text_columns = set()
         for i, header in enumerate(headers):
             h_lower = header.lower()
-            if not any(kw in h_lower for kw in ['amount', 'count', 'percentage', 'avg', 'total', 'spend', 'savings', 'rate', 'pct']):
+            if not any(
+                kw in h_lower
+                for kw in [
+                    "amount",
+                    "count",
+                    "percentage",
+                    "avg",
+                    "total",
+                    "spend",
+                    "savings",
+                    "rate",
+                    "pct",
+                ]
+            ):
                 text_columns.add(i)
 
         # Create paragraph style for table cells
         cell_style = ParagraphStyle(
-            'TableCell',
-            fontName='Helvetica',
+            "TableCell",
+            fontName="Helvetica",
             fontSize=8,
             leading=10,
-            textColor=self._get_hex_color(self.GRAY_700)
+            textColor=self._get_hex_color(self.GRAY_700),
         )
 
         # Format header names
-        header_row = [h.replace('_', ' ').title() for h in headers]
+        header_row = [h.replace("_", " ").title() for h in headers]
         table_data = [header_row]
 
         # Add data rows
         for item in data:
             row = []
             for col_idx, header in enumerate(headers):
-                value = item.get(header, '')
+                value = item.get(header, "")
 
                 # Format based on field type
-                if 'amount' in header.lower() or 'spend' in header.lower() or 'savings' in header.lower():
+                if (
+                    "amount" in header.lower()
+                    or "spend" in header.lower()
+                    or "savings" in header.lower()
+                ):
                     row.append(self.format_currency(value))
-                elif 'percentage' in header.lower() or 'rate' in header.lower() or 'pct' in header.lower():
+                elif (
+                    "percentage" in header.lower()
+                    or "rate" in header.lower()
+                    or "pct" in header.lower()
+                ):
                     row.append(self.format_percentage(value))
                 elif isinstance(value, (int, float)) and not isinstance(value, bool):
-                    row.append(self.format_number(value, 2 if isinstance(value, float) else 0))
+                    row.append(
+                        self.format_number(value, 2 if isinstance(value, float) else 0)
+                    )
                 else:
-                    str_value = str(value) if value is not None else ''
+                    str_value = str(value) if value is not None else ""
                     # For text columns, use Paragraph for wrapping
                     if col_idx in text_columns and len(str_value) > 30:
                         row.append(Paragraph(str_value, cell_style))
                     else:
-                        row.append(str_value[:45] + '...' if len(str_value) > 45 else str_value)
+                        row.append(
+                            str_value[:45] + "..." if len(str_value) > 45 else str_value
+                        )
 
             table_data.append(row)
 
@@ -850,7 +969,20 @@ class PDFRenderer(BaseRenderer):
         for i, header in enumerate(headers):
             h_lower = header.lower()
             # Numeric columns typically have these keywords
-            if any(kw in h_lower for kw in ['amount', 'count', 'percentage', 'avg', 'total', 'spend', 'savings', 'rate', 'pct']):
+            if any(
+                kw in h_lower
+                for kw in [
+                    "amount",
+                    "count",
+                    "percentage",
+                    "avg",
+                    "total",
+                    "spend",
+                    "savings",
+                    "rate",
+                    "pct",
+                ]
+            ):
                 numeric_col_indices.append(i)
             else:
                 text_col_indices.append(i)
@@ -876,34 +1008,32 @@ class PDFRenderer(BaseRenderer):
         # Apply professional styling
         style_commands = [
             # Header styling
-            ('BACKGROUND', (0, 0), (-1, 0), self._get_hex_color(self.NAVY)),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('TOPPADDING', (0, 0), (-1, 0), 10),
-            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-
+            ("BACKGROUND", (0, 0), (-1, 0), self._get_hex_color(self.NAVY)),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+            ("TOPPADDING", (0, 0), (-1, 0), 10),
+            ("ALIGN", (0, 0), (-1, 0), "CENTER"),
             # Data row styling
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
-            ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-
+            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 1), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
+            ("TOPPADDING", (0, 1), (-1, -1), 6),
+            ("ALIGN", (0, 1), (-1, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             # Grid styling
-            ('LINEBELOW', (0, 0), (-1, 0), 2, self._get_hex_color(self.BLUE)),
-            ('LINEBELOW', (0, 1), (-1, -1), 0.5, self._get_hex_color(self.GRAY_200)),
-            ('LINEBEFORE', (0, 0), (0, -1), 0.5, self._get_hex_color(self.GRAY_200)),
-            ('LINEAFTER', (-1, 0), (-1, -1), 0.5, self._get_hex_color(self.GRAY_200)),
+            ("LINEBELOW", (0, 0), (-1, 0), 2, self._get_hex_color(self.BLUE)),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.5, self._get_hex_color(self.GRAY_200)),
+            ("LINEBEFORE", (0, 0), (0, -1), 0.5, self._get_hex_color(self.GRAY_200)),
+            ("LINEAFTER", (-1, 0), (-1, -1), 0.5, self._get_hex_color(self.GRAY_200)),
         ]
 
         # Alternating row colors
         for i in range(1, len(table_data)):
             if i % 2 == 0:
                 style_commands.append(
-                    ('BACKGROUND', (0, i), (-1, i), self._get_hex_color(self.GRAY_50))
+                    ("BACKGROUND", (0, i), (-1, i), self._get_hex_color(self.GRAY_50))
                 )
 
         table.setStyle(TableStyle(style_commands))
@@ -912,55 +1042,69 @@ class PDFRenderer(BaseRenderer):
 
     def _create_recommendations_section(self, styles):
         """Create recommendations/action plan section."""
-        action_plan = self.report_data.get('action_plan', [])
-        recommendations = self.report_data.get('recommendations', [])
+        action_plan = self.report_data.get("action_plan", [])
+        recommendations = self.report_data.get("recommendations", [])
         items = action_plan or recommendations
 
         if not items:
             return None
 
         elements = []
-        elements.append(Paragraph("Recommendations & Action Plan", styles['SectionHeader']))
+        elements.append(
+            Paragraph("Recommendations & Action Plan", styles["SectionHeader"])
+        )
 
         # Create a visually appealing recommendations list
         for i, item in enumerate(items[:10], 1):
             if isinstance(item, dict):
-                action = item.get('action', item.get('recommendation', item.get('title', '')))
-                description = item.get('description', item.get('details', ''))
-                priority = item.get('priority', '')
-                savings = item.get('potential_savings', item.get('savings', ''))
+                action = item.get(
+                    "action", item.get("recommendation", item.get("title", ""))
+                )
+                description = item.get("description", item.get("details", ""))
+                priority = item.get("priority", "")
+                savings = item.get("potential_savings", item.get("savings", ""))
 
                 # Priority badge color
                 priority_colors = {
-                    'high': self.RED,
-                    'medium': self.AMBER,
-                    'low': self.GREEN
+                    "high": self.RED,
+                    "medium": self.AMBER,
+                    "low": self.GREEN,
                 }
                 priority_color = priority_colors.get(str(priority).lower(), self.BLUE)
 
                 # Build recommendation text
                 rec_text = f"<b>{i}. {action}</b>"
                 if priority:
-                    rec_text += f' <font color="{priority_color}">[{priority.upper()}]</font>'
+                    rec_text += (
+                        f' <font color="{priority_color}">[{priority.upper()}]</font>'
+                    )
 
-                elements.append(Paragraph(rec_text, styles['ReportBody']))
+                elements.append(Paragraph(rec_text, styles["ReportBody"]))
 
                 if description:
-                    elements.append(Paragraph(
-                        f"&nbsp;&nbsp;&nbsp;&nbsp;{description}",
-                        styles['ReportBody']
-                    ))
+                    elements.append(
+                        Paragraph(
+                            f"&nbsp;&nbsp;&nbsp;&nbsp;{description}",
+                            styles["ReportBody"],
+                        )
+                    )
 
                 if savings:
-                    savings_text = self.format_currency(savings) if isinstance(savings, (int, float)) else str(savings)
-                    elements.append(Paragraph(
-                        f"&nbsp;&nbsp;&nbsp;&nbsp;<font color=\"{self.GREEN}\">Potential Savings: {savings_text}</font>",
-                        styles['Highlight']
-                    ))
+                    savings_text = (
+                        self.format_currency(savings)
+                        if isinstance(savings, (int, float))
+                        else str(savings)
+                    )
+                    elements.append(
+                        Paragraph(
+                            f'&nbsp;&nbsp;&nbsp;&nbsp;<font color="{self.GREEN}">Potential Savings: {savings_text}</font>',
+                            styles["Highlight"],
+                        )
+                    )
 
                 elements.append(Spacer(1, 8))
             else:
-                elements.append(Paragraph(f"<b>{i}.</b> {item}", styles['ReportBody']))
+                elements.append(Paragraph(f"<b>{i}.</b> {item}", styles["ReportBody"]))
                 elements.append(Spacer(1, 4))
 
         return elements

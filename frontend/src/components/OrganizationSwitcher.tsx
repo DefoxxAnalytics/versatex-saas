@@ -153,10 +153,7 @@ export function OrganizationSwitcher({
                       aria-label="Synthetic demo data"
                       className="text-xs px-1.5 py-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 flex items-center gap-1"
                     >
-                      <FlaskConical
-                        className="h-3 w-3"
-                        aria-hidden="true"
-                      />
+                      <FlaskConical className="h-3 w-3" aria-hidden="true" />
                       Demo
                     </Badge>
                   )}

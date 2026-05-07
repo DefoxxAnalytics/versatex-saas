@@ -1,0 +1,12 @@
+# v3.1 Phase 3 (XC-M2): Black + isort interop. Without `profile = "black"`,
+# isort and Black produce conflicting layouts on the same file (isort
+# reorders imports, Black re-wraps them, isort then re-fails check).
+# `profile = "black"` aligns isort's wrapping/grouping with Black's.
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]

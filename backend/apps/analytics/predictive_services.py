@@ -9,13 +9,16 @@ Provides spending forecasts and trend predictions using statistical methods:
 """
 
 import uuid
-import numpy as np
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from datetime import datetime, timedelta, date
+
+import numpy as np
 from dateutil.relativedelta import relativedelta
-from django.db.models import Sum, Count, Avg
+from django.db.models import Avg, Count, Sum
 from django.db.models.functions import TruncMonth, TruncYear
-from apps.procurement.models import Transaction, Supplier, Category
+from django.utils import timezone
+
+from apps.procurement.models import Category, Supplier, Transaction
 
 
 class PredictiveAnalyticsService:
@@ -43,15 +46,16 @@ class PredictiveAnalyticsService:
         Returns:
             List of dicts with month and amount
         """
-        queryset = self.transactions.annotate(
-            month=TruncMonth('date')
-        ).values('month').annotate(
-            total=Sum('amount'),
-            count=Count('id')
-        ).order_by('month')
+        queryset = (
+            self.transactions.annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total=Sum("amount"), count=Count("id"))
+            .order_by("month")
+        )
 
         if months:
-            cutoff_date = datetime.now().date() - timedelta(days=months * 31)
+            # v3.1 Phase 3 (X-3): timezone-aware day boundary.
+            cutoff_date = timezone.now().date() - timedelta(days=months * 31)
             queryset = queryset.filter(month__gte=cutoff_date)
 
         return list(queryset)
@@ -184,22 +188,19 @@ class PredictiveAnalyticsService:
 
         if not monthly_data:
             return {
-                'forecast': [],
-                'trend': {
-                    'direction': 'stable',
-                    'monthly_change_rate': 0,
-                    'seasonality_detected': False,
-                    'peak_months': []
+                "forecast": [],
+                "trend": {
+                    "direction": "stable",
+                    "monthly_change_rate": 0,
+                    "seasonality_detected": False,
+                    "peak_months": [],
                 },
-                'model_accuracy': {
-                    'mape': None,
-                    'data_points_used': 0
-                }
+                "model_accuracy": {"mape": None, "data_points_used": 0},
             }
 
         # Extract values
-        values = [float(d['total']) for d in monthly_data]
-        months_dates = [(d['month'], float(d['total'])) for d in monthly_data]
+        values = [float(d["total"]) for d in monthly_data]
+        months_dates = [(d["month"], float(d["total"])) for d in monthly_data]
 
         # Determine forecasting method based on data availability
         data_points = len(values)
@@ -213,23 +214,38 @@ class PredictiveAnalyticsService:
 
         # Determine trend direction
         if abs(slope) < np.mean(values) * 0.01:  # Less than 1% change
-            direction = 'stable'
+            direction = "stable"
         elif slope > 0:
-            direction = 'increasing'
+            direction = "increasing"
         else:
-            direction = 'decreasing'
+            direction = "decreasing"
 
         # Find peak months
         peak_months = []
         if seasonal_factors:
-            sorted_months = sorted(seasonal_factors.items(), key=lambda x: x[1], reverse=True)
-            month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June',
-                          'July', 'August', 'September', 'October', 'November', 'December']
+            sorted_months = sorted(
+                seasonal_factors.items(), key=lambda x: x[1], reverse=True
+            )
+            month_names = [
+                "",
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ]
             peak_months = [month_names[m[0]] for m in sorted_months[:3] if m[1] > 1.1]
 
         # Generate forecasts
         forecasts = []
-        last_date = monthly_data[-1]['month'] if monthly_data else datetime.now().date()
+        last_date = monthly_data[-1]["month"] if monthly_data else timezone.now().date()
 
         for i in range(1, months + 1):
             forecast_date = last_date + relativedelta(months=i)
@@ -245,18 +261,20 @@ class PredictiveAnalyticsService:
             base_forecast = max(0, base_forecast)
 
             # Calculate confidence intervals
-            lower_80, upper_80, lower_95, upper_95 = self._calculate_confidence_intervals(
-                values, base_forecast
+            lower_80, upper_80, lower_95, upper_95 = (
+                self._calculate_confidence_intervals(values, base_forecast)
             )
 
-            forecasts.append({
-                'month': forecast_date.strftime('%Y-%m'),
-                'predicted_spend': round(base_forecast, 2),
-                'lower_bound_80': round(lower_80, 2),
-                'upper_bound_80': round(upper_80, 2),
-                'lower_bound_95': round(lower_95, 2),
-                'upper_bound_95': round(upper_95, 2)
-            })
+            forecasts.append(
+                {
+                    "month": forecast_date.strftime("%Y-%m"),
+                    "predicted_spend": round(base_forecast, 2),
+                    "lower_bound_80": round(lower_80, 2),
+                    "upper_bound_80": round(upper_80, 2),
+                    "lower_bound_95": round(lower_95, 2),
+                    "upper_bound_95": round(upper_95, 2),
+                }
+            )
 
         # Calculate model accuracy (MAPE) using last 3 points as validation
         mape = None
@@ -264,25 +282,36 @@ class PredictiveAnalyticsService:
             # Use first n-3 points to predict last 3
             train_values = values[:-3]
             test_values = values[-3:]
-            train_slope, train_intercept, _ = self._calculate_linear_regression(train_values)
+            train_slope, train_intercept, _ = self._calculate_linear_regression(
+                train_values
+            )
 
-            predictions = [train_intercept + train_slope * (len(train_values) + i) for i in range(3)]
-            errors = [abs((pred - actual) / actual) * 100 for pred, actual in zip(predictions, test_values) if actual > 0]
+            predictions = [
+                train_intercept + train_slope * (len(train_values) + i)
+                for i in range(3)
+            ]
+            errors = [
+                abs((pred - actual) / actual) * 100
+                for pred, actual in zip(predictions, test_values)
+                if actual > 0
+            ]
             mape = round(np.mean(errors), 1) if errors else None
 
         return {
-            'forecast': forecasts,
-            'trend': {
-                'direction': direction,
-                'monthly_change_rate': round(slope / np.mean(values) if np.mean(values) > 0 else 0, 4),
-                'seasonality_detected': seasonality_detected,
-                'peak_months': peak_months
+            "forecast": forecasts,
+            "trend": {
+                "direction": direction,
+                "monthly_change_rate": round(
+                    slope / np.mean(values) if np.mean(values) > 0 else 0, 4
+                ),
+                "seasonality_detected": seasonality_detected,
+                "peak_months": peak_months,
             },
-            'model_accuracy': {
-                'mape': mape,
-                'data_points_used': data_points,
-                'r_squared': round(r_squared, 3) if r_squared else None
-            }
+            "model_accuracy": {
+                "mape": mape,
+                "data_points_used": data_points,
+                "r_squared": round(r_squared, 3) if r_squared else None,
+            },
         }
 
     def get_category_forecast(self, category_id, months=6):
@@ -293,63 +322,72 @@ class PredictiveAnalyticsService:
 
         if not category_transactions.exists():
             return {
-                'category_id': category_id,
-                'forecast': [],
-                'trend': {'direction': 'stable', 'monthly_change_rate': 0},
-                'model_accuracy': {'mape': None, 'data_points_used': 0}
+                "category_id": category_id,
+                "forecast": [],
+                "trend": {"direction": "stable", "monthly_change_rate": 0},
+                "model_accuracy": {"mape": None, "data_points_used": 0},
             }
 
-        monthly_data = category_transactions.annotate(
-            month=TruncMonth('date')
-        ).values('month').annotate(
-            total=Sum('amount')
-        ).order_by('month')
+        monthly_data = (
+            category_transactions.annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total=Sum("amount"))
+            .order_by("month")
+        )
 
-        values = [float(d['total']) for d in monthly_data]
+        values = [float(d["total"]) for d in monthly_data]
 
         if not values:
             return {
-                'category_id': category_id,
-                'forecast': [],
-                'trend': {'direction': 'stable', 'monthly_change_rate': 0},
-                'model_accuracy': {'mape': None, 'data_points_used': 0}
+                "category_id": category_id,
+                "forecast": [],
+                "trend": {"direction": "stable", "monthly_change_rate": 0},
+                "model_accuracy": {"mape": None, "data_points_used": 0},
             }
 
         slope, intercept, r_squared = self._calculate_linear_regression(values)
 
-        direction = 'stable'
+        direction = "stable"
         if abs(slope) >= np.mean(values) * 0.01:
-            direction = 'increasing' if slope > 0 else 'decreasing'
+            direction = "increasing" if slope > 0 else "decreasing"
 
         forecasts = []
-        last_date = list(monthly_data)[-1]['month'] if monthly_data else datetime.now().date()
+        last_date = (
+            list(monthly_data)[-1]["month"] if monthly_data else timezone.now().date()
+        )
 
         for i in range(1, months + 1):
             forecast_date = last_date + relativedelta(months=i)
             base_forecast = max(0, intercept + slope * (len(values) + i - 1))
-            lower_80, upper_80, lower_95, upper_95 = self._calculate_confidence_intervals(values, base_forecast)
+            lower_80, upper_80, lower_95, upper_95 = (
+                self._calculate_confidence_intervals(values, base_forecast)
+            )
 
-            forecasts.append({
-                'month': forecast_date.strftime('%Y-%m'),
-                'predicted_spend': round(base_forecast, 2),
-                'lower_bound_80': round(lower_80, 2),
-                'upper_bound_80': round(upper_80, 2),
-                'lower_bound_95': round(lower_95, 2),
-                'upper_bound_95': round(upper_95, 2)
-            })
+            forecasts.append(
+                {
+                    "month": forecast_date.strftime("%Y-%m"),
+                    "predicted_spend": round(base_forecast, 2),
+                    "lower_bound_80": round(lower_80, 2),
+                    "upper_bound_80": round(upper_80, 2),
+                    "lower_bound_95": round(lower_95, 2),
+                    "upper_bound_95": round(upper_95, 2),
+                }
+            )
 
         return {
-            'category_id': category_id,
-            'forecast': forecasts,
-            'trend': {
-                'direction': direction,
-                'monthly_change_rate': round(slope / np.mean(values) if np.mean(values) > 0 else 0, 4)
+            "category_id": category_id,
+            "forecast": forecasts,
+            "trend": {
+                "direction": direction,
+                "monthly_change_rate": round(
+                    slope / np.mean(values) if np.mean(values) > 0 else 0, 4
+                ),
             },
-            'model_accuracy': {
-                'mape': None,
-                'data_points_used': len(values),
-                'r_squared': round(r_squared, 3) if r_squared else None
-            }
+            "model_accuracy": {
+                "mape": None,
+                "data_points_used": len(values),
+                "r_squared": round(r_squared, 3) if r_squared else None,
+            },
         }
 
     def get_supplier_forecast(self, supplier_id, months=6):
@@ -360,63 +398,72 @@ class PredictiveAnalyticsService:
 
         if not supplier_transactions.exists():
             return {
-                'supplier_id': supplier_id,
-                'forecast': [],
-                'trend': {'direction': 'stable', 'monthly_change_rate': 0},
-                'model_accuracy': {'mape': None, 'data_points_used': 0}
+                "supplier_id": supplier_id,
+                "forecast": [],
+                "trend": {"direction": "stable", "monthly_change_rate": 0},
+                "model_accuracy": {"mape": None, "data_points_used": 0},
             }
 
-        monthly_data = supplier_transactions.annotate(
-            month=TruncMonth('date')
-        ).values('month').annotate(
-            total=Sum('amount')
-        ).order_by('month')
+        monthly_data = (
+            supplier_transactions.annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total=Sum("amount"))
+            .order_by("month")
+        )
 
-        values = [float(d['total']) for d in monthly_data]
+        values = [float(d["total"]) for d in monthly_data]
 
         if not values:
             return {
-                'supplier_id': supplier_id,
-                'forecast': [],
-                'trend': {'direction': 'stable', 'monthly_change_rate': 0},
-                'model_accuracy': {'mape': None, 'data_points_used': 0}
+                "supplier_id": supplier_id,
+                "forecast": [],
+                "trend": {"direction": "stable", "monthly_change_rate": 0},
+                "model_accuracy": {"mape": None, "data_points_used": 0},
             }
 
         slope, intercept, r_squared = self._calculate_linear_regression(values)
 
-        direction = 'stable'
+        direction = "stable"
         if abs(slope) >= np.mean(values) * 0.01:
-            direction = 'increasing' if slope > 0 else 'decreasing'
+            direction = "increasing" if slope > 0 else "decreasing"
 
         forecasts = []
-        last_date = list(monthly_data)[-1]['month'] if monthly_data else datetime.now().date()
+        last_date = (
+            list(monthly_data)[-1]["month"] if monthly_data else timezone.now().date()
+        )
 
         for i in range(1, months + 1):
             forecast_date = last_date + relativedelta(months=i)
             base_forecast = max(0, intercept + slope * (len(values) + i - 1))
-            lower_80, upper_80, lower_95, upper_95 = self._calculate_confidence_intervals(values, base_forecast)
+            lower_80, upper_80, lower_95, upper_95 = (
+                self._calculate_confidence_intervals(values, base_forecast)
+            )
 
-            forecasts.append({
-                'month': forecast_date.strftime('%Y-%m'),
-                'predicted_spend': round(base_forecast, 2),
-                'lower_bound_80': round(lower_80, 2),
-                'upper_bound_80': round(upper_80, 2),
-                'lower_bound_95': round(lower_95, 2),
-                'upper_bound_95': round(upper_95, 2)
-            })
+            forecasts.append(
+                {
+                    "month": forecast_date.strftime("%Y-%m"),
+                    "predicted_spend": round(base_forecast, 2),
+                    "lower_bound_80": round(lower_80, 2),
+                    "upper_bound_80": round(upper_80, 2),
+                    "lower_bound_95": round(lower_95, 2),
+                    "upper_bound_95": round(upper_95, 2),
+                }
+            )
 
         return {
-            'supplier_id': supplier_id,
-            'forecast': forecasts,
-            'trend': {
-                'direction': direction,
-                'monthly_change_rate': round(slope / np.mean(values) if np.mean(values) > 0 else 0, 4)
+            "supplier_id": supplier_id,
+            "forecast": forecasts,
+            "trend": {
+                "direction": direction,
+                "monthly_change_rate": round(
+                    slope / np.mean(values) if np.mean(values) > 0 else 0, 4
+                ),
             },
-            'model_accuracy': {
-                'mape': None,
-                'data_points_used': len(values),
-                'r_squared': round(r_squared, 3) if r_squared else None
-            }
+            "model_accuracy": {
+                "mape": None,
+                "data_points_used": len(values),
+                "r_squared": round(r_squared, 3) if r_squared else None,
+            },
         }
 
     def get_trend_analysis(self):
@@ -427,67 +474,97 @@ class PredictiveAnalyticsService:
 
         if not monthly_data:
             return {
-                'overall_trend': {'direction': 'stable', 'change_rate': 0},
-                'category_trends': [],
-                'supplier_trends': [],
-                'growth_metrics': {}
+                "overall_trend": {"direction": "stable", "change_rate": 0},
+                "category_trends": [],
+                "supplier_trends": [],
+                "growth_metrics": {},
             }
 
-        values = [float(d['total']) for d in monthly_data]
+        values = [float(d["total"]) for d in monthly_data]
         slope, intercept, r_squared = self._calculate_linear_regression(values)
 
         # Overall trend
-        direction = 'stable'
+        direction = "stable"
         if abs(slope) >= np.mean(values) * 0.01:
-            direction = 'increasing' if slope > 0 else 'decreasing'
+            direction = "increasing" if slope > 0 else "decreasing"
 
         # Category trends
         category_trends = []
-        categories = self.transactions.values('category_id', 'category__name').distinct()
+        categories = self.transactions.values(
+            "category_id", "category__name"
+        ).distinct()
 
         for cat in categories[:10]:  # Top 10 categories
-            cat_data = self.transactions.filter(category_id=cat['category_id']).annotate(
-                month=TruncMonth('date')
-            ).values('month').annotate(total=Sum('amount')).order_by('month')
+            cat_data = (
+                self.transactions.filter(category_id=cat["category_id"])
+                .annotate(month=TruncMonth("date"))
+                .values("month")
+                .annotate(total=Sum("amount"))
+                .order_by("month")
+            )
 
-            cat_values = [float(d['total']) for d in cat_data]
+            cat_values = [float(d["total"]) for d in cat_data]
             if len(cat_values) >= 2:
                 cat_slope, _, _ = self._calculate_linear_regression(cat_values)
-                cat_direction = 'stable'
+                cat_direction = "stable"
                 if abs(cat_slope) >= np.mean(cat_values) * 0.01:
-                    cat_direction = 'increasing' if cat_slope > 0 else 'decreasing'
+                    cat_direction = "increasing" if cat_slope > 0 else "decreasing"
 
-                category_trends.append({
-                    'category_id': cat['category_id'],
-                    'category_name': cat['category__name'],
-                    'direction': cat_direction,
-                    'change_rate': round(cat_slope / np.mean(cat_values) if np.mean(cat_values) > 0 else 0, 4)
-                })
+                category_trends.append(
+                    {
+                        "category_id": cat["category_id"],
+                        "category_name": cat["category__name"],
+                        "direction": cat_direction,
+                        "change_rate": round(
+                            (
+                                cat_slope / np.mean(cat_values)
+                                if np.mean(cat_values) > 0
+                                else 0
+                            ),
+                            4,
+                        ),
+                    }
+                )
 
         # Supplier trends
         supplier_trends = []
-        suppliers = self.transactions.values('supplier_id', 'supplier__name').annotate(
-            total=Sum('amount')
-        ).order_by('-total')[:10]  # Top 10 suppliers
+        suppliers = (
+            self.transactions.values("supplier_id", "supplier__name")
+            .annotate(total=Sum("amount"))
+            .order_by("-total")[:10]
+        )  # Top 10 suppliers
 
         for sup in suppliers:
-            sup_data = self.transactions.filter(supplier_id=sup['supplier_id']).annotate(
-                month=TruncMonth('date')
-            ).values('month').annotate(total=Sum('amount')).order_by('month')
+            sup_data = (
+                self.transactions.filter(supplier_id=sup["supplier_id"])
+                .annotate(month=TruncMonth("date"))
+                .values("month")
+                .annotate(total=Sum("amount"))
+                .order_by("month")
+            )
 
-            sup_values = [float(d['total']) for d in sup_data]
+            sup_values = [float(d["total"]) for d in sup_data]
             if len(sup_values) >= 2:
                 sup_slope, _, _ = self._calculate_linear_regression(sup_values)
-                sup_direction = 'stable'
+                sup_direction = "stable"
                 if abs(sup_slope) >= np.mean(sup_values) * 0.01:
-                    sup_direction = 'increasing' if sup_slope > 0 else 'decreasing'
+                    sup_direction = "increasing" if sup_slope > 0 else "decreasing"
 
-                supplier_trends.append({
-                    'supplier_id': sup['supplier_id'],
-                    'supplier_name': sup['supplier__name'],
-                    'direction': sup_direction,
-                    'change_rate': round(sup_slope / np.mean(sup_values) if np.mean(sup_values) > 0 else 0, 4)
-                })
+                supplier_trends.append(
+                    {
+                        "supplier_id": sup["supplier_id"],
+                        "supplier_name": sup["supplier__name"],
+                        "direction": sup_direction,
+                        "change_rate": round(
+                            (
+                                sup_slope / np.mean(sup_values)
+                                if np.mean(sup_values) > 0
+                                else 0
+                            ),
+                            4,
+                        ),
+                    }
+                )
 
         # Growth metrics. Each window is emitted only when a FULL prior window
         # exists so current/prev are equal-length sums. Earlier versions summed
@@ -497,30 +574,38 @@ class PredictiveAnalyticsService:
         if len(values) >= 24:
             current_year = sum(values[-12:])
             prev_year = sum(values[-24:-12])
-            yoy_growth = ((current_year - prev_year) / prev_year * 100) if prev_year > 0 else 0
-            growth_metrics['yoy_growth'] = round(yoy_growth, 2)
+            yoy_growth = (
+                ((current_year - prev_year) / prev_year * 100) if prev_year > 0 else 0
+            )
+            growth_metrics["yoy_growth"] = round(yoy_growth, 2)
 
         if len(values) >= 12:
             recent = sum(values[-6:])
             previous = sum(values[-12:-6])
-            six_month_growth = ((recent - previous) / previous * 100) if previous > 0 else 0
-            growth_metrics['six_month_growth'] = round(six_month_growth, 2)
+            six_month_growth = (
+                ((recent - previous) / previous * 100) if previous > 0 else 0
+            )
+            growth_metrics["six_month_growth"] = round(six_month_growth, 2)
 
         if len(values) >= 6:
             recent_3 = sum(values[-3:])
             previous_3 = sum(values[-6:-3])
-            three_month_growth = ((recent_3 - previous_3) / previous_3 * 100) if previous_3 > 0 else 0
-            growth_metrics['three_month_growth'] = round(three_month_growth, 2)
+            three_month_growth = (
+                ((recent_3 - previous_3) / previous_3 * 100) if previous_3 > 0 else 0
+            )
+            growth_metrics["three_month_growth"] = round(three_month_growth, 2)
 
         return {
-            'overall_trend': {
-                'direction': direction,
-                'change_rate': round(slope / np.mean(values) if np.mean(values) > 0 else 0, 4),
-                'r_squared': round(r_squared, 3)
+            "overall_trend": {
+                "direction": direction,
+                "change_rate": round(
+                    slope / np.mean(values) if np.mean(values) > 0 else 0, 4
+                ),
+                "r_squared": round(r_squared, 3),
             },
-            'category_trends': category_trends,
-            'supplier_trends': supplier_trends,
-            'growth_metrics': growth_metrics
+            "category_trends": category_trends,
+            "supplier_trends": supplier_trends,
+            "growth_metrics": growth_metrics,
         }
 
     def get_budget_projection(self, annual_budget):
@@ -534,35 +619,35 @@ class PredictiveAnalyticsService:
             Budget projection with variance analysis
         """
         if annual_budget <= 0:
-            return {'error': 'Annual budget must be positive'}
+            return {"error": "Annual budget must be positive"}
 
         annual_budget = float(annual_budget)
         monthly_budget = annual_budget / 12
 
         # Get current year's data
         current_year = datetime.now().year
-        ytd_data = self.transactions.filter(
-            date__year=current_year
-        ).annotate(
-            month=TruncMonth('date')
-        ).values('month').annotate(
-            total=Sum('amount')
-        ).order_by('month')
+        ytd_data = (
+            self.transactions.filter(date__year=current_year)
+            .annotate(month=TruncMonth("date"))
+            .values("month")
+            .annotate(total=Sum("amount"))
+            .order_by("month")
+        )
 
-        ytd_values = [float(d['total']) for d in ytd_data]
+        ytd_values = [float(d["total"]) for d in ytd_data]
         ytd_spend = sum(ytd_values)
         months_elapsed = len(ytd_values)
 
         if months_elapsed == 0:
             return {
-                'annual_budget': annual_budget,
-                'ytd_spend': 0,
-                'ytd_budget': 0,
-                'variance': 0,
-                'variance_percentage': 0,
-                'projected_year_end': 0,
-                'projected_variance': annual_budget,
-                'status': 'no_data'
+                "annual_budget": annual_budget,
+                "ytd_spend": 0,
+                "ytd_budget": 0,
+                "variance": 0,
+                "variance_percentage": 0,
+                "projected_year_end": 0,
+                "projected_variance": annual_budget,
+                "status": "no_data",
             }
 
         ytd_budget = monthly_budget * months_elapsed
@@ -574,29 +659,31 @@ class PredictiveAnalyticsService:
 
         # Get forecast for remaining months
         forecast_result = self.get_spending_forecast(months=months_remaining)
-        projected_remaining = sum(f['predicted_spend'] for f in forecast_result['forecast'])
+        projected_remaining = sum(
+            f["predicted_spend"] for f in forecast_result["forecast"]
+        )
         projected_year_end = ytd_spend + projected_remaining
         projected_variance = annual_budget - projected_year_end
 
         # Determine status
         if variance_percentage >= 10:
-            status = 'under_budget'
+            status = "under_budget"
         elif variance_percentage <= -10:
-            status = 'over_budget'
+            status = "over_budget"
         else:
-            status = 'on_track'
+            status = "on_track"
 
         return {
-            'annual_budget': annual_budget,
-            'monthly_budget': round(monthly_budget, 2),
-            'ytd_spend': round(ytd_spend, 2),
-            'ytd_budget': round(ytd_budget, 2),
-            'variance': round(variance, 2),
-            'variance_percentage': round(variance_percentage, 2),
-            'projected_year_end': round(projected_year_end, 2),
-            'projected_variance': round(projected_variance, 2),
-            'months_elapsed': months_elapsed,
-            'months_remaining': months_remaining,
-            'status': status,
-            'monthly_forecast': forecast_result['forecast']
+            "annual_budget": annual_budget,
+            "monthly_budget": round(monthly_budget, 2),
+            "ytd_spend": round(ytd_spend, 2),
+            "ytd_budget": round(ytd_budget, 2),
+            "variance": round(variance, 2),
+            "variance_percentage": round(variance_percentage, 2),
+            "projected_year_end": round(projected_year_end, 2),
+            "projected_variance": round(projected_variance, 2),
+            "months_elapsed": months_elapsed,
+            "months_remaining": months_remaining,
+            "status": status,
+            "monthly_forecast": forecast_result["forecast"],
         }

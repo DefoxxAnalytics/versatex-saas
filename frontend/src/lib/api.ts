@@ -277,9 +277,9 @@ export interface AnalyticsFilters {
   date_from?: string;
   date_to?: string;
   supplier_ids?: number[];
-  supplier_names?: string[];  // Names are resolved to IDs server-side
+  supplier_names?: string[]; // Names are resolved to IDs server-side
   category_ids?: number[];
-  category_names?: string[];  // Names are resolved to IDs server-side
+  category_names?: string[]; // Names are resolved to IDs server-side
   subcategories?: string[];
   locations?: string[];
   years?: number[];
@@ -288,19 +288,26 @@ export interface AnalyticsFilters {
 }
 
 // Helper to build filter query params
-export function buildFilterParams(filters?: AnalyticsFilters): Record<string, string | number> {
+export function buildFilterParams(
+  filters?: AnalyticsFilters,
+): Record<string, string | number> {
   const params: Record<string, string | number> = {};
   if (!filters) return params;
 
   if (filters.date_from) params.date_from = filters.date_from;
   if (filters.date_to) params.date_to = filters.date_to;
-  if (filters.supplier_ids?.length) params.supplier_ids = filters.supplier_ids.join(',');
-  if (filters.supplier_names?.length) params.supplier_names = filters.supplier_names.join(',');
-  if (filters.category_ids?.length) params.category_ids = filters.category_ids.join(',');
-  if (filters.category_names?.length) params.category_names = filters.category_names.join(',');
-  if (filters.subcategories?.length) params.subcategories = filters.subcategories.join(',');
-  if (filters.locations?.length) params.locations = filters.locations.join(',');
-  if (filters.years?.length) params.years = filters.years.join(',');
+  if (filters.supplier_ids?.length)
+    params.supplier_ids = filters.supplier_ids.join(",");
+  if (filters.supplier_names?.length)
+    params.supplier_names = filters.supplier_names.join(",");
+  if (filters.category_ids?.length)
+    params.category_ids = filters.category_ids.join(",");
+  if (filters.category_names?.length)
+    params.category_names = filters.category_names.join(",");
+  if (filters.subcategories?.length)
+    params.subcategories = filters.subcategories.join(",");
+  if (filters.locations?.length) params.locations = filters.locations.join(",");
+  if (filters.years?.length) params.years = filters.years.join(",");
   if (filters.min_amount !== undefined) params.min_amount = filters.min_amount;
   if (filters.max_amount !== undefined) params.max_amount = filters.max_amount;
 
@@ -2128,25 +2135,37 @@ export const procurementAPI = {
 // All endpoints support organization_id param for superuser org switching
 // All endpoints support filter params: date_from, date_to, supplier_ids, category_ids, min_amount, max_amount
 export const analyticsAPI = {
-  getOverview: (filters?: AnalyticsFilters): Promise<AxiosResponse<OverviewStats>> =>
-    api.get("/analytics/overview/", { params: { ...getOrganizationParam(), ...buildFilterParams(filters) } }),
+  getOverview: (
+    filters?: AnalyticsFilters,
+  ): Promise<AxiosResponse<OverviewStats>> =>
+    api.get("/analytics/overview/", {
+      params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
+    }),
 
-  getSpendByCategory: (filters?: AnalyticsFilters): Promise<AxiosResponse<SpendByCategory[]>> =>
+  getSpendByCategory: (
+    filters?: AnalyticsFilters,
+  ): Promise<AxiosResponse<SpendByCategory[]>> =>
     api.get("/analytics/spend-by-category/", {
       params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
     }),
 
-  getCategoryDetails: (filters?: AnalyticsFilters): Promise<AxiosResponse<CategoryDetail[]>> =>
+  getCategoryDetails: (
+    filters?: AnalyticsFilters,
+  ): Promise<AxiosResponse<CategoryDetail[]>> =>
     api.get("/analytics/categories/detailed/", {
       params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
     }),
 
-  getSpendBySupplier: (filters?: AnalyticsFilters): Promise<AxiosResponse<SpendBySupplier[]>> =>
+  getSpendBySupplier: (
+    filters?: AnalyticsFilters,
+  ): Promise<AxiosResponse<SpendBySupplier[]>> =>
     api.get("/analytics/spend-by-supplier/", {
       params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
     }),
 
-  getSupplierDetails: (filters?: AnalyticsFilters): Promise<AxiosResponse<SupplierAnalysis>> =>
+  getSupplierDetails: (
+    filters?: AnalyticsFilters,
+  ): Promise<AxiosResponse<SupplierAnalysis>> =>
     api.get("/analytics/suppliers/detailed/", {
       params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
     }),
@@ -2156,11 +2175,19 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<MonthlyTrend[]>> =>
     api.get("/analytics/monthly-trend/", {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
-  getParetoAnalysis: (filters?: AnalyticsFilters): Promise<AxiosResponse<ParetoItem[]>> =>
-    api.get("/analytics/pareto/", { params: { ...getOrganizationParam(), ...buildFilterParams(filters) } }),
+  getParetoAnalysis: (
+    filters?: AnalyticsFilters,
+  ): Promise<AxiosResponse<ParetoItem[]>> =>
+    api.get("/analytics/pareto/", {
+      params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
+    }),
 
   getSupplierDrilldown: (
     supplierId: number,
@@ -2183,7 +2210,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<TailSpendAnalysis>> =>
     api.get("/analytics/tail-spend/", {
-      params: { threshold, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        threshold,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getDetailedTailSpend: (
@@ -2191,7 +2222,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<DetailedTailSpend>> =>
     api.get("/analytics/tail-spend/detailed/", {
-      params: { threshold, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        threshold,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getTailSpendCategoryDrilldown: (
@@ -2200,7 +2235,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<TailSpendCategoryDrilldown>> =>
     api.get(`/analytics/tail-spend/category/${categoryId}/`, {
-      params: { threshold, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        threshold,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getTailSpendVendorDrilldown: (
@@ -2209,7 +2248,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<TailSpendVendorDrilldown>> =>
     api.get(`/analytics/tail-spend/vendor/${supplierId}/`, {
-      params: { threshold, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        threshold,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getStratification: (
@@ -2269,7 +2312,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<SeasonalityCategoryDrilldown>> =>
     api.get(`/analytics/seasonality/category/${categoryId}/`, {
-      params: { ...getOrganizationParam(), use_fiscal_year: useFiscalYear, ...buildFilterParams(filters) },
+      params: {
+        ...getOrganizationParam(),
+        use_fiscal_year: useFiscalYear,
+        ...buildFilterParams(filters),
+      },
     }),
 
   getYearOverYear: (
@@ -2368,7 +2415,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<AIInsightsListResponse>> =>
     api.get("/analytics/ai-insights/anomalies/", {
-      params: { sensitivity, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        sensitivity,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   // AI Insight Feedback endpoints (ROI tracking)
@@ -2461,7 +2512,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<SpendingForecastResponse>> =>
     api.get("/analytics/predictions/spending/", {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getCategoryForecast: (
@@ -2470,7 +2525,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<CategoryForecastResponse>> =>
     api.get(`/analytics/predictions/category/${categoryId}/`, {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getSupplierForecast: (
@@ -2479,7 +2538,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<SupplierForecastResponse>> =>
     api.get(`/analytics/predictions/supplier/${supplierId}/`, {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getTrendAnalysis: (
@@ -2494,7 +2557,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<BudgetProjectionResponse>> =>
     api.get("/analytics/predictions/budget/", {
-      params: { annual_budget: annualBudget, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        annual_budget: annualBudget,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   // Contract Analytics endpoints
@@ -2507,9 +2574,7 @@ export const analyticsAPI = {
 
   getContracts: (
     filters?: AnalyticsFilters,
-  ): Promise<
-    AxiosResponse<{ contracts: ContractListItem[]; count: number }>
-  > =>
+  ): Promise<AxiosResponse<{ contracts: ContractListItem[]; count: number }>> =>
     api.get("/analytics/contracts/", {
       params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
     }),
@@ -2533,7 +2598,11 @@ export const analyticsAPI = {
     }>
   > =>
     api.get("/analytics/contracts/expiring/", {
-      params: { days, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        days,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getContractPerformance: (
@@ -2594,11 +2663,13 @@ export const analyticsAPI = {
       limit?: number;
     },
     filters?: AnalyticsFilters,
-  ): Promise<
-    AxiosResponse<{ violations: PolicyViolation[]; count: number }>
-  > =>
+  ): Promise<AxiosResponse<{ violations: PolicyViolation[]; count: number }>> =>
     api.get("/analytics/compliance/violations/", {
-      params: { ...params, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        ...params,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   resolveViolation: (
@@ -2623,7 +2694,11 @@ export const analyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<ViolationTrends>> =>
     api.get("/analytics/compliance/trends/", {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getSupplierComplianceScores: (
@@ -2637,9 +2712,7 @@ export const analyticsAPI = {
 
   getSpendingPolicies: (
     filters?: AnalyticsFilters,
-  ): Promise<
-    AxiosResponse<{ policies: SpendingPolicy[]; count: number }>
-  > =>
+  ): Promise<AxiosResponse<{ policies: SpendingPolicy[]; count: number }>> =>
     api.get("/analytics/compliance/policies/", {
       params: { ...getOrganizationParam(), ...buildFilterParams(filters) },
     }),
@@ -3419,7 +3492,11 @@ export const p2pAnalyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<P2PCycleTrend[]>> =>
     api.get("/analytics/p2p/cycle-trends/", {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getBottlenecks: (
@@ -3434,7 +3511,11 @@ export const p2pAnalyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<P2PProcessFunnel>> =>
     api.get("/analytics/p2p/process-funnel/", {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getStageDrilldown: (
@@ -3468,7 +3549,11 @@ export const p2pAnalyticsAPI = {
     }>
   > =>
     api.get("/analytics/matching/exceptions/", {
-      params: { ...params, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        ...params,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getExceptionsByType: (
@@ -3554,7 +3639,11 @@ export const p2pAnalyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<DPOTrend[]>> =>
     api.get("/analytics/aging/dpo-trends/", {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getCashFlowForecast: (
@@ -3562,7 +3651,11 @@ export const p2pAnalyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<CashFlowForecast>> =>
     api.get("/analytics/aging/cash-forecast/", {
-      params: { weeks, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        weeks,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   // Purchase Requisitions
@@ -3592,7 +3685,11 @@ export const p2pAnalyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<{ pending_prs: PRPendingItem[]; count: number }>> =>
     api.get("/analytics/requisitions/pending/", {
-      params: { limit, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        limit,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getPRDetail: (
@@ -3655,7 +3752,11 @@ export const p2pAnalyticsAPI = {
     AxiosResponse<{ suppliers: SupplierPaymentScore[]; count: number }>
   > =>
     api.get("/analytics/supplier-payments/scorecard/", {
-      params: { limit, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        limit,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 
   getSupplierPaymentDetail: (
@@ -3672,7 +3773,11 @@ export const p2pAnalyticsAPI = {
     filters?: AnalyticsFilters,
   ): Promise<AxiosResponse<SupplierPaymentHistory>> =>
     api.get(`/analytics/supplier-payments/${supplierId}/history/`, {
-      params: { months, ...getOrganizationParam(), ...buildFilterParams(filters) },
+      params: {
+        months,
+        ...getOrganizationParam(),
+        ...buildFilterParams(filters),
+      },
     }),
 };
 

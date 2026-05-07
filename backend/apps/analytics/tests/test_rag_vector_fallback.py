@@ -8,6 +8,7 @@ literal string "fallback", which made keyword search look for documents
 containing the word "fallback" -- silent degradation, noise into LLM
 context.
 """
+
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -32,9 +33,11 @@ class TestRAGVectorFallback(TestCase):
     def test_vector_failure_falls_back_with_original_query(self):
         service = self._make_service()
 
-        with patch.object(service, '_get_embedding') as mock_embed, \
-             patch.object(service, '_vector_search') as mock_vec, \
-             patch.object(service, '_keyword_search') as mock_kw:
+        with (
+            patch.object(service, "_get_embedding") as mock_embed,
+            patch.object(service, "_vector_search") as mock_vec,
+            patch.object(service, "_keyword_search") as mock_kw,
+        ):
             mock_embed.return_value = [0.1] * 1536
             mock_vec.side_effect = RuntimeError("vector backend unavailable")
             mock_kw.return_value = []
@@ -48,7 +51,7 @@ class TestRAGVectorFallback(TestCase):
         mock_kw.assert_called_once()
         call_args = mock_kw.call_args
         first_positional = (
-            call_args.args[0] if call_args.args else call_args.kwargs.get('query')
+            call_args.args[0] if call_args.args else call_args.kwargs.get("query")
         )
         self.assertEqual(
             first_positional,

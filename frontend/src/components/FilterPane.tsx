@@ -77,11 +77,7 @@ export function FilterPane() {
   const [presetName, setPresetName] = useState("");
 
   // Get unique suppliers, locations, years from procurement data
-  const {
-    uniqueSuppliers,
-    uniqueLocations,
-    uniqueYears,
-  } = useMemo(() => {
+  const { uniqueSuppliers, uniqueLocations, uniqueYears } = useMemo(() => {
     const suppliers = new Set<string>();
     const locations = new Set<string>();
     const years = new Set<string>();
@@ -113,34 +109,36 @@ export function FilterPane() {
   }, [procurementData]);
 
   // Get categories and subcategories from backend category details (proper hierarchy)
-  const {
-    uniqueCategories,
-    uniqueSubcategories,
-    categorySubcategoryMap,
-  } = useMemo(() => {
-    const categories: string[] = [];
-    const subcategories = new Set<string>();
-    const catSubMap = new Map<string, Set<string>>();
+  const { uniqueCategories, uniqueSubcategories, categorySubcategoryMap } =
+    useMemo(() => {
+      const categories: string[] = [];
+      const subcategories = new Set<string>();
+      const catSubMap = new Map<string, Set<string>>();
 
-    categoryDetails.forEach((cat: { category: string; subcategories?: Array<{ name: string }> }) => {
-      categories.push(cat.category);
+      categoryDetails.forEach(
+        (cat: {
+          category: string;
+          subcategories?: Array<{ name: string }>;
+        }) => {
+          categories.push(cat.category);
 
-      if (cat.subcategories && cat.subcategories.length > 0) {
-        const subSet = new Set<string>();
-        cat.subcategories.forEach((sub) => {
-          subSet.add(sub.name);
-          subcategories.add(sub.name);
-        });
-        catSubMap.set(cat.category, subSet);
-      }
-    });
+          if (cat.subcategories && cat.subcategories.length > 0) {
+            const subSet = new Set<string>();
+            cat.subcategories.forEach((sub) => {
+              subSet.add(sub.name);
+              subcategories.add(sub.name);
+            });
+            catSubMap.set(cat.category, subSet);
+          }
+        },
+      );
 
-    return {
-      uniqueCategories: categories.sort(),
-      uniqueSubcategories: Array.from(subcategories).sort(),
-      categorySubcategoryMap: catSubMap,
-    };
-  }, [categoryDetails]);
+      return {
+        uniqueCategories: categories.sort(),
+        uniqueSubcategories: Array.from(subcategories).sort(),
+        categorySubcategoryMap: catSubMap,
+      };
+    }, [categoryDetails]);
 
   // Filter available subcategories based on selected categories
   const availableSubcategories = useMemo(() => {
@@ -169,7 +167,11 @@ export function FilterPane() {
     updateFilters.mutate({ categories: selected });
 
     // If categories were selected, check if current subcategories are still valid
-    if (selected.length > 0 && filters?.subcategories && filters.subcategories.length > 0) {
+    if (
+      selected.length > 0 &&
+      filters?.subcategories &&
+      filters.subcategories.length > 0
+    ) {
       // Get all valid subcategories for the new category selection
       const validSubcategories = new Set<string>();
       selected.forEach((category) => {
@@ -181,7 +183,7 @@ export function FilterPane() {
 
       // Filter out any subcategories that are no longer valid
       const validSelectedSubcategories = filters.subcategories.filter((sub) =>
-        validSubcategories.has(sub)
+        validSubcategories.has(sub),
       );
 
       // If any subcategories were removed, update the filter
@@ -632,7 +634,8 @@ export function FilterPane() {
             Subcategories
             {filters.categories.length > 0 && (
               <span className="text-xs text-muted-foreground ml-1">
-                (filtered by {filters.categories.length} {filters.categories.length === 1 ? "category" : "categories"})
+                (filtered by {filters.categories.length}{" "}
+                {filters.categories.length === 1 ? "category" : "categories"})
               </span>
             )}
           </Label>

@@ -9,19 +9,21 @@ Contains background tasks for:
 - Batch AI insight generation (overnight)
 - Semantic cache maintenance
 """
-import logging
+
 import json
+import logging
 from datetime import timedelta
+
 from celery import shared_task
-from django.db import connection
 from django.core.cache import cache
+from django.db import connection
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
 
 @shared_task(
-    name='refresh_materialized_views',
+    name="refresh_materialized_views",
     bind=True,
     max_retries=3,
     autoretry_for=(Exception,),
@@ -39,9 +41,9 @@ def refresh_materialized_views(self):
         dict: Status and count of views refreshed
     """
     views = [
-        'mv_monthly_category_spend',
-        'mv_monthly_supplier_spend',
-        'mv_daily_transaction_summary',
+        "mv_monthly_category_spend",
+        "mv_monthly_supplier_spend",
+        "mv_daily_transaction_summary",
     ]
 
     refreshed = 0
@@ -74,25 +76,27 @@ def refresh_materialized_views(self):
                     # `errors` so monitoring still sees it, AND we add a
                     # structured warning entry so callers can detect that
                     # the view was refreshed via the blocking path.
-                    warnings.append({
-                        'view': view,
-                        'reason': 'concurrently_failed_used_blocking_fallback',
-                        'original_error': concurrently_error,
-                    })
+                    warnings.append(
+                        {
+                            "view": view,
+                            "reason": "concurrently_failed_used_blocking_fallback",
+                            "original_error": concurrently_error,
+                        }
+                    )
                 except Exception as e2:
                     logger.error(f"Fallback refresh also failed for {view}: {str(e2)}")
 
     return {
-        'status': 'success' if not errors else 'partial',
-        'views_refreshed': refreshed,
-        'total_views': len(views),
-        'errors': errors,
-        'warnings': warnings,
+        "status": "success" if not errors else "partial",
+        "views_refreshed": refreshed,
+        "total_views": len(views),
+        "errors": errors,
+        "warnings": warnings,
     }
 
 
 @shared_task(
-    name='refresh_single_materialized_view',
+    name="refresh_single_materialized_view",
     bind=True,
     max_retries=3,
     autoretry_for=(Exception,),
@@ -109,15 +113,15 @@ def refresh_single_view(self, view_name: str):
         dict: Status of the refresh operation
     """
     valid_views = {
-        'mv_monthly_category_spend',
-        'mv_monthly_supplier_spend',
-        'mv_daily_transaction_summary',
+        "mv_monthly_category_spend",
+        "mv_monthly_supplier_spend",
+        "mv_daily_transaction_summary",
     }
 
     if view_name not in valid_views:
         return {
-            'status': 'error',
-            'message': f"Invalid view name: {view_name}. Valid views: {valid_views}"
+            "status": "error",
+            "message": f"Invalid view name: {view_name}. Valid views: {valid_views}",
         }
 
     with connection.cursor() as cursor:
@@ -125,8 +129,8 @@ def refresh_single_view(self, view_name: str):
             cursor.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view_name}")
             logger.info(f"Refreshed materialized view: {view_name}")
             return {
-                'status': 'success',
-                'view': view_name,
+                "status": "success",
+                "view": view_name,
             }
         except Exception as e:
             logger.error(f"Failed to refresh {view_name}: {str(e)}")
@@ -134,15 +138,15 @@ def refresh_single_view(self, view_name: str):
             try:
                 cursor.execute(f"REFRESH MATERIALIZED VIEW {view_name}")
                 return {
-                    'status': 'success',
-                    'view': view_name,
-                    'note': 'Used non-concurrent refresh',
+                    "status": "success",
+                    "view": view_name,
+                    "note": "Used non-concurrent refresh",
                 }
             except Exception as e2:
                 return {
-                    'status': 'error',
-                    'view': view_name,
-                    'message': str(e2),
+                    "status": "error",
+                    "view": view_name,
+                    "message": str(e2),
                 }
 
 
@@ -156,7 +160,7 @@ ENHANCEMENT_CACHE_TTL = 300  # 5 minutes
 
 
 @shared_task(
-    name='enhance_insights_async',
+    name="enhance_insights_async",
     bind=True,
     max_retries=2,
     autoretry_for=(Exception,),
@@ -178,66 +182,97 @@ def enhance_insights_async(self, org_id: int, user_id: int, insights_data: list)
         dict: Status and result of the enhancement
     """
     from apps.authentication.models import Organization, UserProfile
+
     from .ai_services import AIInsightsService
 
     status_key = f"{ENHANCEMENT_STATUS_PREFIX}:{org_id}:{user_id}"
     result_key = f"{ENHANCEMENT_RESULT_PREFIX}:{org_id}:{user_id}"
 
     try:
-        cache.set(status_key, {"status": "processing", "progress": 10}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key, {"status": "processing", "progress": 10}, ENHANCEMENT_CACHE_TTL
+        )
 
         org = Organization.objects.get(id=org_id)
         profile = UserProfile.objects.filter(user_id=user_id).first()
 
         if not profile:
-            cache.set(status_key, {"status": "failed", "error": "User profile not found"}, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {"status": "failed", "error": "User profile not found"},
+                ENHANCEMENT_CACHE_TTL,
+            )
             return {"status": "failed", "error": "User profile not found"}
 
         prefs = profile.preferences or {}
 
-        cache.set(status_key, {"status": "processing", "progress": 30}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key, {"status": "processing", "progress": 30}, ENHANCEMENT_CACHE_TTL
+        )
 
         service = AIInsightsService(
             organization=org,
             use_external_ai=True,
-            ai_provider=prefs.get('aiProvider', 'anthropic'),
-            api_key=prefs.get('aiApiKey'),
+            ai_provider=prefs.get("aiProvider", "anthropic"),
+            api_key=prefs.get("aiApiKey"),
         )
 
-        cache.set(status_key, {"status": "processing", "progress": 50}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key, {"status": "processing", "progress": 50}, ENHANCEMENT_CACHE_TTL
+        )
 
         enhancement = service._enhance_with_external_ai_structured(insights_data)
 
         if enhancement:
-            cache.set(status_key, {"status": "processing", "progress": 90}, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {"status": "processing", "progress": 90},
+                ENHANCEMENT_CACHE_TTL,
+            )
             cache.set(result_key, enhancement, ENHANCEMENT_CACHE_TTL)
-            cache.set(status_key, {"status": "completed", "progress": 100}, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {"status": "completed", "progress": 100},
+                ENHANCEMENT_CACHE_TTL,
+            )
 
             logger.info(f"AI enhancement completed for org {org_id}")
             return {"status": "completed", "org_id": org_id}
         else:
-            cache.set(status_key, {
-                "status": "failed",
-                "error": "AI enhancement returned no results",
-                "progress": 0
-            }, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {
+                    "status": "failed",
+                    "error": "AI enhancement returned no results",
+                    "progress": 0,
+                },
+                ENHANCEMENT_CACHE_TTL,
+            )
             return {"status": "failed", "error": "No enhancement results"}
 
     except Organization.DoesNotExist:
         error_msg = f"Organization {org_id} not found"
         logger.error(error_msg)
-        cache.set(status_key, {"status": "failed", "error": error_msg, "progress": 0}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key,
+            {"status": "failed", "error": error_msg, "progress": 0},
+            ENHANCEMENT_CACHE_TTL,
+        )
         return {"status": "failed", "error": error_msg}
 
     except Exception as e:
         error_msg = f"AI enhancement failed: {str(e)}"
         logger.error(f"AI enhancement failed for org {org_id}: {e}")
-        cache.set(status_key, {"status": "failed", "error": error_msg, "progress": 0}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key,
+            {"status": "failed", "error": error_msg, "progress": 0},
+            ENHANCEMENT_CACHE_TTL,
+        )
         raise
 
 
 @shared_task(
-    name='perform_deep_analysis_async',
+    name="perform_deep_analysis_async",
     bind=True,
     max_retries=2,
     autoretry_for=(Exception,),
@@ -259,34 +294,45 @@ def perform_deep_analysis_async(self, org_id: int, user_id: int, insight_data: d
         dict: Deep analysis results
     """
     from apps.authentication.models import Organization, UserProfile
+
     from .ai_services import AIInsightsService
 
-    insight_id = insight_data.get('id', 'unknown')
+    insight_id = insight_data.get("id", "unknown")
     status_key = f"deep_analysis_status:{org_id}:{insight_id}"
     result_key = f"deep_analysis_result:{org_id}:{insight_id}"
 
     try:
-        cache.set(status_key, {"status": "processing", "progress": 10}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key, {"status": "processing", "progress": 10}, ENHANCEMENT_CACHE_TTL
+        )
 
         org = Organization.objects.get(id=org_id)
         profile = UserProfile.objects.filter(user_id=user_id).first()
 
         if not profile:
-            cache.set(status_key, {"status": "failed", "error": "User profile not found"}, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {"status": "failed", "error": "User profile not found"},
+                ENHANCEMENT_CACHE_TTL,
+            )
             return {"status": "failed", "error": "User profile not found"}
 
         prefs = profile.preferences or {}
 
-        cache.set(status_key, {"status": "processing", "progress": 30}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key, {"status": "processing", "progress": 30}, ENHANCEMENT_CACHE_TTL
+        )
 
         service = AIInsightsService(
             organization=org,
             use_external_ai=True,
-            ai_provider=prefs.get('aiProvider', 'anthropic'),
-            api_key=prefs.get('aiApiKey'),
+            ai_provider=prefs.get("aiProvider", "anthropic"),
+            api_key=prefs.get("aiApiKey"),
         )
 
-        cache.set(status_key, {"status": "processing", "progress": 50}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key, {"status": "processing", "progress": 50}, ENHANCEMENT_CACHE_TTL
+        )
 
         # M-AI2: pass user_id so the semantic cache key is per-user within
         # the org. Without this, two users in the same org clicking the
@@ -294,30 +340,54 @@ def perform_deep_analysis_async(self, org_id: int, user_id: int, insight_data: d
         analysis = service.perform_deep_analysis(insight_data, user_id=user_id)
 
         if analysis:
-            cache.set(status_key, {"status": "processing", "progress": 90}, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {"status": "processing", "progress": 90},
+                ENHANCEMENT_CACHE_TTL,
+            )
             cache.set(result_key, analysis, ENHANCEMENT_CACHE_TTL)
-            cache.set(status_key, {"status": "completed", "progress": 100}, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {"status": "completed", "progress": 100},
+                ENHANCEMENT_CACHE_TTL,
+            )
 
-            logger.info(f"Deep analysis completed for insight {insight_id} in org {org_id}")
+            logger.info(
+                f"Deep analysis completed for insight {insight_id} in org {org_id}"
+            )
             return {"status": "completed", "insight_id": insight_id}
         else:
-            cache.set(status_key, {
-                "status": "failed",
-                "error": "Deep analysis returned no results",
-                "progress": 0
-            }, ENHANCEMENT_CACHE_TTL)
+            cache.set(
+                status_key,
+                {
+                    "status": "failed",
+                    "error": "Deep analysis returned no results",
+                    "progress": 0,
+                },
+                ENHANCEMENT_CACHE_TTL,
+            )
             return {"status": "failed", "error": "No analysis results"}
 
     except Organization.DoesNotExist:
         error_msg = f"Organization {org_id} not found"
         logger.error(error_msg)
-        cache.set(status_key, {"status": "failed", "error": error_msg, "progress": 0}, ENHANCEMENT_CACHE_TTL)
+        cache.set(
+            status_key,
+            {"status": "failed", "error": error_msg, "progress": 0},
+            ENHANCEMENT_CACHE_TTL,
+        )
         return {"status": "failed", "error": error_msg}
 
     except Exception as e:
         error_msg = f"Deep analysis failed: {str(e)}"
-        logger.error(f"Deep analysis failed for insight {insight_id} in org {org_id}: {e}")
-        cache.set(status_key, {"status": "failed", "error": error_msg, "progress": 0}, ENHANCEMENT_CACHE_TTL)
+        logger.error(
+            f"Deep analysis failed for insight {insight_id} in org {org_id}: {e}"
+        )
+        cache.set(
+            status_key,
+            {"status": "failed", "error": error_msg, "progress": 0},
+            ENHANCEMENT_CACHE_TTL,
+        )
         raise
 
 
@@ -325,8 +395,9 @@ def perform_deep_analysis_async(self, org_id: int, user_id: int, insight_data: d
 # Batch Processing Tasks (Overnight Jobs)
 # ============================================================================
 
+
 @shared_task(
-    name='batch_generate_insights',
+    name="batch_generate_insights",
     bind=True,
     max_retries=2,
     autoretry_for=(Exception,),
@@ -350,20 +421,34 @@ def batch_generate_insights(self):
     - Can use Anthropic Batch API for 50% cost savings (future enhancement)
     - Reduces daytime API load
 
+    v3.1 Phase 3 (XC-TD4): cache.add idempotency lock — keyed on the
+    UTC date — guards against beat-tick overlap (worker restart firing a
+    second tick before the first finishes). The lock is held for 24h
+    matching the schedule cadence; the second concurrent run is a no-op.
+    Same cache.add+incr atomic pattern v3.0 Task 3.7 used for counters.
+
     Returns:
         dict: Summary of batch processing results
     """
     from apps.authentication.models import Organization
-    from .ai_services import AIInsightsService
+
     from .ai_cache import AIInsightsCache
+    from .ai_services import AIInsightsService
 
     start_time = timezone.now()
+    lock_key = f"batch_generate_insights_lock:{start_time.date().isoformat()}"
+    if not cache.add(lock_key, "1", timeout=86400):
+        logger.info(
+            f"batch_generate_insights skipped: another run already claimed "
+            f"lock for {start_time.date().isoformat()}"
+        )
+        return {"status": "skipped", "reason": "concurrent_run_in_progress"}
     results = {
-        'organizations_processed': 0,
-        'organizations_failed': 0,
-        'insights_generated': 0,
-        'errors': [],
-        'started_at': start_time.isoformat(),
+        "organizations_processed": 0,
+        "organizations_failed": 0,
+        "insights_generated": 0,
+        "errors": [],
+        "started_at": start_time.isoformat(),
     }
 
     organizations = Organization.objects.filter(is_active=True)
@@ -385,39 +470,38 @@ def batch_generate_insights(self):
             if insights:
                 cache_service = AIInsightsCache(org.id)
                 cache_key = cache_service._generate_cache_key(
-                    insight_type='all',
-                    filters={}
+                    insight_type="all", filters={}
                 )
                 cache.set(
                     cache_key,
                     {
-                        'insights': insights,
-                        'generated_at': timezone.now().isoformat(),
-                        'batch_generated': True,
+                        "insights": insights,
+                        "generated_at": timezone.now().isoformat(),
+                        "batch_generated": True,
                     },
-                    timeout=86400
+                    timeout=86400,
                 )
 
-                results['insights_generated'] += len(insights)
-                results['organizations_processed'] += 1
+                results["insights_generated"] += len(insights)
+                results["organizations_processed"] += 1
 
                 logger.info(f"Generated {len(insights)} insights for {org.name}")
             else:
-                results['organizations_processed'] += 1
+                results["organizations_processed"] += 1
                 logger.info(f"No insights generated for {org.name} (no data)")
 
         except Exception as e:
             error_msg = f"Failed to process {org.name}: {str(e)}"
             logger.error(error_msg)
-            results['errors'].append(error_msg)
-            results['organizations_failed'] += 1
+            results["errors"].append(error_msg)
+            results["organizations_failed"] += 1
 
     end_time = timezone.now()
     duration = (end_time - start_time).total_seconds()
 
-    results['completed_at'] = end_time.isoformat()
-    results['duration_seconds'] = duration
-    results['status'] = 'success' if not results['errors'] else 'partial'
+    results["completed_at"] = end_time.isoformat()
+    results["duration_seconds"] = duration
+    results["status"] = "success" if not results["errors"] else "partial"
 
     logger.info(
         f"Batch insight generation completed: "
@@ -431,7 +515,7 @@ def batch_generate_insights(self):
 
 
 @shared_task(
-    name='batch_enhance_insights',
+    name="batch_enhance_insights",
     bind=True,
     max_retries=1,
     soft_time_limit=7200,
@@ -445,19 +529,30 @@ def batch_enhance_insights(self):
     This should run AFTER batch_generate_insights completes.
     Uses external AI to add recommendations and priority actions.
 
+    v3.1 Phase 3 (XC-TD4): same cache.add idempotency lock as
+    batch_generate_insights — beat-tick overlap protection.
+
     Returns:
         dict: Summary of enhancement results
     """
     from apps.authentication.models import Organization, UserProfile
+
     from .ai_services import AIInsightsService
 
     start_time = timezone.now()
+    lock_key = f"batch_enhance_insights_lock:{start_time.date().isoformat()}"
+    if not cache.add(lock_key, "1", timeout=86400):
+        logger.info(
+            f"batch_enhance_insights skipped: another run already claimed "
+            f"lock for {start_time.date().isoformat()}"
+        )
+        return {"status": "skipped", "reason": "concurrent_run_in_progress"}
     results = {
-        'organizations_enhanced': 0,
-        'organizations_skipped': 0,
-        'organizations_failed': 0,
-        'errors': [],
-        'started_at': start_time.isoformat(),
+        "organizations_enhanced": 0,
+        "organizations_skipped": 0,
+        "organizations_failed": 0,
+        "errors": [],
+        "started_at": start_time.isoformat(),
     }
 
     organizations = Organization.objects.filter(is_active=True)
@@ -465,49 +560,47 @@ def batch_enhance_insights(self):
     for org in organizations:
         try:
             admin_profile = UserProfile.objects.filter(
-                organization=org,
-                role='admin',
-                is_active=True
+                organization=org, role="admin", is_active=True
             ).first()
 
             if not admin_profile:
-                results['organizations_skipped'] += 1
+                results["organizations_skipped"] += 1
                 continue
 
             prefs = admin_profile.preferences or {}
 
-            if not prefs.get('useExternalAI') or not prefs.get('aiApiKey'):
-                results['organizations_skipped'] += 1
+            if not prefs.get("useExternalAI") or not prefs.get("aiApiKey"):
+                results["organizations_skipped"] += 1
                 continue
 
             service = AIInsightsService(
                 organization=org,
                 use_external_ai=True,
-                ai_provider=prefs.get('aiProvider', 'anthropic'),
-                api_key=prefs.get('aiApiKey'),
+                ai_provider=prefs.get("aiProvider", "anthropic"),
+                api_key=prefs.get("aiApiKey"),
             )
 
             insights = service.get_all_insights()
             if insights:
                 enhanced = service._enhance_with_external_ai_structured(insights)
                 if enhanced:
-                    results['organizations_enhanced'] += 1
+                    results["organizations_enhanced"] += 1
                     logger.info(f"Enhanced insights for {org.name}")
                 else:
-                    results['organizations_failed'] += 1
+                    results["organizations_failed"] += 1
             else:
-                results['organizations_skipped'] += 1
+                results["organizations_skipped"] += 1
 
         except Exception as e:
             error_msg = f"Enhancement failed for {org.name}: {str(e)}"
             logger.error(error_msg)
-            results['errors'].append(error_msg)
-            results['organizations_failed'] += 1
+            results["errors"].append(error_msg)
+            results["organizations_failed"] += 1
 
     end_time = timezone.now()
-    results['completed_at'] = end_time.isoformat()
-    results['duration_seconds'] = (end_time - start_time).total_seconds()
-    results['status'] = 'success' if not results['errors'] else 'partial'
+    results["completed_at"] = end_time.isoformat()
+    results["duration_seconds"] = (end_time - start_time).total_seconds()
+    results["status"] = "success" if not results["errors"] else "partial"
 
     logger.info(
         f"Batch enhancement completed: "
@@ -523,8 +616,9 @@ def batch_enhance_insights(self):
 # Cache Maintenance Tasks
 # ============================================================================
 
+
 @shared_task(
-    name='cleanup_semantic_cache',
+    name="cleanup_semantic_cache",
     bind=True,
     max_retries=3,
     autoretry_for=(Exception,),
@@ -546,46 +640,39 @@ def cleanup_semantic_cache(self):
 
     start_time = timezone.now()
     results = {
-        'expired_deleted': 0,
-        'orphaned_deleted': 0,
-        'low_value_deleted': 0,
-        'total_remaining': 0,
-        'started_at': start_time.isoformat(),
+        "expired_deleted": 0,
+        "orphaned_deleted": 0,
+        "low_value_deleted": 0,
+        "total_remaining": 0,
+        "started_at": start_time.isoformat(),
     }
 
     try:
-        expired = SemanticCache.objects.filter(
-            expires_at__lt=timezone.now()
-        )
-        results['expired_deleted'] = expired.count()
+        expired = SemanticCache.objects.filter(expires_at__lt=timezone.now())
+        results["expired_deleted"] = expired.count()
         expired.delete()
         logger.info(f"Deleted {results['expired_deleted']} expired cache entries")
 
-        orphaned = SemanticCache.objects.filter(
-            organization__isnull=True
-        )
-        results['orphaned_deleted'] = orphaned.count()
+        orphaned = SemanticCache.objects.filter(organization__isnull=True)
+        results["orphaned_deleted"] = orphaned.count()
         orphaned.delete()
 
         cutoff = timezone.now() - timedelta(hours=24)
-        low_value = SemanticCache.objects.filter(
-            hit_count=0,
-            created_at__lt=cutoff
-        )
-        results['low_value_deleted'] = low_value.count()
+        low_value = SemanticCache.objects.filter(hit_count=0, created_at__lt=cutoff)
+        results["low_value_deleted"] = low_value.count()
         low_value.delete()
         logger.info(f"Deleted {results['low_value_deleted']} low-value cache entries")
 
-        results['total_remaining'] = SemanticCache.objects.count()
+        results["total_remaining"] = SemanticCache.objects.count()
 
     except Exception as e:
         logger.error(f"Semantic cache cleanup failed: {str(e)}")
         raise
 
     end_time = timezone.now()
-    results['completed_at'] = end_time.isoformat()
-    results['duration_seconds'] = (end_time - start_time).total_seconds()
-    results['status'] = 'success'
+    results["completed_at"] = end_time.isoformat()
+    results["duration_seconds"] = (end_time - start_time).total_seconds()
+    results["status"] = "success"
 
     logger.info(
         f"Semantic cache cleanup completed: "
@@ -597,7 +684,7 @@ def cleanup_semantic_cache(self):
 
 
 @shared_task(
-    name='cleanup_llm_request_logs',
+    name="cleanup_llm_request_logs",
     bind=True,
     max_retries=3,
     autoretry_for=(Exception,),
@@ -622,18 +709,18 @@ def cleanup_llm_request_logs(self, days_to_keep: int = 30):
     cutoff_date = timezone.now() - timedelta(days=days_to_keep)
 
     results = {
-        'logs_deleted': 0,
-        'logs_remaining': 0,
-        'cutoff_date': cutoff_date.isoformat(),
-        'started_at': start_time.isoformat(),
+        "logs_deleted": 0,
+        "logs_remaining": 0,
+        "cutoff_date": cutoff_date.isoformat(),
+        "started_at": start_time.isoformat(),
     }
 
     try:
         old_logs = LLMRequestLog.objects.filter(created_at__lt=cutoff_date)
-        results['logs_deleted'] = old_logs.count()
+        results["logs_deleted"] = old_logs.count()
         old_logs.delete()
 
-        results['logs_remaining'] = LLMRequestLog.objects.count()
+        results["logs_remaining"] = LLMRequestLog.objects.count()
 
         logger.info(f"Deleted {results['logs_deleted']} old LLM request logs")
 
@@ -642,15 +729,15 @@ def cleanup_llm_request_logs(self, days_to_keep: int = 30):
         raise
 
     end_time = timezone.now()
-    results['completed_at'] = end_time.isoformat()
-    results['duration_seconds'] = (end_time - start_time).total_seconds()
-    results['status'] = 'success'
+    results["completed_at"] = end_time.isoformat()
+    results["duration_seconds"] = (end_time - start_time).total_seconds()
+    results["status"] = "success"
 
     return results
 
 
 @shared_task(
-    name='refresh_rag_documents',
+    name="refresh_rag_documents",
     bind=True,
     max_retries=2,
     autoretry_for=(Exception,),
@@ -671,14 +758,15 @@ def refresh_rag_documents(self):
         dict: Summary of refresh results
     """
     from apps.authentication.models import Organization
+
     from .document_ingestion import DocumentIngestionService
 
     start_time = timezone.now()
     results = {
-        'organizations_processed': 0,
-        'documents_updated': 0,
-        'errors': [],
-        'started_at': start_time.isoformat(),
+        "organizations_processed": 0,
+        "documents_updated": 0,
+        "errors": [],
+        "started_at": start_time.isoformat(),
     }
 
     organizations = Organization.objects.filter(is_active=True)
@@ -690,8 +778,8 @@ def refresh_rag_documents(self):
             supplier_count = ingestion_service.ingest_supplier_profiles()
             insight_count = ingestion_service.ingest_historical_insights()
 
-            results['documents_updated'] += supplier_count + insight_count
-            results['organizations_processed'] += 1
+            results["documents_updated"] += supplier_count + insight_count
+            results["organizations_processed"] += 1
 
             logger.info(
                 f"Refreshed RAG documents for {org.name}: "
@@ -701,12 +789,12 @@ def refresh_rag_documents(self):
         except Exception as e:
             error_msg = f"RAG refresh failed for {org.name}: {str(e)}"
             logger.error(error_msg)
-            results['errors'].append(error_msg)
+            results["errors"].append(error_msg)
 
     end_time = timezone.now()
-    results['completed_at'] = end_time.isoformat()
-    results['duration_seconds'] = (end_time - start_time).total_seconds()
-    results['status'] = 'success' if not results['errors'] else 'partial'
+    results["completed_at"] = end_time.isoformat()
+    results["duration_seconds"] = (end_time - start_time).total_seconds()
+    results["status"] = "success" if not results["errors"] else "partial"
 
     logger.info(
         f"RAG document refresh completed: "
@@ -718,7 +806,7 @@ def refresh_rag_documents(self):
 
 
 @shared_task(
-    name='send_llm_cost_digest',
+    name="send_llm_cost_digest",
     bind=True,
     max_retries=2,
     autoretry_for=(Exception,),
@@ -740,12 +828,14 @@ def send_llm_cost_digest(self):
     """
     import requests
     from django.conf import settings
-    from django.db.models import Sum, Count
+    from django.db.models import Count, Sum
 
     from apps.analytics.models import LLMRequestLog
 
     now = timezone.now()
-    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
+        days=1
+    )
     day_end = day_start + timedelta(days=1)
 
     qs = LLMRequestLog.objects.filter(
@@ -754,39 +844,43 @@ def send_llm_cost_digest(self):
     )
 
     totals = qs.aggregate(
-        total_cost=Sum('cost_usd'),
-        request_count=Count('id'),
+        total_cost=Sum("cost_usd"),
+        request_count=Count("id"),
     )
     by_provider = list(
-        qs.values('provider').annotate(
-            cost=Sum('cost_usd'),
-            count=Count('id'),
-        ).order_by('-cost')
+        qs.values("provider")
+        .annotate(
+            cost=Sum("cost_usd"),
+            count=Count("id"),
+        )
+        .order_by("-cost")
     )
     by_type = list(
-        qs.values('request_type').annotate(
-            cost=Sum('cost_usd'),
-            count=Count('id'),
-        ).order_by('-cost')
+        qs.values("request_type")
+        .annotate(
+            cost=Sum("cost_usd"),
+            count=Count("id"),
+        )
+        .order_by("-cost")
     )
 
     summary = {
-        'date': day_start.date().isoformat(),
-        'total_cost_usd': round(float(totals['total_cost'] or 0), 4),
-        'request_count': totals['request_count'] or 0,
-        'by_provider': [
+        "date": day_start.date().isoformat(),
+        "total_cost_usd": round(float(totals["total_cost"] or 0), 4),
+        "request_count": totals["request_count"] or 0,
+        "by_provider": [
             {
-                'provider': row['provider'],
-                'cost': round(float(row['cost'] or 0), 4),
-                'count': row['count'],
+                "provider": row["provider"],
+                "cost": round(float(row["cost"] or 0), 4),
+                "count": row["count"],
             }
             for row in by_provider
         ],
-        'by_request_type': [
+        "by_request_type": [
             {
-                'type': row['request_type'],
-                'cost': round(float(row['cost'] or 0), 4),
-                'count': row['count'],
+                "type": row["request_type"],
+                "cost": round(float(row["cost"] or 0), 4),
+                "count": row["count"],
             }
             for row in by_type
         ],
@@ -797,16 +891,19 @@ def send_llm_cost_digest(self):
         f"across {summary['request_count']} requests"
     )
 
-    webhook_url = getattr(settings, 'COST_ALERT_WEBHOOK_URL', '') or ''
+    webhook_url = getattr(settings, "COST_ALERT_WEBHOOK_URL", "") or ""
     if not webhook_url:
-        summary['webhook_posted'] = False
-        summary['webhook_skip_reason'] = 'COST_ALERT_WEBHOOK_URL not set'
+        summary["webhook_posted"] = False
+        summary["webhook_skip_reason"] = "COST_ALERT_WEBHOOK_URL not set"
         return summary
 
-    provider_line = ', '.join(
-        f"{row['provider']} ${row['cost']} ({row['count']})"
-        for row in summary['by_provider']
-    ) or '(none)'
+    provider_line = (
+        ", ".join(
+            f"{row['provider']} ${row['cost']} ({row['count']})"
+            for row in summary["by_provider"]
+        )
+        or "(none)"
+    )
     message = (
         f"LLM cost digest for {summary['date']}: "
         f"${summary['total_cost_usd']} across {summary['request_count']} requests\n"
@@ -816,18 +913,18 @@ def send_llm_cost_digest(self):
     try:
         response = requests.post(
             webhook_url,
-            data=message.encode('utf-8'),
+            data=message.encode("utf-8"),
             headers={
-                'Title': 'Versatex Analytics — LLM cost digest',
-                'Tags': 'money_with_wings',
+                "Title": "Versatex Analytics — LLM cost digest",
+                "Tags": "money_with_wings",
             },
             timeout=10,
         )
-        summary['webhook_posted'] = True
-        summary['webhook_status_code'] = response.status_code
+        summary["webhook_posted"] = True
+        summary["webhook_status_code"] = response.status_code
     except Exception as e:
         logger.exception("Cost digest webhook POST failed")
-        summary['webhook_posted'] = False
-        summary['webhook_error'] = type(e).__name__
+        summary["webhook_posted"] = False
+        summary["webhook_error"] = type(e).__name__
 
     return summary

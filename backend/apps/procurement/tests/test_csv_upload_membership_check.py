@@ -5,6 +5,7 @@ and execution, the uploading user could be removed or deactivated from the
 organization. The task must re-verify an active `UserOrganizationMembership`
 before writing any rows; otherwise a removed user can still ingest data.
 """
+
 import io
 import json
 import uuid

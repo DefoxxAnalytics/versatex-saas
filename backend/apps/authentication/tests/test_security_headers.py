@@ -14,6 +14,7 @@ from MIDDLEWARE entirely.
 See docs/codebase-review-2026-05-06-second-pass.md for the v2.12 second-pass
 review requesting this drift-guard.
 """
+
 import pytest
 from django.test import Client, override_settings
 
@@ -47,9 +48,7 @@ class TestHSTSHeader:
             "Either SecurityMiddleware was removed from MIDDLEWARE, or "
             "SECURE_HSTS_SECONDS dropped to 0. Finding #15 regression."
         )
-        assert "max-age=" in hsts, (
-            f"HSTS header lacks max-age directive: {hsts!r}"
-        )
+        assert "max-age=" in hsts, f"HSTS header lacks max-age directive: {hsts!r}"
         assert "includeSubDomains" in hsts, (
             f"HSTS header lacks includeSubDomains directive: {hsts!r}. "
             "Without it, *.versatexanalytics.com subdomains can be SSL-stripped "
@@ -71,6 +70,6 @@ class TestHSTSHeader:
         # then the HSTS header is absent — confirming the prod-gating works
         # and we're not accidentally emitting it in dev (which would brick
         # local self-signed-cert workflows for a year).
-        assert "Strict-Transport-Security" not in response.headers, (
-            "HSTS emitted in dev — SECURE_HSTS_SECONDS gating is broken."
-        )
+        assert (
+            "Strict-Transport-Security" not in response.headers
+        ), "HSTS emitted in dev — SECURE_HSTS_SECONDS gating is broken."

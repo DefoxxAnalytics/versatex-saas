@@ -47,8 +47,10 @@ WORKDIR /app
 # Copy project source
 COPY . .
 
-# Collect static files
-RUN python manage.py collectstatic --noinput || true
+# Make entrypoint executable. collectstatic now runs at container start with
+# the real runtime env (see entrypoint.sh) instead of at build time, where
+# SECRET_KEY was missing and `|| true` masked any failure.
+RUN chmod +x /app/entrypoint.sh
 
 # Create media and logs directories
 RUN mkdir -p /app/media /app/logs
@@ -63,5 +65,6 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Run gunicorn
+# Run gunicorn through entrypoint (collectstatic + exec)
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]

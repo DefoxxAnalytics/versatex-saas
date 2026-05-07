@@ -6,13 +6,27 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('authentication', '0002_add_preferences_to_userprofile'),
+        ("authentication", "0002_add_preferences_to_userprofile"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='auditlog',
-            name='action',
-            field=models.CharField(choices=[('login', 'Login'), ('logout', 'Logout'), ('create', 'Create'), ('update', 'Update'), ('delete', 'Delete'), ('upload', 'Upload'), ('export', 'Export'), ('view', 'View'), ('reset', 'Reset'), ('bulk_delete', 'Bulk Delete')], max_length=20),
+            model_name="auditlog",
+            name="action",
+            field=models.CharField(
+                choices=[
+                    ("login", "Login"),
+                    ("logout", "Logout"),
+                    ("create", "Create"),
+                    ("update", "Update"),
+                    ("delete", "Delete"),
+                    ("upload", "Upload"),
+                    ("export", "Export"),
+                    ("view", "View"),
+                    ("reset", "Reset"),
+                    ("bulk_delete", "Bulk Delete"),
+                ],
+                max_length=20,
+            ),
         ),
     ]

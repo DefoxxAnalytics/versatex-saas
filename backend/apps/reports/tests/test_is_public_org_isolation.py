@@ -11,6 +11,7 @@ sites so the get raises DoesNotExist for cross-org access.
 Phase 1 task 1.3 will resolve `is_public` semantics with product and refactor
 `can_access` properly.
 """
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status

@@ -8,9 +8,10 @@ similar queries (not just exact matches).
 Uses OpenAI text-embedding-3-small (1536 dimensions) for embeddings
 and pgvector for efficient similarity search.
 """
+
 import hashlib
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from django.conf import settings
 from django.db import connection
@@ -48,7 +49,7 @@ class SemanticCacheService:
         """
         self.organization_id = organization_id
         self.openai_api_key = openai_api_key or getattr(
-            settings, 'OPENAI_API_KEY', None
+            settings, "OPENAI_API_KEY", None
         )
         self._openai_client = None
         self._pgvector_available = self._check_pgvector()
@@ -57,9 +58,7 @@ class SemanticCacheService:
         """Check if pgvector extension is available."""
         try:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT 1 FROM pg_extension WHERE extname = 'vector'"
-                )
+                cursor.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
                 return cursor.fetchone() is not None
         except Exception as e:
             logger.warning(f"pgvector check failed: {e}")
@@ -71,6 +70,7 @@ class SemanticCacheService:
         if self._openai_client is None and self.openai_api_key:
             try:
                 import openai
+
                 self._openai_client = openai.OpenAI(api_key=self.openai_api_key)
             except ImportError:
                 logger.warning("openai package not installed")
@@ -95,7 +95,7 @@ class SemanticCacheService:
             response = self.openai_client.embeddings.create(
                 model=self.EMBEDDING_MODEL,
                 input=truncated,
-                dimensions=self.EMBEDDING_DIMENSIONS
+                dimensions=self.EMBEDDING_DIMENSIONS,
             )
 
             return response.data[0].embedding
@@ -104,11 +104,7 @@ class SemanticCacheService:
             logger.error(f"Embedding generation failed: {e}")
             return None
 
-    def lookup(
-        self,
-        query: str,
-        request_type: str = 'enhance'
-    ) -> Optional[dict]:
+    def lookup(self, query: str, request_type: str = "enhance") -> Optional[dict]:
         """
         Find semantically similar cached response.
 
@@ -129,7 +125,7 @@ class SemanticCacheService:
             organization_id=self.organization_id,
             request_type=request_type,
             query_hash=query_hash,
-            expires_at__gt=timezone.now()
+            expires_at__gt=timezone.now(),
         ).first()
 
         if exact_match:
@@ -152,10 +148,8 @@ class SemanticCacheService:
         return None
 
     def _vector_lookup(
-        self,
-        embedding: list,
-        request_type: str
-    ) -> Optional['SemanticCache']:
+        self, embedding: list, request_type: str
+    ) -> Optional["SemanticCache"]:
         """
         Perform vector similarity search using pgvector.
 
@@ -181,7 +175,7 @@ class SemanticCacheService:
                     ORDER BY query_embedding <=> %s::vector
                     LIMIT 1
                     """,
-                    [embedding, self.organization_id, request_type, embedding]
+                    [embedding, self.organization_id, request_type, embedding],
                 )
                 row = cursor.fetchone()
 
@@ -197,9 +191,9 @@ class SemanticCacheService:
         self,
         query: str,
         response: dict,
-        request_type: str = 'enhance',
-        ttl_hours: int = None
-    ) -> Optional['SemanticCache']:
+        request_type: str = "enhance",
+        ttl_hours: int = None,
+    ) -> Optional["SemanticCache"]:
         """
         Store response in cache with embedding.
 
@@ -227,7 +221,7 @@ class SemanticCacheService:
                 query_text=query,
                 embedding=embedding,
                 response=response,
-                ttl_hours=ttl
+                ttl_hours=ttl,
             )
             logger.info(
                 f"Cached {request_type} response "
@@ -239,11 +233,7 @@ class SemanticCacheService:
             logger.error(f"Cache store failed: {e}")
             return None
 
-    def invalidate(
-        self,
-        request_type: str = None,
-        older_than_hours: int = None
-    ) -> int:
+    def invalidate(self, request_type: str = None, older_than_hours: int = None) -> int:
         """
         Invalidate cache entries.
 
@@ -254,8 +244,9 @@ class SemanticCacheService:
         Returns:
             Number of entries deleted
         """
-        from .models import SemanticCache
         from datetime import timedelta
+
+        from .models import SemanticCache
 
         qs = SemanticCache.objects.filter(organization_id=self.organization_id)
 
@@ -274,10 +265,12 @@ class SemanticCacheService:
     def get_stats(self) -> dict:
         """Get cache statistics for this organization."""
         from .models import SemanticCache
+
         return SemanticCache.get_cache_stats(self.organization_id)
 
     @classmethod
     def cleanup_all_expired(cls) -> int:
         """Cleanup expired entries across all organizations."""
         from .models import SemanticCache
+
         return SemanticCache.cleanup_expired()

@@ -16,14 +16,14 @@ For new code, you can also import domain-specific services directly:
 """
 
 from .base import BaseAnalyticsService
+from .constants import SEGMENTS, SPEND_BANDS
 from .overview import OverviewAnalyticsService
-from .spend import SpendAnalyticsService
 from .pareto import ParetoTailAnalyticsService
-from .stratification import StratificationAnalyticsService
 from .seasonality import SeasonalityAnalyticsService
-from .yoy import YearOverYearAnalyticsService
+from .spend import SpendAnalyticsService
+from .stratification import StratificationAnalyticsService
 from .trend import TrendConsolidationAnalyticsService
-from .constants import SPEND_BANDS, SEGMENTS
+from .yoy import YearOverYearAnalyticsService
 
 
 class AnalyticsService:
@@ -167,11 +167,15 @@ class AnalyticsService:
 
     def get_detailed_seasonality_analysis(self, use_fiscal_year=True, year=None):
         """Get detailed seasonality with fiscal year support + optional year filter."""
-        return self._seasonality.get_detailed_seasonality_analysis(use_fiscal_year, year=year)
+        return self._seasonality.get_detailed_seasonality_analysis(
+            use_fiscal_year, year=year
+        )
 
     def get_seasonality_category_drilldown(self, category_id, use_fiscal_year=True):
         """Get seasonality drill-down for a category."""
-        return self._seasonality.get_seasonality_category_drilldown(category_id, use_fiscal_year)
+        return self._seasonality.get_seasonality_category_drilldown(
+            category_id, use_fiscal_year
+        )
 
     # =========================================================================
     # Year-over-Year methods (delegated to YearOverYearAnalyticsService)
@@ -185,13 +189,21 @@ class AnalyticsService:
         """Get detailed YoY comparison."""
         return self._yoy.get_detailed_year_over_year(year1, year2, use_fiscal_year)
 
-    def get_yoy_category_drilldown(self, category_id, year1=None, year2=None, use_fiscal_year=True):
+    def get_yoy_category_drilldown(
+        self, category_id, year1=None, year2=None, use_fiscal_year=True
+    ):
         """Get YoY drill-down for a category."""
-        return self._yoy.get_yoy_category_drilldown(category_id, year1, year2, use_fiscal_year)
+        return self._yoy.get_yoy_category_drilldown(
+            category_id, year1, year2, use_fiscal_year
+        )
 
-    def get_yoy_supplier_drilldown(self, supplier_id, year1=None, year2=None, use_fiscal_year=True):
+    def get_yoy_supplier_drilldown(
+        self, supplier_id, year1=None, year2=None, use_fiscal_year=True
+    ):
         """Get YoY drill-down for a supplier."""
-        return self._yoy.get_yoy_supplier_drilldown(supplier_id, year1, year2, use_fiscal_year)
+        return self._yoy.get_yoy_supplier_drilldown(
+            supplier_id, year1, year2, use_fiscal_year
+        )
 
     # =========================================================================
     # Trend and Consolidation methods (delegated to TrendConsolidationAnalyticsService)
@@ -224,15 +236,15 @@ class AnalyticsService:
 
 # Export commonly used items
 __all__ = [
-    'AnalyticsService',
-    'BaseAnalyticsService',
-    'OverviewAnalyticsService',
-    'SpendAnalyticsService',
-    'ParetoTailAnalyticsService',
-    'StratificationAnalyticsService',
-    'SeasonalityAnalyticsService',
-    'YearOverYearAnalyticsService',
-    'TrendConsolidationAnalyticsService',
-    'SPEND_BANDS',
-    'SEGMENTS',
+    "AnalyticsService",
+    "BaseAnalyticsService",
+    "OverviewAnalyticsService",
+    "SpendAnalyticsService",
+    "ParetoTailAnalyticsService",
+    "StratificationAnalyticsService",
+    "SeasonalityAnalyticsService",
+    "YearOverYearAnalyticsService",
+    "TrendConsolidationAnalyticsService",
+    "SPEND_BANDS",
+    "SEGMENTS",
 ]

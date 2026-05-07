@@ -16,6 +16,7 @@ import {
   ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { AxiosResponse } from "axios";
 import { useAuth } from "./AuthContext";
 import { api, Organization, OrganizationMembership, UserRole } from "@/lib/api";
 
@@ -136,7 +137,16 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
             ? {
                 id: user.profile.organization,
                 name: user.profile.organization_name || "Unknown",
-                slug: "",
+                // v3.1 Phase 2 (F-M1): derive a stable slug from the org
+                // name (legacy single-org UserProfile shape doesn't carry
+                // organization_slug — only OrganizationMembership does).
+                // Previously this hardcoded ``slug: ""`` which silently
+                // broke any consumer that used activeOrganization.slug to
+                // build URLs or display org identity.
+                slug: (user.profile.organization_name ?? "org")
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-+|-+$/g, ""),
                 description: "",
                 is_active: true,
                 is_demo: user.profile?.organization_is_demo ?? false,
@@ -149,9 +159,30 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         // For superusers, fetch all organizations
         if (isSuperAdmin) {
           try {
-            const response = await api.get("/auth/organizations/");
-            const allOrgs = (response.data.results ??
-              response.data) as Organization[];
+            // v3.1 Phase 2 (F-M4): iterate paginated `next` links so a
+            // superuser with > page_size orgs sees the full list rather
+            // than a silently-truncated first page. Bounded at 100 pages
+            // (~5K orgs at default page_size=50) to avoid pathological
+            // infinite-loop scenarios.
+            interface OrgPage {
+              results?: Organization[];
+              next?: string | null;
+            }
+            const allOrgs: Organization[] = [];
+            let url: string | null = "/auth/organizations/";
+            let pages = 0;
+            while (url && pages < 100) {
+              const response: AxiosResponse<OrgPage | Organization[]> =
+                await api.get(url);
+              const page: OrgPage | Organization[] = response.data;
+              if (Array.isArray(page)) {
+                allOrgs.push(...page);
+                break;
+              }
+              allOrgs.push(...(page.results ?? []));
+              url = page.next ?? null;
+              pages += 1;
+            }
             setOrganizations(allOrgs);
 
             // Check for persisted organization selection

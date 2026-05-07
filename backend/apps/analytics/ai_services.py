@@ -15,20 +15,22 @@ Enhancement features:
 - Rich context building for better AI recommendations
 - Multi-provider support with automatic failover
 """
-import json
-import uuid
-import logging
-from decimal import Decimal
-from datetime import datetime
-from typing import Optional, Dict
 
-from django.db.models import Sum, Count, Avg, StdDev, F, Q
+import json
+import logging
+import uuid
+from datetime import datetime
+from decimal import Decimal
+from typing import Dict, Optional
+
+from django.db.models import Avg, Count, F, Q, StdDev, Sum
 from django.db.models.functions import TruncMonth
 
-from apps.procurement.models import Transaction, Supplier, Category
-from .services import AnalyticsService
+from apps.procurement.models import Category, Supplier, Transaction
+
 from .ai_cache import AIInsightsCache
 from .ai_providers import AIProviderManager
+from .services import AnalyticsService
 
 logger = logging.getLogger(__name__)
 
@@ -49,34 +51,34 @@ INSIGHT_ENHANCEMENT_TOOL = {
                     "properties": {
                         "action": {
                             "type": "string",
-                            "description": "Specific, actionable recommendation"
+                            "description": "Specific, actionable recommendation",
                         },
                         "impact": {
                             "type": "string",
                             "enum": ["high", "medium", "low"],
-                            "description": "Expected business impact"
+                            "description": "Expected business impact",
                         },
                         "effort": {
                             "type": "string",
                             "enum": ["low", "medium", "high"],
-                            "description": "Implementation effort required"
+                            "description": "Implementation effort required",
                         },
                         "savings_estimate": {
                             "type": "number",
-                            "description": "Estimated annual savings in USD (optional)"
+                            "description": "Estimated annual savings in USD (optional)",
                         },
                         "timeframe": {
                             "type": "string",
-                            "description": "Expected implementation timeframe"
+                            "description": "Expected implementation timeframe",
                         },
                         "affected_insight_ids": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "IDs of insights this action addresses"
-                        }
+                            "description": "IDs of insights this action addresses",
+                        },
                     },
-                    "required": ["action", "impact", "effort"]
-                }
+                    "required": ["action", "impact", "effort"],
+                },
             },
             "risk_assessment": {
                 "type": "object",
@@ -84,19 +86,19 @@ INSIGHT_ENHANCEMENT_TOOL = {
                 "properties": {
                     "overall_risk_level": {
                         "type": "string",
-                        "enum": ["critical", "high", "moderate", "low"]
+                        "enum": ["critical", "high", "moderate", "low"],
                     },
                     "key_risks": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Top risk factors identified"
+                        "description": "Top risk factors identified",
                     },
                     "mitigation_steps": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Recommended risk mitigation actions"
-                    }
-                }
+                        "description": "Recommended risk mitigation actions",
+                    },
+                },
             },
             "quick_wins": {
                 "type": "array",
@@ -105,18 +107,18 @@ INSIGHT_ENHANCEMENT_TOOL = {
                     "type": "object",
                     "properties": {
                         "action": {"type": "string"},
-                        "expected_benefit": {"type": "string"}
+                        "expected_benefit": {"type": "string"},
                     },
-                    "required": ["action", "expected_benefit"]
-                }
+                    "required": ["action", "expected_benefit"],
+                },
             },
             "strategic_summary": {
                 "type": "string",
-                "description": "Executive summary of procurement health and top recommendations (2-3 sentences)"
-            }
+                "description": "Executive summary of procurement health and top recommendations (2-3 sentences)",
+            },
         },
-        "required": ["priority_actions", "strategic_summary"]
-    }
+        "required": ["priority_actions", "strategic_summary"],
+    },
 }
 
 # Tool schema for deep insight analysis
@@ -133,14 +135,11 @@ DEEP_ANALYSIS_TOOL = {
                     "primary_cause": {"type": "string"},
                     "contributing_factors": {
                         "type": "array",
-                        "items": {"type": "string"}
+                        "items": {"type": "string"},
                     },
-                    "evidence": {
-                        "type": "array",
-                        "items": {"type": "string"}
-                    }
+                    "evidence": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["primary_cause", "contributing_factors"]
+                "required": ["primary_cause", "contributing_factors"],
             },
             "implementation_roadmap": {
                 "type": "array",
@@ -149,15 +148,12 @@ DEEP_ANALYSIS_TOOL = {
                     "type": "object",
                     "properties": {
                         "phase": {"type": "string"},
-                        "tasks": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
+                        "tasks": {"type": "array", "items": {"type": "string"}},
                         "timeline": {"type": "string"},
-                        "resources_required": {"type": "string"}
+                        "resources_required": {"type": "string"},
                     },
-                    "required": ["phase", "tasks", "timeline"]
-                }
+                    "required": ["phase", "tasks", "timeline"],
+                },
             },
             "financial_impact": {
                 "type": "object",
@@ -173,12 +169,12 @@ DEEP_ANALYSIS_TOOL = {
                             "type": "object",
                             "properties": {
                                 "category": {"type": "string"},
-                                "amount": {"type": "number"}
-                            }
-                        }
-                    }
+                                "amount": {"type": "number"},
+                            },
+                        },
+                    },
                 },
-                "required": ["total_savings_potential"]
+                "required": ["total_savings_potential"],
             },
             "risk_factors": {
                 "type": "array",
@@ -189,16 +185,13 @@ DEEP_ANALYSIS_TOOL = {
                         "risk": {"type": "string"},
                         "likelihood": {
                             "type": "string",
-                            "enum": ["low", "medium", "high"]
+                            "enum": ["low", "medium", "high"],
                         },
-                        "impact": {
-                            "type": "string",
-                            "enum": ["low", "medium", "high"]
-                        },
-                        "mitigation": {"type": "string"}
+                        "impact": {"type": "string", "enum": ["low", "medium", "high"]},
+                        "mitigation": {"type": "string"},
                     },
-                    "required": ["risk", "mitigation"]
-                }
+                    "required": ["risk", "mitigation"],
+                },
             },
             "success_metrics": {
                 "type": "array",
@@ -208,10 +201,10 @@ DEEP_ANALYSIS_TOOL = {
                     "properties": {
                         "metric": {"type": "string"},
                         "target": {"type": "string"},
-                        "measurement_method": {"type": "string"}
+                        "measurement_method": {"type": "string"},
                     },
-                    "required": ["metric", "target"]
-                }
+                    "required": ["metric", "target"],
+                },
             },
             "stakeholder_mapping": {
                 "type": "array",
@@ -223,23 +216,20 @@ DEEP_ANALYSIS_TOOL = {
                         "responsibility": {"type": "string"},
                         "engagement_level": {
                             "type": "string",
-                            "enum": ["inform", "consult", "collaborate", "lead"]
-                        }
+                            "enum": ["inform", "consult", "collaborate", "lead"],
+                        },
                     },
-                    "required": ["role", "responsibility"]
-                }
+                    "required": ["role", "responsibility"],
+                },
             },
             "industry_context": {
                 "type": "object",
                 "description": "Industry benchmarks and best practices",
                 "properties": {
                     "benchmark_comparison": {"type": "string"},
-                    "best_practices": {
-                        "type": "array",
-                        "items": {"type": "string"}
-                    },
-                    "market_trends": {"type": "string"}
-                }
+                    "best_practices": {"type": "array", "items": {"type": "string"}},
+                    "market_trends": {"type": "string"},
+                },
             },
             "next_steps": {
                 "type": "array",
@@ -252,19 +242,25 @@ DEEP_ANALYSIS_TOOL = {
                         "due_date": {"type": "string"},
                         "priority": {
                             "type": "string",
-                            "enum": ["high", "medium", "low"]
-                        }
+                            "enum": ["high", "medium", "low"],
+                        },
                     },
-                    "required": ["action", "priority"]
-                }
+                    "required": ["action", "priority"],
+                },
             },
             "executive_summary": {
                 "type": "string",
-                "description": "Brief summary of findings and recommendations"
-            }
+                "description": "Brief summary of findings and recommendations",
+            },
         },
-        "required": ["root_cause_analysis", "implementation_roadmap", "financial_impact", "next_steps", "executive_summary"]
-    }
+        "required": [
+            "root_cause_analysis",
+            "implementation_roadmap",
+            "financial_impact",
+            "next_steps",
+            "executive_summary",
+        ],
+    },
 }
 
 
@@ -286,19 +282,19 @@ class AIInsightsService:
     #   ENHANCED            — LLM call succeeded; ai_enhancement payload present
     #   UNAVAILABLE_NO_KEY  — no API key configured; ai_enhancement omitted
     #   UNAVAILABLE_FAILED  — API key configured but LLM call failed; ai_enhancement omitted
-    ENHANCEMENT_STATUS_ENHANCED = 'enhanced'
-    ENHANCEMENT_STATUS_UNAVAILABLE_NO_KEY = 'unavailable_no_key'
-    ENHANCEMENT_STATUS_UNAVAILABLE_FAILED = 'unavailable_failed'
+    ENHANCEMENT_STATUS_ENHANCED = "enhanced"
+    ENHANCEMENT_STATUS_UNAVAILABLE_NO_KEY = "unavailable_no_key"
+    ENHANCEMENT_STATUS_UNAVAILABLE_FAILED = "unavailable_failed"
 
     def __init__(
         self,
         organization,
         filters: Optional[Dict] = None,
         use_external_ai: bool = False,
-        ai_provider: str = 'anthropic',
+        ai_provider: str = "anthropic",
         api_key: Optional[str] = None,
         api_keys: Optional[Dict[str, str]] = None,
-        enable_fallback: bool = True
+        enable_fallback: bool = True,
     ):
         """
         Initialize AI Insights Service.
@@ -325,12 +321,12 @@ class AIInsightsService:
 
         # Load configurable savings rates from organization
         savings_config = organization.get_savings_config()
-        self.consolidation_rate = savings_config.get('consolidation_rate', 0.03)
-        self.anomaly_rate = savings_config.get('anomaly_recovery_rate', 0.008)
-        self.variance_capture = savings_config.get('price_variance_capture', 0.40)
+        self.consolidation_rate = savings_config.get("consolidation_rate", 0.03)
+        self.anomaly_rate = savings_config.get("anomaly_recovery_rate", 0.008)
+        self.variance_capture = savings_config.get("price_variance_capture", 0.40)
         self.enabled_insights = savings_config.get(
-            'enabled_insights',
-            ['consolidation', 'anomaly', 'cost_optimization', 'risk']
+            "enabled_insights",
+            ["consolidation", "anomaly", "cost_optimization", "risk"],
         )
 
         # Build api_keys dict from legacy api_key if not provided
@@ -349,48 +345,49 @@ class AIInsightsService:
                 api_keys=self.api_keys,
                 enable_fallback=enable_fallback,
                 organization_id=self.organization.id,
-                enable_logging=True
+                enable_logging=True,
             )
 
     def _build_filtered_queryset(self):
         """Build transaction queryset with applied filters."""
         from datetime import datetime as dt
+
         qs = Transaction.objects.filter(organization=self.organization)
 
-        if date_from := self.filters.get('date_from'):
+        if date_from := self.filters.get("date_from"):
             if isinstance(date_from, str):
-                date_from = dt.strptime(date_from, '%Y-%m-%d').date()
+                date_from = dt.strptime(date_from, "%Y-%m-%d").date()
             qs = qs.filter(date__gte=date_from)
 
-        if date_to := self.filters.get('date_to'):
+        if date_to := self.filters.get("date_to"):
             if isinstance(date_to, str):
-                date_to = dt.strptime(date_to, '%Y-%m-%d').date()
+                date_to = dt.strptime(date_to, "%Y-%m-%d").date()
             qs = qs.filter(date__lte=date_to)
 
-        if supplier_ids := self.filters.get('supplier_ids'):
+        if supplier_ids := self.filters.get("supplier_ids"):
             if isinstance(supplier_ids, list) and supplier_ids:
                 qs = qs.filter(supplier_id__in=supplier_ids)
 
-        if category_ids := self.filters.get('category_ids'):
+        if category_ids := self.filters.get("category_ids"):
             if isinstance(category_ids, list) and category_ids:
                 qs = qs.filter(category_id__in=category_ids)
 
-        if subcategories := self.filters.get('subcategories'):
+        if subcategories := self.filters.get("subcategories"):
             if isinstance(subcategories, list) and subcategories:
                 qs = qs.filter(subcategory__in=subcategories)
 
-        if locations := self.filters.get('locations'):
+        if locations := self.filters.get("locations"):
             if isinstance(locations, list) and locations:
                 qs = qs.filter(location__in=locations)
 
-        if years := self.filters.get('years'):
+        if years := self.filters.get("years"):
             if isinstance(years, list) and years:
                 qs = qs.filter(fiscal_year__in=years)
 
-        if min_amount := self.filters.get('min_amount'):
+        if min_amount := self.filters.get("min_amount"):
             qs = qs.filter(amount__gte=min_amount)
 
-        if max_amount := self.filters.get('max_amount'):
+        if max_amount := self.filters.get("max_amount"):
             qs = qs.filter(amount__lte=max_amount)
 
         return qs
@@ -425,63 +422,76 @@ class AIInsightsService:
         anomaly_insights = self.get_anomaly_insights()
         consolidation_insights = self.get_consolidation_recommendations()
 
-        all_insights = cost_insights + risk_insights + anomaly_insights + consolidation_insights
+        all_insights = (
+            cost_insights + risk_insights + anomaly_insights + consolidation_insights
+        )
 
         # Apply deduplication to prevent double-counting savings
         deduplicated_insights, adjusted_total = self.deduplicate_savings(all_insights)
 
         # Sort by severity, then by adjusted savings
-        severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
-        deduplicated_insights.sort(key=lambda x: (
-            severity_order.get(x['severity'], 4),
-            -(x.get('potential_savings', 0) or 0)
-        ))
+        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        deduplicated_insights.sort(
+            key=lambda x: (
+                severity_order.get(x["severity"], 4),
+                -(x.get("potential_savings", 0) or 0),
+            )
+        )
 
         # Calculate total spend for capping
         total_spend = float(
-            self.transactions.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            self.transactions.aggregate(total=Sum("amount"))["total"] or Decimal("0")
         )
 
         # Cap at total spend (safety net)
         savings_capped = adjusted_total > total_spend
-        final_savings = min(adjusted_total, total_spend) if total_spend > 0 else adjusted_total
+        final_savings = (
+            min(adjusted_total, total_spend) if total_spend > 0 else adjusted_total
+        )
 
         # Calculate overlap summary
         overlap_summary = self._calculate_overlap_summary(deduplicated_insights)
 
         summary = {
-            'total_insights': len(deduplicated_insights),
-            'high_priority': len([i for i in deduplicated_insights if i['severity'] in ['critical', 'high']]),
-            'total_potential_savings': round(final_savings, 2),
-            'total_potential_savings_raw': round(adjusted_total, 2),
-            'savings_capped': savings_capped,
-            'total_spend': round(total_spend, 2),
-            'deduplication_applied': True,
-            'overlap_summary': overlap_summary,
-            'by_type': {
-                'cost_optimization': len(cost_insights),
-                'risk': len(risk_insights),
-                'anomaly': len(anomaly_insights),
-                'consolidation': len(consolidation_insights)
-            }
+            "total_insights": len(deduplicated_insights),
+            "high_priority": len(
+                [
+                    i
+                    for i in deduplicated_insights
+                    if i["severity"] in ["critical", "high"]
+                ]
+            ),
+            "total_potential_savings": round(final_savings, 2),
+            "total_potential_savings_raw": round(adjusted_total, 2),
+            "savings_capped": savings_capped,
+            "total_spend": round(total_spend, 2),
+            "deduplication_applied": True,
+            "overlap_summary": overlap_summary,
+            "by_type": {
+                "cost_optimization": len(cost_insights),
+                "risk": len(risk_insights),
+                "anomaly": len(anomaly_insights),
+                "consolidation": len(consolidation_insights),
+            },
         }
 
         # Strip internal _attribution before returning (don't expose to API)
         clean_insights = [
-            {k: v for k, v in i.items() if not k.startswith('_')}
+            {k: v for k, v in i.items() if not k.startswith("_")}
             for i in deduplicated_insights
         ]
 
-        result = {
-            'insights': clean_insights,
-            'summary': summary
-        }
+        result = {"insights": clean_insights, "summary": summary}
 
         # Finding #9 — `enhancement_status` tri-state. Always emit so the
         # frontend can distinguish "no key configured" from "key configured
         # but LLM call failed" — previously both rendered the same label.
-        if not (self.use_external_ai and self.api_key):
-            result['enhancement_status'] = self.ENHANCEMENT_STATUS_UNAVAILABLE_NO_KEY
+        # v3.1 Phase 1 (AN-C1): gate also accepts `self.api_keys` (multi-
+        # provider dict). Multi-provider callers may pass api_keys without
+        # the legacy singular api_key kwarg; without this, the gate would
+        # short-circuit to no_key while _provider_manager is fully viable.
+        if not (self.use_external_ai and (self.api_key or self.api_keys)):
+            result["enhancement_status"] = self.ENHANCEMENT_STATUS_UNAVAILABLE_NO_KEY
             return result
 
         cache_hit = False
@@ -489,8 +499,7 @@ class AIInsightsService:
 
         if not force_refresh:
             ai_enhancement = AIInsightsCache.get_cached_enhancement(
-                self.organization.id,
-                clean_insights
+                self.organization.id, clean_insights
             )
             cache_hit = ai_enhancement is not None
 
@@ -506,17 +515,28 @@ class AIInsightsService:
 
             if ai_enhancement:
                 AIInsightsCache.cache_enhancement(
-                    self.organization.id,
-                    clean_insights,
-                    ai_enhancement
+                    self.organization.id, clean_insights, ai_enhancement
                 )
 
         if ai_enhancement:
-            result['ai_enhancement'] = ai_enhancement
-            result['cache_hit'] = cache_hit
-            result['enhancement_status'] = self.ENHANCEMENT_STATUS_ENHANCED
+            result["ai_enhancement"] = ai_enhancement
+            result["cache_hit"] = cache_hit
+            result["enhancement_status"] = self.ENHANCEMENT_STATUS_ENHANCED
+
+            # v3.1 Phase 1 (AN-C2): per-insight enhancement only fires when
+            # the top-level call succeeded. On `unavailable_failed` the
+            # provider is rate-limited / auth-broken / down — firing 5 more
+            # per-insight calls accumulates cost, hits the same failure, and
+            # burns the user's 30/hour throttle quota faster than necessary.
+            per_insight_enhancer = PerInsightEnhancer(
+                api_key=self.api_key,
+                provider=self.ai_provider,
+                api_keys=self.api_keys,
+                enable_fallback=self.enable_fallback,
+            )
+            result["insights"] = per_insight_enhancer.enhance_insights(clean_insights)
         else:
-            result['enhancement_status'] = self.ENHANCEMENT_STATUS_UNAVAILABLE_FAILED
+            result["enhancement_status"] = self.ENHANCEMENT_STATUS_UNAVAILABLE_FAILED
             # Finding B14: pull typed error code from provider manager so
             # callers can distinguish auth vs rate-limit vs unknown. Falls
             # back to the legacy 'llm_call_failed' marker when the manager
@@ -524,18 +544,10 @@ class AIInsightsService:
             # without raising).
             manager_code = (
                 self._provider_manager.get_last_error_code()
-                if self._provider_manager else None
+                if self._provider_manager
+                else None
             )
-            result['enhancement_error_code'] = manager_code or 'llm_call_failed'
-
-        # Per-insight enhancement for high-value insights
-        per_insight_enhancer = PerInsightEnhancer(
-            api_key=self.api_key,
-            provider=self.ai_provider,
-            api_keys=self.api_keys,
-            enable_fallback=self.enable_fallback
-        )
-        result['insights'] = per_insight_enhancer.enhance_insights(clean_insights)
+            result["enhancement_error_code"] = manager_code or "llm_call_failed"
 
         return result
 
@@ -549,95 +561,111 @@ class AIInsightsService:
 
         # Get spend by category, subcategory, and supplier to find variance
         # Group by subcategory for apples-to-apples comparison
-        category_supplier_spend = self.transactions.values(
-            'category__name',
-            'category__uuid',
-            'subcategory',
-            'supplier__name',
-            'supplier__uuid'
-        ).annotate(
-            total_amount=Sum('amount'),
-            transaction_count=Count('id'),
-            avg_transaction=Avg('amount')
-        ).order_by('category__name', 'subcategory', '-total_amount')
+        category_supplier_spend = (
+            self.transactions.values(
+                "category__name",
+                "category__uuid",
+                "subcategory",
+                "supplier__name",
+                "supplier__uuid",
+            )
+            .annotate(
+                total_amount=Sum("amount"),
+                transaction_count=Count("id"),
+                avg_transaction=Avg("amount"),
+            )
+            .order_by("category__name", "subcategory", "-total_amount")
+        )
 
         # Group by (category, subcategory) for apples-to-apples comparison
         category_data = {}
         for item in category_supplier_spend:
-            cat_name = item['category__name']
-            subcategory = item['subcategory'] or 'Unspecified'
+            cat_name = item["category__name"]
+            subcategory = item["subcategory"] or "Unspecified"
             group_key = (cat_name, subcategory)
             if group_key not in category_data:
                 category_data[group_key] = {
-                    'category': cat_name,
-                    'subcategory': subcategory,
-                    'uuid': str(item['category__uuid']),
-                    'suppliers': []
+                    "category": cat_name,
+                    "subcategory": subcategory,
+                    "uuid": str(item["category__uuid"]),
+                    "suppliers": [],
                 }
-            category_data[group_key]['suppliers'].append({
-                'name': item['supplier__name'],
-                'uuid': str(item['supplier__uuid']),
-                'total': float(item['total_amount']),
-                'avg_transaction': float(item['avg_transaction']),
-                'count': item['transaction_count']
-            })
+            category_data[group_key]["suppliers"].append(
+                {
+                    "name": item["supplier__name"],
+                    "uuid": str(item["supplier__uuid"]),
+                    "total": float(item["total_amount"]),
+                    "avg_transaction": float(item["avg_transaction"]),
+                    "count": item["transaction_count"],
+                }
+            )
 
         # Analyze each (category, subcategory) group for price variance
         for group_key, data in category_data.items():
-            if len(data['suppliers']) < 2:
+            if len(data["suppliers"]) < 2:
                 continue
 
             # Calculate variance in average transaction
-            avg_prices = [s['avg_transaction'] for s in data['suppliers']]
+            avg_prices = [s["avg_transaction"] for s in data["suppliers"]]
             if not avg_prices or max(avg_prices) == 0:
                 continue
 
             price_variance = (max(avg_prices) - min(avg_prices)) / max(avg_prices)
 
             if price_variance > self.PRICE_VARIANCE_THRESHOLD:
-                total_category_spend = sum(s['total'] for s in data['suppliers'])
+                total_category_spend = sum(s["total"] for s in data["suppliers"])
                 # Potential savings = difference × transactions from expensive suppliers
                 # Apply configurable variance capture rate (not 100% realizable)
-                expensive_suppliers = [s for s in data['suppliers']
-                                       if s['avg_transaction'] > min(avg_prices) * 1.1]
+                expensive_suppliers = [
+                    s
+                    for s in data["suppliers"]
+                    if s["avg_transaction"] > min(avg_prices) * 1.1
+                ]
                 raw_savings = sum(
-                    (s['avg_transaction'] - min(avg_prices)) * s['count']
+                    (s["avg_transaction"] - min(avg_prices)) * s["count"]
                     for s in expensive_suppliers
                 )
                 potential_savings = raw_savings * self.variance_capture
 
-                severity = 'high' if price_variance > 0.30 else 'medium'
+                severity = "high" if price_variance > 0.30 else "medium"
 
-                cat_name = data['category']
-                subcategory = data['subcategory']
-                display_name = f"{cat_name} > {subcategory}" if subcategory != 'Unspecified' else cat_name
+                cat_name = data["category"]
+                subcategory = data["subcategory"]
+                display_name = (
+                    f"{cat_name} > {subcategory}"
+                    if subcategory != "Unspecified"
+                    else cat_name
+                )
 
-                insights.append({
-                    'id': str(uuid.uuid4()),
-                    'type': 'cost_optimization',
-                    'severity': severity,
-                    'confidence': min(0.95, 0.70 + (price_variance * 0.5)),
-                    'title': f'Price variance detected in {display_name}',
-                    'description': (
-                        f'Found {len(data["suppliers"])} suppliers with '
-                        f'{round(price_variance * 100, 1)}% price variance. '
-                        f'Average prices range from ${min(avg_prices):,.2f} to '
-                        f'${max(avg_prices):,.2f}.'
-                    ),
-                    'potential_savings': round(potential_savings, 2),
-                    'affected_entities': [display_name] + [s['name'] for s in expensive_suppliers],
-                    'recommended_actions': [
-                        f'Review pricing from {data["suppliers"][-1]["name"]} (lowest avg: ${min(avg_prices):,.2f})',
-                        'Negotiate better rates with higher-priced suppliers',
-                        'Consider consolidating purchases to preferred supplier'
-                    ],
-                    '_attribution': {
-                        'subcategory_keys': [(cat_name, subcategory)],
-                        'supplier_ids': [s['uuid'] for s in data['suppliers']],
-                        'spend_basis': total_category_spend,
-                    },
-                    'created_at': datetime.now().isoformat()
-                })
+                insights.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "type": "cost_optimization",
+                        "severity": severity,
+                        "confidence": min(0.95, 0.70 + (price_variance * 0.5)),
+                        "title": f"Price variance detected in {display_name}",
+                        "description": (
+                            f'Found {len(data["suppliers"])} suppliers with '
+                            f"{round(price_variance * 100, 1)}% price variance. "
+                            f"Average prices range from ${min(avg_prices):,.2f} to "
+                            f"${max(avg_prices):,.2f}."
+                        ),
+                        "potential_savings": round(potential_savings, 2),
+                        "affected_entities": [display_name]
+                        + [s["name"] for s in expensive_suppliers],
+                        "recommended_actions": [
+                            f'Review pricing from {data["suppliers"][-1]["name"]} (lowest avg: ${min(avg_prices):,.2f})',
+                            "Negotiate better rates with higher-priced suppliers",
+                            "Consider consolidating purchases to preferred supplier",
+                        ],
+                        "_attribution": {
+                            "subcategory_keys": [(cat_name, subcategory)],
+                            "supplier_ids": [s["uuid"] for s in data["suppliers"]],
+                            "spend_basis": total_category_spend,
+                        },
+                        "created_at": datetime.now().isoformat(),
+                    }
+                )
 
         return insights
 
@@ -650,47 +678,49 @@ class AIInsightsService:
         insights = []
 
         # Get total spend
-        total_spend = self.transactions.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        total_spend = self.transactions.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
         if total_spend == 0:
             return insights
 
         # Get spend by supplier
-        supplier_spend = self.transactions.values(
-            'supplier__name',
-            'supplier__uuid'
-        ).annotate(
-            total=Sum('amount'),
-            transaction_count=Count('id')
-        ).order_by('-total')
+        supplier_spend = (
+            self.transactions.values("supplier__name", "supplier__uuid")
+            .annotate(total=Sum("amount"), transaction_count=Count("id"))
+            .order_by("-total")
+        )
 
         for supplier in supplier_spend:
-            concentration = float(supplier['total']) / float(total_spend)
+            concentration = float(supplier["total"]) / float(total_spend)
 
             if concentration >= self.SUPPLIER_CONCENTRATION_THRESHOLD:
-                severity = 'critical' if concentration > 0.50 else 'high'
+                severity = "critical" if concentration > 0.50 else "high"
 
-                insights.append({
-                    'id': str(uuid.uuid4()),
-                    'type': 'risk',
-                    'severity': severity,
-                    'confidence': 0.90,
-                    'title': f'High supplier concentration: {supplier["supplier__name"]}',
-                    'description': (
-                        f'{supplier["supplier__name"]} represents '
-                        f'{round(concentration * 100, 1)}% of total spend '
-                        f'(${float(supplier["total"]):,.2f} of ${float(total_spend):,.2f}). '
-                        f'This creates supply chain vulnerability.'
-                    ),
-                    'potential_savings': None,  # Risk insight, not cost saving
-                    'affected_entities': [supplier['supplier__name']],
-                    'recommended_actions': [
-                        'Identify alternative suppliers for key categories',
-                        'Negotiate backup supply agreements',
-                        'Develop supplier diversification strategy',
-                        'Review contract terms for flexibility'
-                    ],
-                    'created_at': datetime.now().isoformat()
-                })
+                insights.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "type": "risk",
+                        "severity": severity,
+                        "confidence": 0.90,
+                        "title": f'High supplier concentration: {supplier["supplier__name"]}',
+                        "description": (
+                            f'{supplier["supplier__name"]} represents '
+                            f"{round(concentration * 100, 1)}% of total spend "
+                            f'(${float(supplier["total"]):,.2f} of ${float(total_spend):,.2f}). '
+                            f"This creates supply chain vulnerability."
+                        ),
+                        "potential_savings": None,  # Risk insight, not cost saving
+                        "affected_entities": [supplier["supplier__name"]],
+                        "recommended_actions": [
+                            "Identify alternative suppliers for key categories",
+                            "Negotiate backup supply agreements",
+                            "Develop supplier diversification strategy",
+                            "Review contract terms for flexibility",
+                        ],
+                        "created_at": datetime.now().isoformat(),
+                    }
+                )
 
         return insights
 
@@ -704,89 +734,97 @@ class AIInsightsService:
         sensitivity = sensitivity or self.ANOMALY_Z_SCORE_THRESHOLD
 
         # Get statistics by category
-        category_stats = self.transactions.values(
-            'category__name',
-            'category__uuid'
-        ).annotate(
-            avg_amount=Avg('amount'),
-            std_amount=StdDev('amount'),
-            transaction_count=Count('id')
-        ).filter(transaction_count__gt=5)  # Need enough data for meaningful stats
+        category_stats = (
+            self.transactions.values("category__name", "category__uuid")
+            .annotate(
+                avg_amount=Avg("amount"),
+                std_amount=StdDev("amount"),
+                transaction_count=Count("id"),
+            )
+            .filter(transaction_count__gt=5)
+        )  # Need enough data for meaningful stats
 
         for cat_stat in category_stats:
-            if not cat_stat['std_amount'] or cat_stat['std_amount'] == 0:
+            if not cat_stat["std_amount"] or cat_stat["std_amount"] == 0:
                 continue
 
-            avg = float(cat_stat['avg_amount'])
-            std = float(cat_stat['std_amount'])
+            avg = float(cat_stat["avg_amount"])
+            std = float(cat_stat["std_amount"])
             upper_threshold = avg + (sensitivity * std)
             lower_threshold = max(0, avg - (sensitivity * std))
 
             # Find anomalous transactions
-            anomalies = self.transactions.filter(
-                category__name=cat_stat['category__name']
-            ).filter(
-                Q(amount__gt=upper_threshold) | Q(amount__lt=lower_threshold)
-            ).values(
-                'uuid',
-                'amount',
-                'date',
-                'supplier__name',
-                'description'
-            )[:10]  # Limit to top 10
+            anomalies = (
+                self.transactions.filter(category__name=cat_stat["category__name"])
+                .filter(Q(amount__gt=upper_threshold) | Q(amount__lt=lower_threshold))
+                .values("uuid", "amount", "date", "supplier__name", "description")[:10]
+            )  # Limit to top 10
 
             if anomalies:
                 anomalies_list = list(anomalies)
-                high_anomalies = [a for a in anomalies_list if float(a['amount']) > upper_threshold]
-                low_anomalies = [a for a in anomalies_list if float(a['amount']) < lower_threshold]
+                high_anomalies = [
+                    a for a in anomalies_list if float(a["amount"]) > upper_threshold
+                ]
+                low_anomalies = [
+                    a for a in anomalies_list if float(a["amount"]) < lower_threshold
+                ]
 
-                total_anomaly_spend = sum(float(a['amount']) for a in high_anomalies)
+                total_anomaly_spend = sum(float(a["amount"]) for a in high_anomalies)
 
-                severity = 'high' if len(high_anomalies) > 3 else 'medium'
+                severity = "high" if len(high_anomalies) > 3 else "medium"
 
-                insights.append({
-                    'id': str(uuid.uuid4()),
-                    'type': 'anomaly',
-                    'severity': severity,
-                    'confidence': 0.75,
-                    'title': f'Unusual transactions in {cat_stat["category__name"]}',
-                    'description': (
-                        f'Found {len(anomalies_list)} transactions outside normal range. '
-                        f'Average for category: ${avg:,.2f}, Threshold: ±${sensitivity * std:,.2f}. '
-                        f'{len(high_anomalies)} unusually high, {len(low_anomalies)} unusually low.'
-                    ),
-                    'potential_savings': round(total_anomaly_spend * self.anomaly_rate, 2) if high_anomalies else None,
-                    'affected_entities': [f"{a['supplier__name']} (${float(a['amount']):,.2f})" for a in anomalies_list],
-                    'recommended_actions': [
-                        'Review flagged transactions for accuracy',
-                        'Verify pricing and quantities',
-                        'Check for duplicate or erroneous entries',
-                        'Investigate supplier invoicing practices'
-                    ],
-                    '_attribution': {
-                        'category_ids': [str(cat_stat['category__uuid'])],
-                        'transaction_ids': [str(a['uuid']) for a in anomalies_list],
-                        'spend_basis': total_anomaly_spend,
-                    },
-                    'details': {
-                        'category': cat_stat['category__name'],
-                        'average': avg,
-                        'std_deviation': std,
-                        'threshold_upper': upper_threshold,
-                        'threshold_lower': lower_threshold,
-                        'anomaly_count': len(anomalies_list),
-                        'sample_anomalies': [
-                            {
-                                'uuid': str(a['uuid']),
-                                'amount': float(a['amount']),
-                                'date': str(a['date']),
-                                'supplier': a['supplier__name']
-                            }
-                            for a in anomalies_list[:5]
-                        ]
-                    },
-                    'created_at': datetime.now().isoformat()
-                })
+                insights.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "type": "anomaly",
+                        "severity": severity,
+                        "confidence": 0.75,
+                        "title": f'Unusual transactions in {cat_stat["category__name"]}',
+                        "description": (
+                            f"Found {len(anomalies_list)} transactions outside normal range. "
+                            f"Average for category: ${avg:,.2f}, Threshold: ±${sensitivity * std:,.2f}. "
+                            f"{len(high_anomalies)} unusually high, {len(low_anomalies)} unusually low."
+                        ),
+                        "potential_savings": (
+                            round(total_anomaly_spend * self.anomaly_rate, 2)
+                            if high_anomalies
+                            else None
+                        ),
+                        "affected_entities": [
+                            f"{a['supplier__name']} (${float(a['amount']):,.2f})"
+                            for a in anomalies_list
+                        ],
+                        "recommended_actions": [
+                            "Review flagged transactions for accuracy",
+                            "Verify pricing and quantities",
+                            "Check for duplicate or erroneous entries",
+                            "Investigate supplier invoicing practices",
+                        ],
+                        "_attribution": {
+                            "category_ids": [str(cat_stat["category__uuid"])],
+                            "transaction_ids": [str(a["uuid"]) for a in anomalies_list],
+                            "spend_basis": total_anomaly_spend,
+                        },
+                        "details": {
+                            "category": cat_stat["category__name"],
+                            "average": avg,
+                            "std_deviation": std,
+                            "threshold_upper": upper_threshold,
+                            "threshold_lower": lower_threshold,
+                            "anomaly_count": len(anomalies_list),
+                            "sample_anomalies": [
+                                {
+                                    "uuid": str(a["uuid"]),
+                                    "amount": float(a["amount"]),
+                                    "date": str(a["date"]),
+                                    "supplier": a["supplier__name"],
+                                }
+                                for a in anomalies_list[:5]
+                            ],
+                        },
+                        "created_at": datetime.now().isoformat(),
+                    }
+                )
 
         return insights
 
@@ -800,93 +838,105 @@ class AIInsightsService:
         insights = []
 
         # Get (category, subcategory) groups with multiple suppliers
-        category_subcategory_groups = self.transactions.values(
-            'category__name',
-            'category__uuid',
-            'subcategory'
-        ).annotate(
-            supplier_count=Count('supplier', distinct=True),
-            total_spend=Sum('amount'),
-            transaction_count=Count('id')
-        ).filter(supplier_count__gte=self.CONSOLIDATION_MIN_SUPPLIERS).order_by('-supplier_count')
+        category_subcategory_groups = (
+            self.transactions.values("category__name", "category__uuid", "subcategory")
+            .annotate(
+                supplier_count=Count("supplier", distinct=True),
+                total_spend=Sum("amount"),
+                transaction_count=Count("id"),
+            )
+            .filter(supplier_count__gte=self.CONSOLIDATION_MIN_SUPPLIERS)
+            .order_by("-supplier_count")
+        )
 
         for group in category_subcategory_groups:
-            cat_name = group['category__name']
-            subcategory = group['subcategory'] or 'Unspecified'
-            display_name = f"{cat_name} > {subcategory}" if subcategory != 'Unspecified' else cat_name
+            cat_name = group["category__name"]
+            subcategory = group["subcategory"] or "Unspecified"
+            display_name = (
+                f"{cat_name} > {subcategory}"
+                if subcategory != "Unspecified"
+                else cat_name
+            )
 
             # Get suppliers in this (category, subcategory) group
-            suppliers_filter = {'category__name': cat_name}
-            if subcategory != 'Unspecified':
-                suppliers_filter['subcategory'] = group['subcategory']
+            suppliers_filter = {"category__name": cat_name}
+            if subcategory != "Unspecified":
+                suppliers_filter["subcategory"] = group["subcategory"]
             else:
-                suppliers_filter['subcategory__isnull'] = True
+                suppliers_filter["subcategory__isnull"] = True
 
-            suppliers = self.transactions.filter(
-                **suppliers_filter
-            ).values(
-                'supplier__name',
-                'supplier__uuid'
-            ).annotate(
-                spend=Sum('amount'),
-                count=Count('id')
-            ).order_by('-spend')
+            suppliers = (
+                self.transactions.filter(**suppliers_filter)
+                .values("supplier__name", "supplier__uuid")
+                .annotate(spend=Sum("amount"), count=Count("id"))
+                .order_by("-spend")
+            )
 
             supplier_list = list(suppliers)
             top_supplier = supplier_list[0] if supplier_list else None
             top_supplier_share = (
-                float(top_supplier['spend']) / float(group['total_spend'])
-                if top_supplier and group['total_spend']
+                float(top_supplier["spend"]) / float(group["total_spend"])
+                if top_supplier and group["total_spend"]
                 else 0
             )
 
             # Potential savings: apply configurable consolidation rate (industry benchmark)
-            potential_savings = float(group['total_spend']) * self.consolidation_rate
+            potential_savings = float(group["total_spend"]) * self.consolidation_rate
 
-            severity = 'high' if group['supplier_count'] >= 5 else 'medium'
+            severity = "high" if group["supplier_count"] >= 5 else "medium"
 
-            insights.append({
-                'id': str(uuid.uuid4()),
-                'type': 'consolidation',
-                'severity': severity,
-                'confidence': 0.80,
-                'title': f'Consolidation opportunity: {display_name}',
-                'description': (
-                    f'{group["supplier_count"]} suppliers for {display_name} '
-                    f'(${float(group["total_spend"]):,.2f} total). '
-                    f'Top supplier ({top_supplier["supplier__name"] if top_supplier else "N/A"}) '
-                    f'has {round(top_supplier_share * 100, 1)}% share. '
-                    f'Consider consolidating to reduce costs and complexity.'
-                ),
-                'potential_savings': round(potential_savings, 2),
-                'affected_entities': [display_name] + [s['supplier__name'] for s in supplier_list],
-                'recommended_actions': [
-                    f'Evaluate {top_supplier["supplier__name"] if top_supplier else "primary supplier"} as preferred vendor',
-                    'Request volume discount proposals',
-                    'Review supplier performance metrics',
-                    'Develop preferred supplier program'
-                ],
-                '_attribution': {
-                    'subcategory_keys': [(cat_name, subcategory)],
-                    'supplier_ids': [str(s['supplier__uuid']) for s in supplier_list],
-                    'spend_basis': float(group['total_spend']),
-                },
-                'details': {
-                    'category': cat_name,
-                    'subcategory': subcategory,
-                    'supplier_count': group['supplier_count'],
-                    'total_spend': float(group['total_spend']),
-                    'suppliers': [
-                        {
-                            'name': s['supplier__name'],
-                            'spend': float(s['spend']),
-                            'share': round(float(s['spend']) / float(group['total_spend']) * 100, 1)
-                        }
-                        for s in supplier_list[:5]
-                    ]
-                },
-                'created_at': datetime.now().isoformat()
-            })
+            insights.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "consolidation",
+                    "severity": severity,
+                    "confidence": 0.80,
+                    "title": f"Consolidation opportunity: {display_name}",
+                    "description": (
+                        f'{group["supplier_count"]} suppliers for {display_name} '
+                        f'(${float(group["total_spend"]):,.2f} total). '
+                        f'Top supplier ({top_supplier["supplier__name"] if top_supplier else "N/A"}) '
+                        f"has {round(top_supplier_share * 100, 1)}% share. "
+                        f"Consider consolidating to reduce costs and complexity."
+                    ),
+                    "potential_savings": round(potential_savings, 2),
+                    "affected_entities": [display_name]
+                    + [s["supplier__name"] for s in supplier_list],
+                    "recommended_actions": [
+                        f'Evaluate {top_supplier["supplier__name"] if top_supplier else "primary supplier"} as preferred vendor',
+                        "Request volume discount proposals",
+                        "Review supplier performance metrics",
+                        "Develop preferred supplier program",
+                    ],
+                    "_attribution": {
+                        "subcategory_keys": [(cat_name, subcategory)],
+                        "supplier_ids": [
+                            str(s["supplier__uuid"]) for s in supplier_list
+                        ],
+                        "spend_basis": float(group["total_spend"]),
+                    },
+                    "details": {
+                        "category": cat_name,
+                        "subcategory": subcategory,
+                        "supplier_count": group["supplier_count"],
+                        "total_spend": float(group["total_spend"]),
+                        "suppliers": [
+                            {
+                                "name": s["supplier__name"],
+                                "spend": float(s["spend"]),
+                                "share": round(
+                                    float(s["spend"])
+                                    / float(group["total_spend"])
+                                    * 100,
+                                    1,
+                                ),
+                            }
+                            for s in supplier_list[:5]
+                        ],
+                    },
+                    "created_at": datetime.now().isoformat(),
+                }
+            )
 
         return insights
 
@@ -900,20 +950,20 @@ class AIInsightsService:
         keys = []
 
         # Primary key: subcategory_keys (most specific for grouping)
-        if subcategory_keys := attribution.get('subcategory_keys'):
+        if subcategory_keys := attribution.get("subcategory_keys"):
             for key in subcategory_keys:
                 if isinstance(key, (list, tuple)) and len(key) == 2:
-                    keys.append(('subcat', key[0], key[1]))
+                    keys.append(("subcat", key[0], key[1]))
 
         # Secondary: category_ids (for anomaly insights)
-        if category_ids := attribution.get('category_ids'):
+        if category_ids := attribution.get("category_ids"):
             for cat_id in category_ids:
-                keys.append(('cat', cat_id))
+                keys.append(("cat", cat_id))
 
         # Tertiary: supplier_ids (for overlap detection)
-        if supplier_ids := attribution.get('supplier_ids'):
+        if supplier_ids := attribution.get("supplier_ids"):
             for sup_id in supplier_ids:
-                keys.append(('sup', sup_id))
+                keys.append(("sup", sup_id))
 
         return keys
 
@@ -931,16 +981,19 @@ class AIInsightsService:
         """
         # Priority order (lower number = higher priority)
         priority = {
-            'anomaly': 1,
-            'cost_optimization': 2,
-            'consolidation': 3,
-            'risk': 4,
+            "anomaly": 1,
+            "cost_optimization": 2,
+            "consolidation": 3,
+            "risk": 4,
         }
 
         # Sort by priority, then by potential_savings descending
         sorted_insights = sorted(
             insights,
-            key=lambda i: (priority.get(i['type'], 5), -(i.get('potential_savings') or 0))
+            key=lambda i: (
+                priority.get(i["type"], 5),
+                -(i.get("potential_savings") or 0),
+            ),
         )
 
         # Track claimed entities and their savings
@@ -948,16 +1001,16 @@ class AIInsightsService:
 
         adjusted_insights = []
         for insight in sorted_insights:
-            attribution = insight.get('_attribution', {})
+            attribution = insight.get("_attribution", {})
             entity_keys = self._get_entity_keys(attribution)
 
-            original_savings = insight.get('potential_savings') or 0
+            original_savings = insight.get("potential_savings") or 0
 
             # Skip deduplication for risk insights (no savings) or missing attribution
-            if insight['type'] == 'risk' or not entity_keys:
+            if insight["type"] == "risk" or not entity_keys:
                 adjusted_insight = {**insight}
-                adjusted_insight['_original_savings'] = original_savings
-                adjusted_insight['_overlap_reduction'] = 0
+                adjusted_insight["_original_savings"] = original_savings
+                adjusted_insight["_overlap_reduction"] = 0
                 adjusted_insights.append(adjusted_insight)
                 continue
 
@@ -966,8 +1019,8 @@ class AIInsightsService:
             overlapping_types = set()
             for key in entity_keys:
                 if key in claimed_by_entity:
-                    overlap_savings += claimed_by_entity[key]['savings']
-                    overlapping_types.add(claimed_by_entity[key]['type'])
+                    overlap_savings += claimed_by_entity[key]["savings"]
+                    overlapping_types.add(claimed_by_entity[key]["type"])
 
             # Reduce savings by overlap
             adjusted_savings = max(0, original_savings - overlap_savings)
@@ -978,9 +1031,9 @@ class AIInsightsService:
 
             # Update insight
             adjusted_insight = {**insight}
-            adjusted_insight['potential_savings'] = round(adjusted_savings, 2)
-            adjusted_insight['_original_savings'] = original_savings
-            adjusted_insight['_overlap_reduction'] = round(overlap_savings, 2)
+            adjusted_insight["potential_savings"] = round(adjusted_savings, 2)
+            adjusted_insight["_original_savings"] = original_savings
+            adjusted_insight["_overlap_reduction"] = round(overlap_savings, 2)
             adjusted_insights.append(adjusted_insight)
 
             # Mark entities as claimed (distribute savings proportionally)
@@ -989,27 +1042,31 @@ class AIInsightsService:
                 for key in entity_keys:
                     if key not in claimed_by_entity:
                         claimed_by_entity[key] = {
-                            'type': insight['type'],
-                            'savings': savings_per_key,
+                            "type": insight["type"],
+                            "savings": savings_per_key,
                         }
 
-        total_savings = sum(i.get('potential_savings') or 0 for i in adjusted_insights)
+        total_savings = sum(i.get("potential_savings") or 0 for i in adjusted_insights)
         return adjusted_insights, total_savings
 
     def _calculate_overlap_summary(self, insights: list) -> dict:
         """Calculate summary of overlap adjustments."""
-        total_original = sum(i.get('_original_savings') or 0 for i in insights)
-        total_adjusted = sum(i.get('potential_savings') or 0 for i in insights)
-        total_reduction = sum(i.get('_overlap_reduction') or 0 for i in insights)
+        total_original = sum(i.get("_original_savings") or 0 for i in insights)
+        total_adjusted = sum(i.get("potential_savings") or 0 for i in insights)
+        total_reduction = sum(i.get("_overlap_reduction") or 0 for i in insights)
 
-        insights_with_overlap = len([i for i in insights if i.get('_overlap_reduction', 0) > 0])
+        insights_with_overlap = len(
+            [i for i in insights if i.get("_overlap_reduction", 0) > 0]
+        )
 
         return {
-            'total_original_savings': round(total_original, 2),
-            'total_adjusted_savings': round(total_adjusted, 2),
-            'total_overlap_reduction': round(total_reduction, 2),
-            'insights_with_overlap': insights_with_overlap,
-            'deduplication_percentage': round((total_reduction / total_original * 100) if total_original > 0 else 0, 1),
+            "total_original_savings": round(total_original, 2),
+            "total_adjusted_savings": round(total_adjusted, 2),
+            "total_overlap_reduction": round(total_reduction, 2),
+            "insights_with_overlap": insights_with_overlap,
+            "deduplication_percentage": round(
+                (total_reduction / total_original * 100) if total_original > 0 else 0, 1
+            ),
         }
 
     def _build_comprehensive_context(self, insights: list) -> dict:
@@ -1022,28 +1079,29 @@ class AIInsightsService:
         Returns:
             Dict with organization, spending, top_categories, top_suppliers, insights, historical
         """
-        total_spend = self.transactions.aggregate(total=Sum('amount'))['total'] or Decimal('0')
-        avg_transaction = self.transactions.aggregate(avg=Avg('amount'))['avg'] or Decimal('0')
+        total_spend = self.transactions.aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0")
+        avg_transaction = self.transactions.aggregate(avg=Avg("amount"))[
+            "avg"
+        ] or Decimal("0")
 
         top_categories = list(
-            self.transactions.values('category__name')
-            .annotate(spend=Sum('amount'))
-            .order_by('-spend')[:5]
+            self.transactions.values("category__name")
+            .annotate(spend=Sum("amount"))
+            .order_by("-spend")[:5]
         )
 
         top_suppliers = list(
-            self.transactions.values('supplier__name')
-            .annotate(spend=Sum('amount'))
-            .order_by('-spend')[:5]
+            self.transactions.values("supplier__name")
+            .annotate(spend=Sum("amount"))
+            .order_by("-spend")[:5]
         )
 
-        date_range = {
-            "earliest": None,
-            "latest": None
-        }
+        date_range = {"earliest": None, "latest": None}
         if self.transactions.exists():
-            earliest = self.transactions.order_by('date').first()
-            latest = self.transactions.order_by('-date').first()
+            earliest = self.transactions.order_by("date").first()
+            latest = self.transactions.order_by("-date").first()
             if earliest:
                 date_range["earliest"] = str(earliest.date)
             if latest:
@@ -1059,10 +1117,22 @@ class AIInsightsService:
                 "description": i["description"],
                 "potential_savings": i.get("potential_savings"),
                 "affected_entities": i.get("affected_entities", [])[:5],
-                "details": {
-                    k: v for k, v in i.get("details", {}).items()
-                    if k in ["category", "supplier_count", "average", "suppliers", "total_spend"]
-                } if i.get("details") else {}
+                "details": (
+                    {
+                        k: v
+                        for k, v in i.get("details", {}).items()
+                        if k
+                        in [
+                            "category",
+                            "supplier_count",
+                            "average",
+                            "suppliers",
+                            "total_spend",
+                        ]
+                    }
+                    if i.get("details")
+                    else {}
+                ),
             }
             for i in insights[:15]
         ]
@@ -1076,8 +1146,12 @@ class AIInsightsService:
             },
             "spending": {
                 "total_ytd": float(total_spend),
-                "supplier_count": self.transactions.values('supplier').distinct().count(),
-                "category_count": self.transactions.values('category').distinct().count(),
+                "supplier_count": self.transactions.values("supplier")
+                .distinct()
+                .count(),
+                "category_count": self.transactions.values("category")
+                .distinct()
+                .count(),
                 "transaction_count": self.transactions.count(),
                 "avg_transaction": float(avg_transaction),
                 "date_range": date_range,
@@ -1100,8 +1174,8 @@ class AIInsightsService:
 
         Returns one of: 'early_stage', 'basic', 'developing', 'mature'
         """
-        supplier_count = self.transactions.values('supplier').distinct().count()
-        category_count = self.transactions.values('category').distinct().count()
+        supplier_count = self.transactions.values("supplier").distinct().count()
+        category_count = self.transactions.values("category").distinct().count()
         transaction_count = self.transactions.count()
 
         if transaction_count < 100:
@@ -1124,27 +1198,31 @@ class AIInsightsService:
 
             feedback = InsightFeedback.objects.filter(
                 organization=self.organization
-            ).order_by('-created_at')[:50]
+            ).order_by("-created_at")[:50]
 
             if not feedback.exists():
                 return {}
 
-            implemented_count = feedback.filter(action_taken='implemented').count()
-            total_predicted = feedback.filter(
-                action_taken='implemented',
-                predicted_savings__isnull=False
-            ).aggregate(total=Sum('predicted_savings'))['total'] or 0
+            implemented_count = feedback.filter(action_taken="implemented").count()
+            total_predicted = (
+                feedback.filter(
+                    action_taken="implemented", predicted_savings__isnull=False
+                ).aggregate(total=Sum("predicted_savings"))["total"]
+                or 0
+            )
 
-            total_actual = feedback.filter(
-                outcome='success',
-                actual_savings__isnull=False
-            ).aggregate(total=Sum('actual_savings'))['total'] or 0
+            total_actual = (
+                feedback.filter(
+                    outcome="success", actual_savings__isnull=False
+                ).aggregate(total=Sum("actual_savings"))["total"]
+                or 0
+            )
 
             most_actioned = list(
-                feedback.filter(action_taken='implemented')
-                .values('insight_type')
-                .annotate(count=Count('id'))
-                .order_by('-count')[:3]
+                feedback.filter(action_taken="implemented")
+                .values("insight_type")
+                .annotate(count=Count("id"))
+                .order_by("-count")[:3]
             )
 
             return {
@@ -1155,7 +1233,7 @@ class AIInsightsService:
                 "most_actioned_types": [
                     {"type": item["insight_type"], "count": item["count"]}
                     for item in most_actioned
-                ]
+                ],
             }
         except Exception as e:
             logger.debug(f"Could not fetch historical patterns: {e}")
@@ -1168,170 +1246,27 @@ class AIInsightsService:
         Uses the provider manager with automatic failover to provide
         structured recommendations.
 
+        v3.1 Phase 3 (AN-TD2): legacy single-provider fallback paths
+        (_enhance_with_claude_structured / _enhance_with_openai_structured)
+        removed. They were unreachable whenever ``self.api_keys`` was
+        populated (always, when ``use_external_ai=True`` per the __init__
+        invariant) AND hardcoded a model name that bypassed the
+        ``AI_CHAT_ALLOWED_MODELS`` cost-containment allowlist. The
+        provider manager is the single sanctioned path.
+
         Returns:
             Dict with priority_actions, risk_assessment, quick_wins, strategic_summary
             or None if all providers fail
         """
-        if not self.api_keys:
+        if not self.api_keys or not self._provider_manager:
             return None
 
-        # Use provider manager for automatic failover
-        if self._provider_manager:
-            context = self._build_comprehensive_context(insights)
-            return self._provider_manager.enhance_insights(
-                insights=insights,
-                context=context,
-                tool_schema=INSIGHT_ENHANCEMENT_TOOL
-            )
-
-        # Fallback to legacy single-provider behavior
-        if not self.api_key:
-            return None
-
-        try:
-            if self.ai_provider == 'anthropic':
-                return self._enhance_with_claude_structured(insights)
-            elif self.ai_provider == 'openai':
-                return self._enhance_with_openai_structured(insights)
-            else:
-                logger.warning(f"Unknown AI provider: {self.ai_provider}")
-                return None
-        except Exception as e:
-            logger.error(f"External AI enhancement failed: {e}")
-            return None
-
-    def _enhance_with_claude_structured(self, insights: list) -> Optional[dict]:
-        """
-        Enhance insights using Claude API with structured tool calling.
-
-        Uses tool calling to ensure predictable, parseable JSON output.
-
-        Returns:
-            Structured enhancement dict or None on failure
-        """
-        try:
-            import anthropic
-
-            client = anthropic.Anthropic(api_key=self.api_key)
-            context = self._build_comprehensive_context(insights)
-
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2048,
-                tools=[INSIGHT_ENHANCEMENT_TOOL],
-                tool_choice={"type": "tool", "name": "provide_procurement_recommendations"},
-                messages=[{
-                    "role": "user",
-                    "content": f"""Analyze these procurement insights and provide structured recommendations.
-
-Organization: {context['organization']['name']}
-
-Spending Summary:
-- Total YTD Spend: ${context['spending']['total_ytd']:,.2f}
-- Supplier Count: {context['spending']['supplier_count']}
-- Category Count: {context['spending']['category_count']}
-- Transaction Count: {context['spending']['transaction_count']}
-
-Top Categories:
-{json.dumps(context['top_categories'], indent=2)}
-
-Top Suppliers:
-{json.dumps(context['top_suppliers'], indent=2)}
-
-Current Insights ({len(insights)} total):
-{json.dumps(context['insights'], indent=2)}
-
-Provide actionable recommendations prioritized by impact and effort.
-Focus on quick wins and high-impact actions that address the identified issues."""
-                }]
-            )
-
-            for block in message.content:
-                if block.type == "tool_use" and block.name == "provide_procurement_recommendations":
-                    enhancement = block.input
-                    enhancement['provider'] = 'anthropic'
-                    enhancement['generated_at'] = datetime.now().isoformat()
-                    return enhancement
-
-            logger.warning("Claude did not return tool_use response")
-            return None
-
-        except ImportError:
-            logger.warning("anthropic package not installed, skipping Claude enhancement")
-            return None
-        except Exception as e:
-            logger.error(f"Claude API error: {e}")
-            return None
-
-    def _enhance_with_openai_structured(self, insights: list) -> Optional[dict]:
-        """
-        Enhance insights using OpenAI API with structured output.
-
-        Uses function calling for predictable JSON output.
-
-        Returns:
-            Structured enhancement dict or None on failure
-        """
-        try:
-            import openai
-
-            client = openai.OpenAI(api_key=self.api_key)
-            context = self._build_comprehensive_context(insights)
-
-            openai_tool = {
-                "type": "function",
-                "function": {
-                    "name": INSIGHT_ENHANCEMENT_TOOL["name"],
-                    "description": INSIGHT_ENHANCEMENT_TOOL["description"],
-                    "parameters": INSIGHT_ENHANCEMENT_TOOL["input_schema"]
-                }
-            }
-
-            response = client.chat.completions.create(
-                model="gpt-4-turbo-preview",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a procurement analytics expert. Analyze the insights and provide structured, actionable recommendations."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""Analyze these procurement insights and provide structured recommendations.
-
-Organization: {context['organization']['name']}
-
-Spending Summary:
-- Total YTD Spend: ${context['spending']['total_ytd']:,.2f}
-- Supplier Count: {context['spending']['supplier_count']}
-- Category Count: {context['spending']['category_count']}
-
-Current Insights ({len(insights)} total):
-{json.dumps(context['insights'], indent=2)}
-
-Provide actionable recommendations prioritized by impact and effort."""
-                    }
-                ],
-                tools=[openai_tool],
-                tool_choice={"type": "function", "function": {"name": "provide_procurement_recommendations"}},
-                max_tokens=2048
-            )
-
-            if response.choices and response.choices[0].message.tool_calls:
-                tool_call = response.choices[0].message.tool_calls[0]
-                enhancement = json.loads(tool_call.function.arguments)
-                enhancement['provider'] = 'openai'
-                enhancement['generated_at'] = datetime.now().isoformat()
-                return enhancement
-
-            logger.warning("OpenAI did not return function call response")
-            return None
-
-        except ImportError:
-            logger.warning("openai package not installed, skipping OpenAI enhancement")
-            return None
-        except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
-            return None
+        context = self._build_comprehensive_context(insights)
+        return self._provider_manager.enhance_insights(
+            insights=insights,
+            context=context,
+            tool_schema=INSIGHT_ENHANCEMENT_TOOL,
+        )
 
     def get_insights_by_type(self, insight_type: str) -> list:
         """
@@ -1341,12 +1276,12 @@ Provide actionable recommendations prioritized by impact and effort."""
             insight_type: One of 'cost_optimization', 'risk', 'anomaly', 'consolidation'
         """
         type_methods = {
-            'cost': self.get_cost_optimization_insights,
-            'cost_optimization': self.get_cost_optimization_insights,
-            'risk': self.get_supplier_risk_insights,
-            'anomaly': self.get_anomaly_insights,
-            'anomalies': self.get_anomaly_insights,
-            'consolidation': self.get_consolidation_recommendations,
+            "cost": self.get_cost_optimization_insights,
+            "cost_optimization": self.get_cost_optimization_insights,
+            "risk": self.get_supplier_risk_insights,
+            "anomaly": self.get_anomaly_insights,
+            "anomalies": self.get_anomaly_insights,
+            "consolidation": self.get_consolidation_recommendations,
         }
 
         method = type_methods.get(insight_type.lower())
@@ -1400,12 +1335,14 @@ Provide actionable recommendations prioritized by impact and effort."""
             return None
 
         try:
-            if self.ai_provider == 'anthropic':
+            if self.ai_provider == "anthropic":
                 return self._deep_analysis_with_claude(insight_data)
-            elif self.ai_provider == 'openai':
+            elif self.ai_provider == "openai":
                 return self._deep_analysis_with_openai(insight_data)
             else:
-                logger.warning(f"Unknown AI provider for deep analysis: {self.ai_provider}")
+                logger.warning(
+                    f"Unknown AI provider for deep analysis: {self.ai_provider}"
+                )
                 return None
         except Exception as e:
             logger.error(f"Deep analysis failed: {e}")
@@ -1425,9 +1362,10 @@ Provide actionable recommendations prioritized by impact and effort."""
                 max_tokens=4096,
                 tools=[DEEP_ANALYSIS_TOOL],
                 tool_choice={"type": "tool", "name": "provide_deep_insight_analysis"},
-                messages=[{
-                    "role": "user",
-                    "content": f"""Perform a comprehensive deep analysis of this procurement insight.
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""Perform a comprehensive deep analysis of this procurement insight.
 
 INSIGHT DETAILS:
 - ID: {insight_data.get('id', 'N/A')}
@@ -1455,17 +1393,21 @@ Provide a thorough analysis including:
 5. Success metrics - KPIs to track implementation success
 6. Stakeholder mapping - who needs to be involved
 7. Industry context - benchmarks and best practices
-8. Clear next steps - immediate actions to take"""
-                }]
+8. Clear next steps - immediate actions to take""",
+                    }
+                ],
             )
 
             for block in message.content:
-                if block.type == "tool_use" and block.name == "provide_deep_insight_analysis":
+                if (
+                    block.type == "tool_use"
+                    and block.name == "provide_deep_insight_analysis"
+                ):
                     result = block.input
-                    result['insight_id'] = insight_data.get('id')
-                    result['provider'] = 'anthropic'
-                    result['model'] = 'claude-sonnet-4'
-                    result['generated_at'] = datetime.now().isoformat()
+                    result["insight_id"] = insight_data.get("id")
+                    result["provider"] = "anthropic"
+                    result["model"] = "claude-sonnet-4"
+                    result["generated_at"] = datetime.now().isoformat()
                     return result
 
             logger.warning("Claude did not return deep analysis tool response")
@@ -1492,8 +1434,8 @@ Provide a thorough analysis including:
                 "function": {
                     "name": DEEP_ANALYSIS_TOOL["name"],
                     "description": DEEP_ANALYSIS_TOOL["description"],
-                    "parameters": DEEP_ANALYSIS_TOOL["input_schema"]
-                }
+                    "parameters": DEEP_ANALYSIS_TOOL["input_schema"],
+                },
             }
 
             response = client.chat.completions.create(
@@ -1501,7 +1443,7 @@ Provide a thorough analysis including:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a senior procurement consultant providing comprehensive analysis. Be thorough, specific, and actionable."
+                        "content": "You are a senior procurement consultant providing comprehensive analysis. Be thorough, specific, and actionable.",
                     },
                     {
                         "role": "user",
@@ -1517,21 +1459,24 @@ INSIGHT DETAILS:
 CONTEXT:
 {json.dumps(context, indent=2)}
 
-Provide thorough analysis with root cause, implementation roadmap, financial impact, risks, and next steps."""
-                    }
+Provide thorough analysis with root cause, implementation roadmap, financial impact, risks, and next steps.""",
+                    },
                 ],
                 tools=[openai_tool],
-                tool_choice={"type": "function", "function": {"name": "provide_deep_insight_analysis"}},
-                max_tokens=4096
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": "provide_deep_insight_analysis"},
+                },
+                max_tokens=4096,
             )
 
             if response.choices and response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
                 result = json.loads(tool_call.function.arguments)
-                result['insight_id'] = insight_data.get('id')
-                result['provider'] = 'openai'
-                result['model'] = 'gpt-4-turbo'
-                result['generated_at'] = datetime.now().isoformat()
+                result["insight_id"] = insight_data.get("id")
+                result["provider"] = "openai"
+                result["model"] = "gpt-4-turbo"
+                result["generated_at"] = datetime.now().isoformat()
                 return result
 
             logger.warning("OpenAI did not return deep analysis function call")
@@ -1552,29 +1497,31 @@ Provide thorough analysis with root cause, implementation roadmap, financial imp
                 "maturity": self._assess_procurement_maturity(),
             },
             "spending": {
-                "total_ytd": float(self.transactions.aggregate(total=Sum('amount'))['total'] or 0),
-                "supplier_count": self.transactions.values('supplier').distinct().count(),
-                "category_count": self.transactions.values('category').distinct().count(),
-            }
+                "total_ytd": float(
+                    self.transactions.aggregate(total=Sum("amount"))["total"] or 0
+                ),
+                "supplier_count": self.transactions.values("supplier")
+                .distinct()
+                .count(),
+                "category_count": self.transactions.values("category")
+                .distinct()
+                .count(),
+            },
         }
 
-        if insight_data.get('affected_entities'):
-            entity_ids = insight_data['affected_entities'][:5]
+        if insight_data.get("affected_entities"):
+            entity_ids = insight_data["affected_entities"][:5]
             related_spend = self.transactions.filter(
                 Q(supplier__uuid__in=entity_ids) | Q(category__uuid__in=entity_ids)
-            ).aggregate(
-                total=Sum('amount'),
-                count=Count('id'),
-                avg=Avg('amount')
-            )
-            context['related_spend'] = {
-                'total': float(related_spend['total'] or 0),
-                'transaction_count': related_spend['count'] or 0,
-                'avg_transaction': float(related_spend['avg'] or 0),
+            ).aggregate(total=Sum("amount"), count=Count("id"), avg=Avg("amount"))
+            context["related_spend"] = {
+                "total": float(related_spend["total"] or 0),
+                "transaction_count": related_spend["count"] or 0,
+                "avg_transaction": float(related_spend["avg"] or 0),
             }
 
-        if insight_data.get('details', {}).get('suppliers'):
-            context['supplier_details'] = insight_data['details']['suppliers'][:10]
+        if insight_data.get("details", {}).get("suppliers"):
+            context["supplier_details"] = insight_data["details"]["suppliers"][:10]
 
         return context
 
@@ -1604,11 +1551,8 @@ Provide thorough analysis with root cause, implementation roadmap, financial imp
             "available_providers": [self.ai_provider] if self.api_key else [],
             "provider_errors": {},
             "providers": {
-                self.ai_provider: {
-                    "available": bool(self.api_key),
-                    "last_error": None
-                }
-            }
+                self.ai_provider: {"available": bool(self.api_key), "last_error": None}
+            },
         }
 
     def health_check_providers(self) -> dict:
@@ -1632,29 +1576,29 @@ SINGLE_INSIGHT_TOOL = {
         "properties": {
             "root_cause": {
                 "type": "string",
-                "description": "Likely root cause of this pattern or issue"
+                "description": "Likely root cause of this pattern or issue",
             },
             "industry_benchmark": {
                 "type": "string",
-                "description": "How this compares to industry standards or best practices"
+                "description": "How this compares to industry standards or best practices",
             },
             "action_plan": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Step-by-step remediation plan (3-5 steps)"
+                "description": "Step-by-step remediation plan (3-5 steps)",
             },
             "risk_of_inaction": {
                 "type": "string",
-                "description": "Consequences of not addressing this issue"
+                "description": "Consequences of not addressing this issue",
             },
             "success_metrics": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "KPIs to track improvement (2-3 metrics)"
-            }
+                "description": "KPIs to track improvement (2-3 metrics)",
+            },
         },
-        "required": ["root_cause", "action_plan"]
-    }
+        "required": ["root_cause", "action_plan"],
+    },
 }
 
 
@@ -1670,15 +1614,15 @@ class PerInsightEnhancer:
 
     # Thresholds for determining which insights to enhance
     MIN_SAVINGS_THRESHOLD = 5000  # Only enhance insights with >$5K potential savings
-    MAX_INSIGHTS_TO_ENHANCE = 5   # Limit API calls
+    MAX_INSIGHTS_TO_ENHANCE = 5  # Limit API calls
 
     def __init__(
         self,
         api_key: str = None,
-        provider: str = 'anthropic',
+        provider: str = "anthropic",
         api_keys: Optional[Dict[str, str]] = None,
         enable_fallback: bool = True,
-        organization_id: Optional[int] = None
+        organization_id: Optional[int] = None,
     ):
         self.api_key = api_key
         self.provider = provider
@@ -1701,7 +1645,7 @@ class PerInsightEnhancer:
                 api_keys=self.api_keys,
                 enable_fallback=enable_fallback,
                 organization_id=organization_id,
-                enable_logging=True
+                enable_logging=True,
             )
 
     def enhance_insights(self, insights: list) -> list:
@@ -1732,8 +1676,8 @@ class PerInsightEnhancer:
             try:
                 enhancement = self._get_single_insight_enhancement(insight)
                 if enhancement:
-                    insight['ai_analysis'] = enhancement
-                    insight['ai_enhanced'] = True
+                    insight["ai_analysis"] = enhancement
+                    insight["ai_enhanced"] = True
             except Exception as e:
                 logger.warning(f"Failed to enhance insight {insight['id']}: {e}")
 
@@ -1742,25 +1686,25 @@ class PerInsightEnhancer:
     def _filter_high_value_insights(self, insights: list) -> list:
         """Filter insights that warrant AI enhancement based on value and severity."""
         high_value = [
-            i for i in insights
-            if (i.get('potential_savings') or 0) >= self.MIN_SAVINGS_THRESHOLD
-            or i.get('severity') in ['critical', 'high']
+            i
+            for i in insights
+            if (i.get("potential_savings") or 0) >= self.MIN_SAVINGS_THRESHOLD
+            or i.get("severity") in ["critical", "high"]
         ]
-        return high_value[:self.MAX_INSIGHTS_TO_ENHANCE]
+        return high_value[: self.MAX_INSIGHTS_TO_ENHANCE]
 
     def _get_single_insight_enhancement(self, insight: dict) -> Optional[dict]:
         """Get AI enhancement for a single insight using cost-efficient model."""
         # Use provider manager for automatic failover
         if self._provider_manager:
             return self._provider_manager.analyze_single_insight(
-                insight=insight,
-                tool_schema=SINGLE_INSIGHT_TOOL
+                insight=insight, tool_schema=SINGLE_INSIGHT_TOOL
             )
 
         # Fallback to legacy single-provider behavior
-        if self.provider == 'anthropic':
+        if self.provider == "anthropic":
             return self._enhance_with_claude_haiku(insight)
-        elif self.provider == 'openai':
+        elif self.provider == "openai":
             return self._enhance_with_openai_mini(insight)
         return None
 
@@ -1776,9 +1720,10 @@ class PerInsightEnhancer:
                 max_tokens=500,
                 tools=[SINGLE_INSIGHT_TOOL],
                 tool_choice={"type": "tool", "name": "analyze_insight"},
-                messages=[{
-                    "role": "user",
-                    "content": f"""Analyze this procurement insight and provide detailed analysis:
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""Analyze this procurement insight and provide detailed analysis:
 
 Type: {insight['type']}
 Title: {insight['title']}
@@ -1790,16 +1735,17 @@ Confidence: {insight.get('confidence', 0) * 100:.0f}%
 Additional Details:
 {json.dumps(insight.get('details', {}), indent=2)}
 
-Provide root cause analysis, industry benchmarks, and actionable remediation steps."""
-                }]
+Provide root cause analysis, industry benchmarks, and actionable remediation steps.""",
+                    }
+                ],
             )
 
             for block in message.content:
                 if block.type == "tool_use" and block.name == "analyze_insight":
                     result = block.input
-                    result['provider'] = 'anthropic'
-                    result['model'] = 'claude-3-5-haiku'
-                    result['generated_at'] = datetime.now().isoformat()
+                    result["provider"] = "anthropic"
+                    result["model"] = "claude-3-5-haiku"
+                    result["generated_at"] = datetime.now().isoformat()
                     return result
 
             return None
@@ -1823,8 +1769,8 @@ Provide root cause analysis, industry benchmarks, and actionable remediation ste
                 "function": {
                     "name": SINGLE_INSIGHT_TOOL["name"],
                     "description": SINGLE_INSIGHT_TOOL["description"],
-                    "parameters": SINGLE_INSIGHT_TOOL["input_schema"]
-                }
+                    "parameters": SINGLE_INSIGHT_TOOL["input_schema"],
+                },
             }
 
             response = client.chat.completions.create(
@@ -1832,7 +1778,7 @@ Provide root cause analysis, industry benchmarks, and actionable remediation ste
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a procurement analytics expert. Provide concise, actionable analysis."
+                        "content": "You are a procurement analytics expert. Provide concise, actionable analysis.",
                     },
                     {
                         "role": "user",
@@ -1844,20 +1790,23 @@ Description: {insight['description']}
 Severity: {insight['severity']}
 Potential Savings: ${insight.get('potential_savings', 0):,.2f}
 
-Provide root cause analysis and actionable remediation steps."""
-                    }
+Provide root cause analysis and actionable remediation steps.""",
+                    },
                 ],
                 tools=[openai_tool],
-                tool_choice={"type": "function", "function": {"name": "analyze_insight"}},
-                max_tokens=500
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": "analyze_insight"},
+                },
+                max_tokens=500,
             )
 
             if response.choices and response.choices[0].message.tool_calls:
                 tool_call = response.choices[0].message.tool_calls[0]
                 result = json.loads(tool_call.function.arguments)
-                result['provider'] = 'openai'
-                result['model'] = 'gpt-4o-mini'
-                result['generated_at'] = datetime.now().isoformat()
+                result["provider"] = "openai"
+                result["model"] = "gpt-4o-mini"
+                result["generated_at"] = datetime.now().isoformat()
                 return result
 
             return None

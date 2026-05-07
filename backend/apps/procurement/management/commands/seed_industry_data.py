@@ -9,6 +9,7 @@ Usage:
     python manage.py seed_industry_data --industry healthcare --org-slug uch --wipe
     python manage.py seed_industry_data --industry higher-ed --org-slug tsu --wipe
 """
+
 import math
 import random
 from datetime import date, timedelta
@@ -30,12 +31,14 @@ from apps.procurement.models import (
     Supplier,
     Transaction,
 )
-
-from ._industry_profiles import PROFILES
 from apps.procurement.services import (
-    get_or_create_supplier as _service_get_or_create_supplier,
     get_or_create_category as _service_get_or_create_category,
 )
+from apps.procurement.services import (
+    get_or_create_supplier as _service_get_or_create_supplier,
+)
+
+from ._industry_profiles import PROFILES
 
 
 class Command(BaseCommand):
@@ -43,13 +46,27 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--industry", choices=list(PROFILES.keys()), required=True)
-        parser.add_argument("--org-slug", type=str, required=True, help="Target organization slug")
-        parser.add_argument("--org-name", type=str, help="Override org display name (default: profile name)")
-        parser.add_argument("--wipe", action="store_true", help="Wipe ALL procurement data for the org before seeding")
-        parser.add_argument("--seed", type=int, default=42)
-        parser.add_argument("--transactions", type=int, default=25000, help="Target transaction count")
         parser.add_argument(
-            "--start-year", type=int, default=2022,
+            "--org-slug", type=str, required=True, help="Target organization slug"
+        )
+        parser.add_argument(
+            "--org-name",
+            type=str,
+            help="Override org display name (default: profile name)",
+        )
+        parser.add_argument(
+            "--wipe",
+            action="store_true",
+            help="Wipe ALL procurement data for the org before seeding",
+        )
+        parser.add_argument("--seed", type=int, default=42)
+        parser.add_argument(
+            "--transactions", type=int, default=25000, help="Target transaction count"
+        )
+        parser.add_argument(
+            "--start-year",
+            type=int,
+            default=2022,
             help="First calendar year for transaction dates (default 2022)",
         )
         parser.add_argument(
@@ -70,7 +87,9 @@ class Command(BaseCommand):
         )
         updated_fields = []
         if not created and org.name != org_name:
-            self.stdout.write(self.style.WARNING(f"Renaming org '{org.name}' -> '{org_name}'"))
+            self.stdout.write(
+                self.style.WARNING(f"Renaming org '{org.name}' -> '{org_name}'")
+            )
             org.name = org_name
             updated_fields.append("name")
         if not org.is_demo:
@@ -78,11 +97,17 @@ class Command(BaseCommand):
             updated_fields.append("is_demo")
         if updated_fields:
             org.save(update_fields=updated_fields)
-        self.stdout.write(self.style.NOTICE(
-            f"Seeding {industry} data into org '{org.name}' (slug={slug})"
-        ))
+        self.stdout.write(
+            self.style.NOTICE(
+                f"Seeding {industry} data into org '{org.name}' (slug={slug})"
+            )
+        )
 
-        end_date = date.fromisoformat(options["end_date"]) if options["end_date"] else date.today()
+        end_date = (
+            date.fromisoformat(options["end_date"])
+            if options["end_date"]
+            else date.today()
+        )
         start_date = date(options["start_year"], 1, 1)
 
         with db_transaction.atomic():
@@ -91,8 +116,14 @@ class Command(BaseCommand):
             categories = self._create_categories(org, profile)
             suppliers_by_cat = self._create_suppliers(org, profile, rng)
             self._generate_transactions(
-                org, rng, profile, categories, suppliers_by_cat,
-                start_date, end_date, options["transactions"],
+                org,
+                rng,
+                profile,
+                categories,
+                suppliers_by_cat,
+                start_date,
+                end_date,
+                options["transactions"],
             )
 
         self.stdout.write(self.style.SUCCESS("Industry base data seeded."))
@@ -109,16 +140,20 @@ class Command(BaseCommand):
         txn_ct = Transaction.objects.filter(organization=org).delete()[0]
         cat_ct = Category.objects.filter(organization=org).delete()[0]
         sup_ct = Supplier.objects.filter(organization=org).delete()[0]
-        self.stdout.write(self.style.WARNING(
-            f"Wiped: invoices={invoice_ct} grs={gr_ct} pos={po_ct} prs={pr_ct} "
-            f"violations={viol_ct} policies={policy_ct} contracts={contract_ct} "
-            f"transactions={txn_ct} categories={cat_ct} suppliers={sup_ct}"
-        ))
+        self.stdout.write(
+            self.style.WARNING(
+                f"Wiped: invoices={invoice_ct} grs={gr_ct} pos={po_ct} prs={pr_ct} "
+                f"violations={viol_ct} policies={policy_ct} contracts={contract_ct} "
+                f"transactions={txn_ct} categories={cat_ct} suppliers={sup_ct}"
+            )
+        )
 
     def _create_categories(self, org, profile):
         categories = {}
         for cat_def in profile["categories"]:
-            cat, _ = _service_get_or_create_category(organization=org, name=cat_def["name"])
+            cat, _ = _service_get_or_create_category(
+                organization=org, name=cat_def["name"]
+            )
             categories[cat_def["name"]] = cat
         self.stdout.write(f"  Categories: {len(categories)}")
         return categories
@@ -140,27 +175,44 @@ class Command(BaseCommand):
         regions = profile["tail_regions"]
         for template, count in profile["tail_supplier_templates"]:
             for _ in range(count):
-                name = template.format(city=rng.choice(cities), region=rng.choice(regions))
+                name = template.format(
+                    city=rng.choice(cities), region=rng.choice(regions)
+                )
                 suffix = 1
                 unique_name = name
                 while unique_name in all_named:
                     suffix += 1
                     unique_name = f"{name} #{suffix}"
                 all_named.add(unique_name)
-                sup, _ = _service_get_or_create_supplier(organization=org, name=unique_name)
+                sup, _ = _service_get_or_create_supplier(
+                    organization=org, name=unique_name
+                )
                 tail_suppliers.append(sup)
 
         for cat_def in profile["categories"]:
             cat_tail_count = max(10, len(tail_suppliers) // len(profile["categories"]))
-            cat_tail = rng.sample(tail_suppliers, min(cat_tail_count, len(tail_suppliers)))
+            cat_tail = rng.sample(
+                tail_suppliers, min(cat_tail_count, len(tail_suppliers))
+            )
             suppliers_by_cat[cat_def["name"]].extend(cat_tail)
 
         total_suppliers = Supplier.objects.filter(organization=org).count()
-        self.stdout.write(f"  Suppliers: {total_suppliers} ({len(all_named)} named, {len(tail_suppliers)} tail)")
+        self.stdout.write(
+            f"  Suppliers: {total_suppliers} ({len(all_named)} named, {len(tail_suppliers)} tail)"
+        )
         return suppliers_by_cat
 
-    def _generate_transactions(self, org, rng, profile, categories, suppliers_by_cat,
-                               start_date, end_date, target_count):
+    def _generate_transactions(
+        self,
+        org,
+        rng,
+        profile,
+        categories,
+        suppliers_by_cat,
+        start_date,
+        end_date,
+        target_count,
+    ):
         seasonality = profile["seasonality"]
         cat_defs = profile["categories"]
         cat_weights = [c["spend_share"] for c in cat_defs]
@@ -186,14 +238,21 @@ class Command(BaseCommand):
             n_txn = cat_txn_counts[cat_def["name"]]
 
             for _ in range(n_txn):
-                txn_date = self._pick_seasonal_date(rng, start_date, total_days, seasonality)
+                txn_date = self._pick_seasonal_date(
+                    rng, start_date, total_days, seasonality
+                )
                 supplier = self._pick_supplier(rng, named_suppliers, tail_suppliers)
                 amount = self._pick_amount(rng, mu, sigma)
 
-                batch.append(Transaction(
-                    organization=org, supplier=supplier, category=cat,
-                    amount=amount, date=txn_date,
-                ))
+                batch.append(
+                    Transaction(
+                        organization=org,
+                        supplier=supplier,
+                        category=cat,
+                        amount=amount,
+                        date=txn_date,
+                    )
+                )
                 if len(batch) >= batch_size:
                     Transaction.objects.bulk_create(batch, batch_size=batch_size)
                     total_created += len(batch)
@@ -249,10 +308,20 @@ class Command(BaseCommand):
 
     def _print_summary(self, org):
         from django.db.models import Sum
-        total_spend = Transaction.objects.filter(organization=org).aggregate(s=Sum("amount"))["s"] or 0
+
+        total_spend = (
+            Transaction.objects.filter(organization=org).aggregate(s=Sum("amount"))["s"]
+            or 0
+        )
         self.stdout.write(self.style.SUCCESS("\n=== Summary ==="))
         self.stdout.write(f"  Organization: {org.name} (slug={org.slug})")
-        self.stdout.write(f"  Categories: {Category.objects.filter(organization=org).count()}")
-        self.stdout.write(f"  Suppliers: {Supplier.objects.filter(organization=org).count()}")
-        self.stdout.write(f"  Transactions: {Transaction.objects.filter(organization=org).count()}")
+        self.stdout.write(
+            f"  Categories: {Category.objects.filter(organization=org).count()}"
+        )
+        self.stdout.write(
+            f"  Suppliers: {Supplier.objects.filter(organization=org).count()}"
+        )
+        self.stdout.write(
+            f"  Transactions: {Transaction.objects.filter(organization=org).count()}"
+        )
         self.stdout.write(f"  Total spend: ${float(total_spend):,.2f}")

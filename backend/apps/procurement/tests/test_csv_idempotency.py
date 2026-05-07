@@ -23,6 +23,7 @@ These tests assert:
   - in-memory accumulators (counts, error_log, batch_log) are seeded from
     persisted state so the resumed run's final tallies are correct
 """
+
 import json
 import uuid
 from unittest.mock import patch
@@ -166,9 +167,7 @@ class _SimulatedWorkerCrash(BaseException):
     """
 
 
-class TestMidBatchCrashLeavesCheckpoint(
-    _IdempotencyFixturesMixin, TransactionTestCase
-):
+class TestMidBatchCrashLeavesCheckpoint(_IdempotencyFixturesMixin, TransactionTestCase):
     """Simulate a worker crash mid-run: the 3rd batch (batch_index=2) raises
     a BaseException that bypasses the task's `except Exception` handlers,
     mimicking a real SIGKILL that leaves no in-process cleanup.
@@ -186,9 +185,7 @@ class TestMidBatchCrashLeavesCheckpoint(
         # first row of batch_index=2 (rows 11-15 in 0-indexed terms).
         rows_per_batch = self.BATCH_SIZE
         batch_count = 5
-        csv_payload = _build_csv(
-            rows_per_batch=rows_per_batch, batch_count=batch_count
-        )
+        csv_payload = _build_csv(rows_per_batch=rows_per_batch, batch_count=batch_count)
         upload = self._create_upload(csv_payload)
 
         original_create = Transaction.objects.create
@@ -207,13 +204,9 @@ class TestMidBatchCrashLeavesCheckpoint(
         # with BaseException propagation in unhelpful ways for this test).
         # The task body is what we want to exercise; .apply() vs direct
         # call is irrelevant to the idempotency invariant.
-        with patch.object(
-            Transaction.objects, "create", side_effect=crashing_create
-        ):
+        with patch.object(Transaction.objects, "create", side_effect=crashing_create):
             with self.assertRaises(_SimulatedWorkerCrash):
-                process_csv_upload.run(
-                    upload.id, CSV_MAPPING, skip_invalid=True
-                )
+                process_csv_upload.run(upload.id, CSV_MAPPING, skip_invalid=True)
 
         upload.refresh_from_db()
 
@@ -243,9 +236,7 @@ class TestMidBatchCrashLeavesCheckpoint(
         self.assertEqual(upload.successful_rows, 2 * self.BATCH_SIZE)
 
 
-class TestResumeSkipsCompletedBatches(
-    _IdempotencyFixturesMixin, TransactionTestCase
-):
+class TestResumeSkipsCompletedBatches(_IdempotencyFixturesMixin, TransactionTestCase):
     """End-to-end retry simulation: invoke the task, force a mid-batch
     crash, then re-invoke with the same upload_id. Assert the resumed run
     skips completed batches (no double-insert), processes only the
@@ -258,9 +249,7 @@ class TestResumeSkipsCompletedBatches(
     def test_retry_resumes_from_checkpoint_no_double_insert(self):
         rows_per_batch = self.BATCH_SIZE
         batch_count = 4
-        csv_payload = _build_csv(
-            rows_per_batch=rows_per_batch, batch_count=batch_count
-        )
+        csv_payload = _build_csv(rows_per_batch=rows_per_batch, batch_count=batch_count)
         upload = self._create_upload(csv_payload)
 
         original_create = Transaction.objects.create
@@ -277,13 +266,9 @@ class TestResumeSkipsCompletedBatches(
         # in the task and propagates out, leaving the DataUpload row in
         # the same state a fresh-worker retry would observe. Call the
         # task body directly to bypass Celery's eager-mode tracer.
-        with patch.object(
-            Transaction.objects, "create", side_effect=crashing_create
-        ):
+        with patch.object(Transaction.objects, "create", side_effect=crashing_create):
             with self.assertRaises(_SimulatedWorkerCrash):
-                process_csv_upload.run(
-                    upload.id, CSV_MAPPING, skip_invalid=True
-                )
+                process_csv_upload.run(upload.id, CSV_MAPPING, skip_invalid=True)
 
         upload.refresh_from_db()
         self.assertEqual(upload.last_processed_batch_index, 2)
@@ -331,8 +316,7 @@ class TestResumeSkipsCompletedBatches(
         log = json.loads(upload.error_log) if upload.error_log else []
         batch_entries = [e for e in log if e.get("kind") == "batch"]
         succeeded_indices = sorted(
-            e["batch_index"] for e in batch_entries
-            if e["status"] == "succeeded"
+            e["batch_index"] for e in batch_entries if e["status"] == "succeeded"
         )
         self.assertEqual(
             succeeded_indices,

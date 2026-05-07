@@ -39,8 +39,8 @@ Two safeguards:
 Deploy during a low-traffic window. If trigger creation times out, retry
 the migration after the contending transaction releases its lock.
 """
-from django.db import migrations
 
+from django.db import migrations
 
 # (table_name, function_name, trigger_name) for the four supplier FKs
 # flagged in Finding C3. Each table owns ``organization_id`` and

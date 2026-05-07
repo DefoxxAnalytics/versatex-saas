@@ -15,6 +15,9 @@ import {
   procurementAPI,
   getOrganizationParam,
   type AnalyticsFilters,
+  type Category,
+  type PaginatedResponse,
+  type Supplier,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/queryKeys";
 import { useFilters } from "./useFilters";
@@ -36,21 +39,19 @@ function useFilterMapping() {
   const { data: suppliers } = useSuppliersInternal();
   const { data: categories } = useCategoriesInternal();
 
+  // v3.1 Phase 1 (F-C3): typed access via PaginatedResponse<T>. Previous
+  // `as any` casts hid type drift — if the API ever returned an array
+  // instead of a paginated envelope, runtime would silently break with no
+  // compile-time signal.
   const supplierNameToId = useMemo(() => {
     const map = new Map<string, number>();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (suppliers as any)?.results?.forEach((s: { name: string; id: number }) =>
-      map.set(s.name, s.id)
-    );
+    suppliers?.results?.forEach((s) => map.set(s.name, s.id));
     return map;
   }, [suppliers]);
 
   const categoryNameToId = useMemo(() => {
     const map = new Map<string, number>();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (categories as any)?.results?.forEach((c: { name: string; id: number }) =>
-      map.set(c.name, c.id)
-    );
+    categories?.results?.forEach((c) => map.set(c.name, c.id));
     return map;
   }, [categories]);
 
@@ -60,7 +61,7 @@ function useFilterMapping() {
 // Internal hooks for filter mapping (to avoid circular dependency)
 function useSuppliersInternal() {
   const orgId = getOrgKeyPart();
-  return useQuery({
+  return useQuery<PaginatedResponse<Supplier>>({
     queryKey: queryKeys.procurement.suppliers.list(undefined, orgId),
     queryFn: async () => {
       const response = await procurementAPI.getSuppliers();
@@ -71,7 +72,7 @@ function useSuppliersInternal() {
 
 function useCategoriesInternal() {
   const orgId = getOrgKeyPart();
-  return useQuery({
+  return useQuery<PaginatedResponse<Category>>({
     queryKey: queryKeys.procurement.categories.list(undefined, orgId),
     queryFn: async () => {
       const response = await procurementAPI.getCategories();
@@ -278,10 +279,17 @@ export function useSupplierDrilldown(supplierId: number | null) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.analytics.supplierDrilldown(supplierId!, orgId, filters),
+    queryKey: queryKeys.analytics.supplierDrilldown(
+      supplierId!,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
       if (!supplierId) return null;
-      const response = await analyticsAPI.getSupplierDrilldown(supplierId, filters);
+      const response = await analyticsAPI.getSupplierDrilldown(
+        supplierId,
+        filters,
+      );
       return response.data;
     },
     enabled: !!supplierId,
@@ -297,10 +305,17 @@ export function useCategoryDrilldown(categoryId: number | null) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.analytics.categoryDrilldown(categoryId!, orgId, filters),
+    queryKey: queryKeys.analytics.categoryDrilldown(
+      categoryId!,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
       if (!categoryId) return null;
-      const response = await analyticsAPI.getCategoryDrilldown(categoryId, filters);
+      const response = await analyticsAPI.getCategoryDrilldown(
+        categoryId,
+        filters,
+      );
       return response.data;
     },
     enabled: !!categoryId,
@@ -336,7 +351,10 @@ export function useDetailedTailSpend(threshold: number = 50000) {
   return useQuery({
     queryKey: queryKeys.analytics.tailSpendDetailed(threshold, orgId, filters),
     queryFn: async () => {
-      const response = await analyticsAPI.getDetailedTailSpend(threshold, filters);
+      const response = await analyticsAPI.getDetailedTailSpend(
+        threshold,
+        filters,
+      );
       return response.data;
     },
   });
@@ -446,10 +464,17 @@ export function useSegmentDrilldown(segmentName: string | null) {
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.analytics.segmentDrilldown(segmentName!, orgId, filters),
+    queryKey: queryKeys.analytics.segmentDrilldown(
+      segmentName!,
+      orgId,
+      filters,
+    ),
     queryFn: async () => {
       if (!segmentName) return null;
-      const response = await analyticsAPI.getSegmentDrilldown(segmentName, filters);
+      const response = await analyticsAPI.getSegmentDrilldown(
+        segmentName,
+        filters,
+      );
       return response.data;
     },
     enabled: !!segmentName,
@@ -504,9 +529,18 @@ export function useDetailedSeasonality(
   const orgId = getOrgKeyPart();
   const filters = useAnalyticsFilters();
   return useQuery({
-    queryKey: queryKeys.analytics.seasonalityDetailed(useFiscalYear, orgId, filters, year),
+    queryKey: queryKeys.analytics.seasonalityDetailed(
+      useFiscalYear,
+      orgId,
+      filters,
+      year,
+    ),
     queryFn: async () => {
-      const response = await analyticsAPI.getDetailedSeasonality(useFiscalYear, filters, year);
+      const response = await analyticsAPI.getDetailedSeasonality(
+        useFiscalYear,
+        filters,
+        year,
+      );
       return response.data;
     },
   });

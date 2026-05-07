@@ -17,6 +17,7 @@ test_switch_org_atomicity.py.
 
 See docs/codebase-review-2026-05-06-second-pass.md Critical #4.
 """
+
 from unittest.mock import patch
 
 import pytest
@@ -36,7 +37,7 @@ def auth_client(admin_user):
     """APIClient authenticated via cookie path (DEBUG-only header fallback)."""
     client = APIClient()
     refresh = RefreshToken.for_user(admin_user)
-    client.cookies['access_token'] = str(refresh.access_token)
+    client.cookies["access_token"] = str(refresh.access_token)
     return client
 
 
@@ -68,16 +69,19 @@ class TestUserPreferencesAtomicity:
             atomic_calls["n"] += 1
             return original_atomic(*args, **kwargs)
 
-        with patch.object(
-            UserProfile.objects, 'select_for_update', side_effect=counting_sfu
-        ), patch(
-            'apps.authentication.views.transaction.atomic',
-            side_effect=counting_atomic,
+        with (
+            patch.object(
+                UserProfile.objects, "select_for_update", side_effect=counting_sfu
+            ),
+            patch(
+                "apps.authentication.views.transaction.atomic",
+                side_effect=counting_atomic,
+            ),
         ):
             response = auth_client.patch(
-                '/api/v1/auth/preferences/',
-                {'theme': 'dark', 'colorScheme': 'navy'},
-                format='json',
+                "/api/v1/auth/preferences/",
+                {"theme": "dark", "colorScheme": "navy"},
+                format="json",
             )
 
         assert response.status_code == status.HTTP_200_OK, response.data
@@ -97,24 +101,28 @@ class TestUserPreferencesAtomicity:
         """
         # Seed.
         response = auth_client.patch(
-            '/api/v1/auth/preferences/', {'theme': 'dark'}, format='json',
+            "/api/v1/auth/preferences/",
+            {"theme": "dark"},
+            format="json",
         )
         assert response.status_code == status.HTTP_200_OK, response.data
 
         # Partial update: add a new key.
         response = auth_client.patch(
-            '/api/v1/auth/preferences/', {'colorScheme': 'navy'}, format='json',
+            "/api/v1/auth/preferences/",
+            {"colorScheme": "navy"},
+            format="json",
         )
         assert response.status_code == status.HTTP_200_OK, response.data
 
         admin_user.profile.refresh_from_db()
         prefs = admin_user.profile.preferences or {}
-        assert prefs.get('theme') == 'dark', (
-            f"Pre-existing key dropped on merge: {prefs!r}"
-        )
-        assert prefs.get('colorScheme') == 'navy', (
-            f"New key not persisted on merge: {prefs!r}"
-        )
+        assert (
+            prefs.get("theme") == "dark"
+        ), f"Pre-existing key dropped on merge: {prefs!r}"
+        assert (
+            prefs.get("colorScheme") == "navy"
+        ), f"New key not persisted on merge: {prefs!r}"
 
 
 @pytest.mark.django_db
@@ -143,15 +151,20 @@ class TestSavingsConfigAtomicity:
             atomic_calls["n"] += 1
             return original_atomic(*args, **kwargs)
 
-        url = f'/api/v1/auth/organizations/{organization.id}/savings-config/'
-        with patch.object(
-            Organization.objects, 'select_for_update', side_effect=counting_sfu
-        ), patch(
-            'apps.authentication.views.transaction.atomic',
-            side_effect=counting_atomic,
+        url = f"/api/v1/auth/organizations/{organization.id}/savings-config/"
+        with (
+            patch.object(
+                Organization.objects, "select_for_update", side_effect=counting_sfu
+            ),
+            patch(
+                "apps.authentication.views.transaction.atomic",
+                side_effect=counting_atomic,
+            ),
         ):
             response = admin_client.patch(
-                url, {'consolidation_rate': 0.04}, format='json',
+                url,
+                {"consolidation_rate": 0.04},
+                format="json",
             )
 
         assert response.status_code == status.HTTP_200_OK, response.data
@@ -164,28 +177,30 @@ class TestSavingsConfigAtomicity:
             "to lock the org row during the read-merge-write."
         )
 
-    def test_patch_merge_still_correct(
-        self, organization, admin_user, admin_client
-    ):
+    def test_patch_merge_still_correct(self, organization, admin_user, admin_client):
         """Regression guard: atomic wrap must not break the merge semantics."""
-        url = f'/api/v1/auth/organizations/{organization.id}/savings-config/'
+        url = f"/api/v1/auth/organizations/{organization.id}/savings-config/"
         # Seed.
         response = admin_client.patch(
-            url, {'consolidation_rate': 0.04}, format='json',
+            url,
+            {"consolidation_rate": 0.04},
+            format="json",
         )
         assert response.status_code == status.HTTP_200_OK, response.data
 
         # Partial update: add a second key.
         response = admin_client.patch(
-            url, {'anomaly_recovery_rate': 0.01}, format='json',
+            url,
+            {"anomaly_recovery_rate": 0.01},
+            format="json",
         )
         assert response.status_code == status.HTTP_200_OK, response.data
 
         organization.refresh_from_db()
         config = organization.savings_config or {}
-        assert config.get('consolidation_rate') == 0.04, (
-            f"Merge dropped pre-existing key: {config!r}"
-        )
-        assert config.get('anomaly_recovery_rate') == 0.01, (
-            f"Merge failed to add new key: {config!r}"
-        )
+        assert (
+            config.get("consolidation_rate") == 0.04
+        ), f"Merge dropped pre-existing key: {config!r}"
+        assert (
+            config.get("anomaly_recovery_rate") == 0.01
+        ), f"Merge failed to add new key: {config!r}"
