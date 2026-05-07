@@ -26,6 +26,91 @@ FORMULA_CHARS = ('=', '+', '-', '@', '\t', '\r', '\n')
 MAX_ROWS_PER_UPLOAD = 50000
 
 
+def normalize_name(name: str) -> str:
+    """
+    Canonicalize a Supplier / Category name for storage and lookup.
+
+    Returns lowercase, whitespace-normalized form. Used to eliminate the
+    case-collision race in concurrent CSV uploads where two writers with the
+    same name in different cases (e.g. "ACME Corp" and "acme corp") both
+    miss a case-insensitive lookup, both INSERT, and produce duplicate rows
+    that the (organization, name) unique constraint cannot prevent because
+    the constraint is case-sensitive at the DB level.
+
+    The unique_together (organization, name) on Supplier and Category enforces
+    canonical equality after this function is applied on every read AND write,
+    serializing concurrent writers via IntegrityError.
+
+    Args:
+        name: Raw name from CSV / form input.
+
+    Returns:
+        Canonical form: stripped, internal whitespace collapsed, lowercased.
+        Empty string if input is empty / None / whitespace-only.
+    """
+    if not name:
+        return ""
+    return " ".join(str(name).split()).lower()
+
+
+def get_or_create_supplier(organization, name, defaults=None):
+    """
+    Race-safe Supplier lookup-or-create using canonical name normalization.
+
+    Pattern:
+    1. Normalize the name once via `normalize_name`.
+    2. Inside `transaction.atomic()`, attempt `get_or_create` with the
+       canonical name. The atomic block ensures the SELECT and the INSERT
+       run in the same transaction so the unique constraint actually
+       protects us.
+    3. On `IntegrityError` (concurrent writer beat us to the INSERT),
+       retry once with `.get(name=canonical)` — the canonical form means
+       the second writer's exact-match lookup finds the first writer's
+       row instead of duplicating.
+
+    Returns:
+        Tuple (supplier, created) matching `get_or_create`'s contract.
+
+    Raises:
+        ValueError: If `name` is empty after normalization.
+    """
+    canonical = normalize_name(name)
+    if not canonical:
+        raise ValueError("Supplier name is required")
+
+    create_defaults = dict(defaults or {})
+    try:
+        with transaction.atomic():
+            return Supplier.objects.get_or_create(
+                organization=organization,
+                name=canonical,
+                defaults=create_defaults,
+            )
+    except IntegrityError:
+        return Supplier.objects.get(organization=organization, name=canonical), False
+
+
+def get_or_create_category(organization, name, defaults=None):
+    """
+    Race-safe Category lookup-or-create. See `get_or_create_supplier` for
+    the full rationale — this is the same pattern applied to Category.
+    """
+    canonical = normalize_name(name)
+    if not canonical:
+        raise ValueError("Category name is required")
+
+    create_defaults = dict(defaults or {})
+    try:
+        with transaction.atomic():
+            return Category.objects.get_or_create(
+                organization=organization,
+                name=canonical,
+                defaults=create_defaults,
+            )
+    except IntegrityError:
+        return Category.objects.get(organization=organization, name=canonical), False
+
+
 def sanitize_csv_value(value: str) -> str:
     """
     Sanitize a CSV value to prevent formula injection.
@@ -303,23 +388,23 @@ class CSVProcessor:
         # Track affected organizations for audit logging
         self.orgs_affected.add(organization.name)
 
-        # Get or create supplier (sanitize name)
+        # Get or create supplier (sanitize name, canonical-case race-safe)
         supplier_name = sanitize_csv_value(str(row['supplier']).strip())
         if not supplier_name or supplier_name == "'":
             raise ValueError("Supplier name is required")
 
-        supplier, _ = Supplier.objects.get_or_create(
+        supplier, _ = get_or_create_supplier(
             organization=organization,
             name=supplier_name,
             defaults={'is_active': True}
         )
 
-        # Get or create category (sanitize name)
+        # Get or create category (sanitize name, canonical-case race-safe)
         category_name = sanitize_csv_value(str(row['category']).strip())
         if not category_name or category_name == "'":
             raise ValueError("Category name is required")
 
-        category, _ = Category.objects.get_or_create(
+        category, _ = get_or_create_category(
             organization=organization,
             name=category_name,
             defaults={'is_active': True}

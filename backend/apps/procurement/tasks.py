@@ -16,6 +16,7 @@ from django.utils import timezone
 from apps.authentication.models import UserOrganizationMembership
 
 from .models import DataUpload, Transaction, Supplier, Category
+from .services import get_or_create_supplier, get_or_create_category
 
 logger = logging.getLogger(__name__)
 
@@ -173,20 +174,18 @@ def process_csv_upload(self, upload_id, mapping, skip_invalid=True, skip_duplica
                                 batch_duplicates += 1
                                 continue
 
-                            # Get or create supplier
+                            # Get or create supplier (canonical-case race-safe)
                             supplier_name = row.get(supplier_col, '').strip()
-                            supplier, _ = Supplier.objects.get_or_create(
+                            supplier, _ = get_or_create_supplier(
                                 organization=organization,
-                                name__iexact=supplier_name,
-                                defaults={'name': supplier_name}
+                                name=supplier_name,
                             )
 
-                            # Get or create category
+                            # Get or create category (canonical-case race-safe)
                             category_name = row.get(category_col, '').strip()
-                            category, _ = Category.objects.get_or_create(
+                            category, _ = get_or_create_category(
                                 organization=organization,
-                                name__iexact=category_name,
-                                defaults={'name': category_name}
+                                name=category_name,
                             )
 
                             # Parse amount

@@ -7,6 +7,7 @@ from .models import (
     Supplier, Category, Transaction, DataUpload,
     PurchaseRequisition, PurchaseOrder, GoodsReceipt, Invoice
 )
+from .services import get_or_create_supplier, get_or_create_category
 
 # Try to import python-magic for robust file type validation
 try:
@@ -125,21 +126,21 @@ class TransactionCreateSerializer(serializers.ModelSerializer):
         # Get organization from context
         organization = self.context['request'].user.profile.organization
         
-        # Handle supplier creation if name provided
+        # Handle supplier creation if name provided (canonical-case race-safe)
         supplier_name = validated_data.pop('supplier_name', None)
         if supplier_name and 'supplier' not in validated_data:
-            supplier, _ = Supplier.objects.get_or_create(
+            supplier, _ = get_or_create_supplier(
                 organization=organization,
-                name=supplier_name
+                name=supplier_name,
             )
             validated_data['supplier'] = supplier
-        
-        # Handle category creation if name provided
+
+        # Handle category creation if name provided (canonical-case race-safe)
         category_name = validated_data.pop('category_name', None)
         if category_name and 'category' not in validated_data:
-            category, _ = Category.objects.get_or_create(
+            category, _ = get_or_create_category(
                 organization=organization,
-                name=category_name
+                name=category_name,
             )
             validated_data['category'] = category
         
