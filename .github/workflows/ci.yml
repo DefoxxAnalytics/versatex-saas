@@ -405,10 +405,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Print findings as a table first so failures are diagnosable from the
-      # job log without downloading the SARIF artifact. Non-blocking: this
-      # step never fails the job. The blocking gate is the SARIF run below.
-      - name: Trivy diagnostic table (HIGH/CRITICAL)
+      # Two Trivy invocations split by responsibility:
+      #
+      #   1. Gate (this step) — table format, exit 1 on HIGH/CRITICAL. Prints
+      #      findings inline so the job log alone is enough to diagnose a
+      #      failure. Trivy v0.70 with `format: sarif` + `exit-code: 1` had a
+      #      quirk where it exited 1 even on 0 findings (table format on the
+      #      same checkout reported 0/0); table-format gating sidesteps that.
+      #
+      #   2. SARIF upload (next step) — never blocks; output goes to the
+      #      uploader so findings show up in GitHub code scanning even when
+      #      the gate passes.
+      #
+      # `scanners: 'vuln'` is REQUIRED on both. The action defaults to
+      # vuln + secret + misconfig; secret findings ignore the severity
+      # filter and would block the gate on docstring false-positives.
+      # Secret scanning belongs in a dedicated job (gitleaks / GitHub
+      # secret scanning), not bolted into the CVE gate.
+      - name: Trivy CVE gate (HIGH/CRITICAL block)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           scan-type: 'fs'
@@ -416,22 +430,11 @@ jobs:
           format: 'table'
           scanners: 'vuln'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'
           ignore-unfixed: false
 
-      - name: Run Trivy vulnerability scanner
-        # Pinned to the v0.36.0 commit SHA. Floating @master is a supply-chain
-        # risk; tag refs (@v0.36.0) are immutable in GitHub Actions but a
-        # digest pin is even safer. Bump deliberately.
-        #
-        # `scanners: 'vuln'` is REQUIRED. The action defaults to scanning
-        # vuln + secret + misconfig. The `severity` filter only applies to
-        # vulns — secrets always trigger exit 1 on any match, bypassing the
-        # CRITICAL/HIGH gate. We had a false-positive secret detection
-        # blocking CI even with 0 HIGH vulnerabilities; explicit scanners
-        # keeps the gate scoped to what `severity` actually controls.
-        # Secret scanning lives in a separate tool (gitleaks etc.) — track
-        # there, not here.
+      - name: Trivy SARIF for code scanning (non-blocking)
+        if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           scan-type: 'fs'
@@ -440,7 +443,7 @@ jobs:
           output: 'trivy-results.sarif'
           scanners: 'vuln'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+          exit-code: '0'
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
