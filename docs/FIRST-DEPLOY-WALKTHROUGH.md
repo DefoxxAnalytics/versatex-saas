@@ -536,8 +536,9 @@ docker compose up -d backend
 # Apply migrations
 docker compose exec backend python manage.py migrate
 
-# Collect admin static files (whitenoise needs the manifest)
-docker compose exec backend python manage.py collectstatic --noinput
+# (collectstatic is automatic since v3.1: backend/entrypoint.sh runs it
+#  on every container start. Manual run only useful if you've changed
+#  files under backend/static/ since the last container restart.)
 
 # Create superuser
 docker compose exec backend python manage.py createsuperuser

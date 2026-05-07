@@ -69,7 +69,7 @@ map $http_x_forwarded_proto $proxy_x_forwarded_proto {
 ```
 **b.** Replace `X-Forwarded-Proto $scheme` with `X-Forwarded-Proto $proxy_x_forwarded_proto` in all 4 proxy blocks. Without this the cloudflared→nginx plaintext hop wipes out Cloudflare's `X-Forwarded-Proto: https`, breaking Django `SECURE_SSL_REDIRECT` in prod.
 
-**c.** Tighten CSP `connect-src` for production — drop `http://localhost:8001`, `http://127.0.0.1:8001`, `https://*.railway.app`. Leave `'self'` only (all traffic is same-origin now).
+**c.** ~~Tighten CSP `connect-src` for production — drop `http://localhost:8001`, `http://127.0.0.1:8001`, `https://*.railway.app`. Leave `'self'` only (all traffic is same-origin now).~~ **DONE in v3.1 Phase 0 (F-H4).** Production CSP now ships as `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';` — `script-src` `'unsafe-inline'` was also dropped (Manus IDE-runtime plugin gated to dev-only in `vite.config.ts`).
 
 ### 2. `backend/config/settings.py`
 
@@ -368,7 +368,8 @@ Follow [CLOUDFLARE-HETZNER.md](CLOUDFLARE-HETZNER.md) §1–§4 verbatim (VPS pr
 9. **Bootstrap:**
    ```bash
    docker compose exec backend python manage.py migrate
-   docker compose exec backend python manage.py collectstatic --noinput
+   # collectstatic is automatic since v3.1 (backend/entrypoint.sh runs it
+   # on every container start). Manual run is a fallback only.
    docker compose exec backend python manage.py createsuperuser
    # Link UserProfile per CLOUDFLARE-HETZNER.md §7 heredoc
    ```
@@ -410,7 +411,8 @@ Follow [CLOUDFLARE-HETZNER.md](CLOUDFLARE-HETZNER.md) §1–§4 verbatim (VPS pr
 - `APP_VERSION=<prev-sha> docker compose pull && docker compose up -d` — previous images pulled from GHCR, app reverts in <90 s. Confirm user session cookies still valid.
 
 **Scheduled tasks**
-- Within 24 h: `docker compose logs celery | grep -E 'batch_generate_insights|cleanup_|llm_cost_digest'` — beat firing.
+- Within 24 h: `docker compose logs celery | grep -E 'batch_generate_insights|cleanup_|llm_cost_digest|process_scheduled_reports|cleanup_expired_reports'` — beat firing.
+- Within 1 h of deploy: at least one `process_scheduled_reports` line in celery logs (hourly schedule). Silent failure mode: scheduled reports created via the UI never run.
 - LLM cost digest POSTs to webhook.
 
 **Non-regression**

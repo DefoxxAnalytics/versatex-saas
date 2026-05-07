@@ -1,5 +1,13 @@
 # Complete Step-by-Step Railway Deployment Guide
 
+> **⚠️ DEPRECATED — see [`docs/RAILWAY-DEPLOY-WALKTHROUGH.md`](../RAILWAY-DEPLOY-WALKTHROUGH.md) instead.**
+>
+> This document predates the v3.1 deployment posture (entrypoint-driven
+> `collectstatic`, beat-driven scheduled reports, GHCR `workflow_run` gate,
+> tightened production CSP). The canonical walkthrough has been kept in
+> sync; this file is retained for historical reference only and may
+> contain stale commands or env-var advice.
+
 **Detailed walkthrough for deploying the Analytics Dashboard to Railway from scratch.**
 
 ---
