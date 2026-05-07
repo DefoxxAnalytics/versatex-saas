@@ -100,5 +100,18 @@ export default defineConfig({
         singleFork: true,
       },
     },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "lcov", "json-summary"],
+      // Floors set just below current measured coverage (May 2026 baseline:
+      // 70.69 stmt / 61.13 branch / 65.89 func / 72.02 line). Ratchet up as
+      // tests are added; never relax.
+      thresholds: {
+        lines: 65,
+        statements: 65,
+        functions: 60,
+        branches: 55,
+      },
+    },
   },
 });
