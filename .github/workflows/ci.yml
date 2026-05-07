@@ -401,6 +401,14 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     needs: [backend-lint, frontend-lint]
+    # Required for upload-sarif: push events to main don't get
+    # security-events: write on GITHUB_TOKEN by default (PR events do
+    # because forked PRs have a separate token model). Without this the
+    # upload-sarif step fails with `Resource not accessible by integration`,
+    # which fails the job even though Trivy itself succeeded.
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - uses: actions/checkout@v4
