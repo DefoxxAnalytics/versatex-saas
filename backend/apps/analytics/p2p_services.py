@@ -1153,35 +1153,45 @@ class P2PAnalyticsService:
         return sorted(result, key=lambda x: x['total_ap'], reverse=True)[:limit]
 
     def get_payment_terms_compliance(self):
-        """On-time vs late payment rates by payment terms."""
-        paid_invoices = Invoice.objects.filter(
-            organization=self.organization,
-            status='paid',
-            paid_date__isnull=False,
-            payment_terms__isnull=False
-        ).exclude(payment_terms='')
+        """On-time vs late payment rates by payment terms.
 
-        # Group by payment terms
-        terms_stats = defaultdict(lambda: {'on_time': 0, 'late': 0, 'total': 0})
-
-        for inv in paid_invoices:
-            terms = inv.payment_terms
-            terms_stats[terms]['total'] += 1
-
-            if inv.days_overdue == 0:
-                terms_stats[terms]['on_time'] += 1
-            else:
-                terms_stats[terms]['late'] += 1
+        On-time mirrors `Invoice.days_overdue == 0` semantics: a paid
+        invoice is on-time when `paid_date <= due_date`. Implemented as a
+        single grouped ORM aggregation rather than per-row Python iteration
+        so it stays O(1) DB roundtrip as invoice volume grows.
+        Invoices with NULL `due_date` are excluded — `days_overdue` is
+        undefined for them and the prior implementation would have raised.
+        """
+        terms_stats = (
+            Invoice.objects.filter(
+                organization=self.organization,
+                status='paid',
+                paid_date__isnull=False,
+                due_date__isnull=False,
+                payment_terms__isnull=False,
+            )
+            .exclude(payment_terms='')
+            .values('payment_terms')
+            .annotate(
+                total=Count('id'),
+                on_time=Count(
+                    Case(
+                        When(paid_date__lte=F('due_date'), then=1),
+                        output_field=IntegerField(),
+                    )
+                ),
+            )
+        )
 
         return [
             {
-                'payment_terms': terms,
-                'total': stats['total'],
-                'on_time': stats['on_time'],
-                'late': stats['late'],
-                'on_time_rate': round(stats['on_time'] / stats['total'] * 100, 1) if stats['total'] > 0 else 0
+                'payment_terms': item['payment_terms'],
+                'total': item['total'],
+                'on_time': item['on_time'],
+                'late': item['total'] - item['on_time'],
+                'on_time_rate': round(item['on_time'] / item['total'] * 100, 1) if item['total'] > 0 else 0,
             }
-            for terms, stats in terms_stats.items()
+            for item in terms_stats
         ]
 
     def get_cash_flow_forecast(self, weeks=4):
