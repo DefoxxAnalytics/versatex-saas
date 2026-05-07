@@ -22,6 +22,20 @@ apps/analytics/models.py:370 and :554 — guarded by `if PGVECTOR_AVAILABLE`).
 Keeping the index in a raw migration decouples index management from the
 conditional-field setup and avoids `makemigrations` noise when devs run
 without pgvector installed.
+
+Concurrency note (v3.0 Phase 3 task 3.10 / M-DB3):
+We build with `CREATE INDEX CONCURRENTLY` and `atomic = False` on the
+Migration class. Without CONCURRENTLY, Postgres holds an ACCESS EXCLUSIVE
+lock on the table for the full duration of the build, blocking concurrent
+reads and writes. CONCURRENTLY trades roughly 2x build time for a
+non-blocking build (only a brief lock at start/end). Vector tables are
+small today (<1K rows), so the build is fast either way — but the change
+matters once these tables grow into the tens of thousands of rows, when
+the blocking variant would create deploy outages.
+
+Deploy guidance: still prefer a low-traffic window. CONCURRENTLY can fail
+mid-build (leaving an INVALID index that must be dropped manually); see
+the pgvector / Postgres docs before retrying.
 """
 import os
 
@@ -43,12 +57,12 @@ def add_vector_indexes(apps, schema_editor):
         return
     lists = _lists()
     schema_editor.execute(
-        f"CREATE INDEX IF NOT EXISTS analytics_semanticcache_query_embedding_ivfflat "
+        f"CREATE INDEX CONCURRENTLY IF NOT EXISTS analytics_semanticcache_query_embedding_ivfflat "
         f"ON analytics_semanticcache USING ivfflat (query_embedding vector_cosine_ops) "
         f"WITH (lists = {lists})"
     )
     schema_editor.execute(
-        f"CREATE INDEX IF NOT EXISTS analytics_embeddeddocument_content_embedding_ivfflat "
+        f"CREATE INDEX CONCURRENTLY IF NOT EXISTS analytics_embeddeddocument_content_embedding_ivfflat "
         f"ON analytics_embeddeddocument USING ivfflat (content_embedding vector_cosine_ops) "
         f"WITH (lists = {lists})"
     )
@@ -58,14 +72,17 @@ def remove_vector_indexes(apps, schema_editor):
     if schema_editor.connection.vendor != 'postgresql':
         return
     schema_editor.execute(
-        "DROP INDEX IF EXISTS analytics_semanticcache_query_embedding_ivfflat"
+        "DROP INDEX CONCURRENTLY IF EXISTS analytics_semanticcache_query_embedding_ivfflat"
     )
     schema_editor.execute(
-        "DROP INDEX IF EXISTS analytics_embeddeddocument_content_embedding_ivfflat"
+        "DROP INDEX CONCURRENTLY IF EXISTS analytics_embeddeddocument_content_embedding_ivfflat"
     )
 
 
 class Migration(migrations.Migration):
+
+    # CONCURRENTLY index ops cannot run inside a transaction block.
+    atomic = False
 
     dependencies = [
         ('analytics', '0005_embeddeddocument'),
@@ -76,5 +93,6 @@ class Migration(migrations.Migration):
             code=add_vector_indexes,
             reverse_code=remove_vector_indexes,
             elidable=False,
+            atomic=False,
         ),
     ]
