@@ -405,6 +405,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Print findings as a table first so failures are diagnosable from the
+      # job log without downloading the SARIF artifact. Non-blocking: this
+      # step never fails the job. The blocking gate is the SARIF run below.
+      - name: Trivy diagnostic table (HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          ignore-unfixed: false
+
       - name: Run Trivy vulnerability scanner
         # Pinned to the v0.36.0 commit SHA. Floating @master is a supply-chain
         # risk; tag refs (@v0.36.0) are immutable in GitHub Actions but a
