@@ -16,7 +16,13 @@ class TestRegisterView:
     """Tests for user registration."""
 
     def test_register_success(self, api_client, organization):
-        """Test successful user registration."""
+        """Test successful user registration.
+
+        Also drift-guards Finding #1 (Phase 1 task 1.1): the happy-path
+        registration must always assign role='viewer'. If RegisterSerializer
+        ever loosens its role-defaulting, this assertion catches it before
+        the regression ships.
+        """
         url = reverse('register')
         data = {
             'username': 'newuser',
@@ -34,6 +40,18 @@ class TestRegisterView:
         # Verify cookies are set
         assert 'access_token' in response.cookies
         assert 'refresh_token' in response.cookies
+
+        # Finding #1 drift-guard: default role must remain 'viewer' on the
+        # happy path. The hardening test_register_role_hardening.py covers
+        # the malicious-payload path; this covers the silent-default path
+        # (e.g., a refactor that swaps 'viewer' for 'manager' would slip
+        # past the hardening tests but break here).
+        profile = UserProfile.objects.get(user__username='newuser')
+        assert profile.role == 'viewer', (
+            f"RegisterView assigned role={profile.role!r} on happy path; "
+            f"expected 'viewer'. Finding #1 drift — see "
+            f"test_register_role_hardening.py for the malicious-payload coverage."
+        )
 
     def test_register_password_mismatch(self, api_client, organization):
         """Test registration with mismatched passwords."""
