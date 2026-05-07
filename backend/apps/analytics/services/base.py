@@ -174,3 +174,56 @@ class BaseAnalyticsService:
         if month >= 7:
             return month - 6  # Jul=1, Aug=2, ..., Dec=6
         return month + 6  # Jan=7, Feb=8, ..., Jun=12
+
+    @staticmethod
+    def fiscal_year_db_expr(use_fiscal_year=True, date_field="date"):
+        """
+        Django ORM expression mirroring `_get_fiscal_year` for use in
+        `.annotate()` / `.values()` aggregation pipelines.
+
+        Returns a Case/When expression that evaluates server-side:
+            month >= 7 → Year(date) + 1
+            else       → Year(date)
+
+        When ``use_fiscal_year=False``, returns calendar year directly.
+
+        Use this when you need to GROUP BY fiscal year at the DB layer
+        instead of materialising rows and computing in Python.
+        """
+        from django.db.models import Case, IntegerField, Value, When
+        from django.db.models.functions import ExtractMonth, ExtractYear
+
+        if not use_fiscal_year:
+            return ExtractYear(date_field)
+        return Case(
+            When(
+                **{f"{date_field}__month__gte": 7},
+                then=ExtractYear(date_field) + Value(1),
+            ),
+            default=ExtractYear(date_field),
+            output_field=IntegerField(),
+        )
+
+    @staticmethod
+    def fiscal_month_db_expr(use_fiscal_year=True, date_field="date"):
+        """
+        Django ORM expression mirroring `_get_fiscal_month`.
+
+            use_fiscal_year=True:
+                month >= 7 → month - 6  (Jul=1, ..., Dec=6)
+                else       → month + 6  (Jan=7, ..., Jun=12)
+            use_fiscal_year=False: month (1..12, calendar)
+        """
+        from django.db.models import Case, IntegerField, Value, When
+        from django.db.models.functions import ExtractMonth
+
+        if not use_fiscal_year:
+            return ExtractMonth(date_field)
+        return Case(
+            When(
+                **{f"{date_field}__month__gte": 7},
+                then=ExtractMonth(date_field) - Value(6),
+            ),
+            default=ExtractMonth(date_field) + Value(6),
+            output_field=IntegerField(),
+        )

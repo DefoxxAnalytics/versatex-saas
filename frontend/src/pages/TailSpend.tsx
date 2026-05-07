@@ -784,7 +784,8 @@ export default function TailSpend() {
             <div className="space-y-4">
               {category_analysis.slice(0, 10).map((cat, index) => (
                 <div
-                  key={index}
+                  // v3.1 Phase 4 (F-TD1): cat.category + index for stability.
+                  key={`${cat.category}-${index}`}
                   className="border-l-4 border-l-gray-300 bg-gray-50 dark:bg-gray-900 p-4 rounded-r-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   onClick={() =>
                     cat.category_id && setSelectedCategoryId(cat.category_id)
@@ -912,7 +913,9 @@ export default function TailSpend() {
                       {consolidation_opportunities.multi_category.map(
                         (opp, index) => (
                           <div
-                            key={index}
+                            // v3.1 Phase 4 (F-TD1): supplier name uniquely
+                            // identifies a multi-category opp.
+                            key={`${opp.supplier}-${index}`}
                             className="border-l-4 border-l-indigo-500 bg-indigo-50 dark:bg-indigo-950 p-4 rounded-r-lg cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors"
                             onClick={() => setSelectedVendorId(opp.supplier_id)}
                           >
@@ -959,7 +962,8 @@ export default function TailSpend() {
                   ) : (
                     consolidation_opportunities.category.map((opp, index) => (
                       <div
-                        key={index}
+                        // v3.1 Phase 4 (F-TD1): opp.category is stable.
+                        key={`${opp.category}-${index}`}
                         className="border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-950 p-4 rounded-r-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors"
                         onClick={() =>
                           opp.category_id &&
@@ -1018,7 +1022,8 @@ export default function TailSpend() {
                   ) : (
                     consolidation_opportunities.geographic.map((opp, index) => (
                       <div
-                        key={index}
+                        // v3.1 Phase 4 (F-TD1): opp.location is stable.
+                        key={`${opp.location}-${index}`}
                         className="border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950 p-4 rounded-r-lg"
                       >
                         <h3 className="font-semibold text-lg text-green-900 dark:text-green-100 mb-2">

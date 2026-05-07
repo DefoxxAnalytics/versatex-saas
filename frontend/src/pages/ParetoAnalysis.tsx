@@ -594,7 +594,10 @@ export default function ParetoAnalysis() {
                       <div className="space-y-3">
                         {drilldownData.subcategories.map((item, index) => (
                           <div
-                            key={index}
+                            // v3.1 Phase 4 (F-TD1): content-derived key
+                            // so reordering doesn't tear the row's progress
+                            // bar animation against the wrong subcategory.
+                            key={`${item.name}-${index}`}
                             className="flex items-center justify-between"
                           >
                             <div className="flex-1">
@@ -636,7 +639,8 @@ export default function ParetoAnalysis() {
                       <div className="space-y-3">
                         {drilldownData.locations.map((item, index) => (
                           <div
-                            key={index}
+                            // v3.1 Phase 4 (F-TD1): see subcategories above.
+                            key={`${item.name}-${index}`}
                             className="flex items-center justify-between"
                           >
                             <div className="flex-1">

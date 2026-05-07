@@ -534,10 +534,24 @@ v2.12 closed `timezone.now()` violations in `compliance_services.py`. Same anti-
 - **XC-M2** Promote Black/Prettier to hard gates
 - **XC-M3** Ratchet `fail_under` upward
 
+### Phase 4 — Follow-up cleanup (post-v3.1 merge)
+
+Added 2026-05-07 after the v3.1 merge surfaced trailing items worth folding into a single dedicated cleanup pass. Closes the original v3.1 audit completely so v3.2 differential starts from a known-clean baseline.
+
+- **AN-M3** `yoy.py:get_detailed_year_over_year` DB-side aggregation. Phase 2 deferred this with rationale "FY math is Python-side via `_get_fiscal_year`, refactor would lose semantics, perf concern hypothetical." Reopened: at scale FY math expresses cleanly as `Case(When(date__month__gte=7, then=Year+1)).else_(Year)` without losing the helper's behaviour, and the change naturally pairs with the Phase 2 perf sweep that already DB-side-grouped `get_year_over_year_comparison`.
+- **F-TD1 sweep** Remaining `key={index}` data-list sites that were left out of the Phase 3 partial fix: `ParetoAnalysis.tsx`, `contracts/index.tsx`, `maverick/index.tsx`, `p2p/PurchaseOrders.tsx`, `p2p/InvoiceAging.tsx`, `TailSpend.tsx`. Skeleton/placeholder `key={i}` sites (still ~14 places) explicitly stay as-is — index keys on truly static filler are correct.
+- **A-H3** `create_tenant` management command. Phase 1 verification flagged the 3-step Org/User/UserProfile provisioning as non-atomic with a broad `except Exception` swallow. Phase 1/2 didn't touch it because it's only relevant in shell-driven tenant provisioning paths, but it's the kind of bug that costs 30 min of confused debugging when it bites. Wrap in `transaction.atomic()`, drop the swallow, re-raise after logging.
+- **MEDIUM dep bumps surfaced post-merge** by Trivy + safety:
+  - `scikit-learn 1.4.0 → 1.5.x` (CVE-2024-5206, TfidfVectorizer info leak)
+  - `pytest 8.3.4 → 8.4.2` (CVE-2025-71176, /tmp pytest-of-{user} race; conservative within 8.x major to avoid pytest 9 API breaks)
+  - `dompurify ≥3.4` via pnpm overrides (multiple GHSAs in 3.3.x, transitive via streamdown→mermaid)
+  - `uuid ≥11.1.1` via pnpm overrides (CVE-2026-41907, transitive)
+  - `mdast-util-to-hast ≥13.2.1` via pnpm overrides (CVE-2025-66400, transitive via streamdown)
+
 ### Open product decisions (not bugs)
-- Negative amount handling in CSV uploads (P-H1) — credit memo policy
-- Throttle scope rename (R-H3) — operator-facing API contract
-- `xlsx` package — confirm not transitively required
+- Negative amount handling in CSV uploads (P-H1) — credit memo policy. Surfaced by audit; needs decision on whether sync upload should accept negative amounts (current: rejected; async path: accepted, divergent). Tracking in `docs/REMEDIATION-OPEN-ITEMS.md` if not already there.
+- Throttle scope rename (R-H3) — operator-facing API contract; Phase 3 chose CLAUDE.md doc clarification over rename, can be revisited.
+- `xlsx` package — already removed in Phase 3 after verifying zero direct imports.
 
 ---
 
