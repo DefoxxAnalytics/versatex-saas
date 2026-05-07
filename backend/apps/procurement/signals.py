@@ -2,10 +2,17 @@
 Procurement signals for cache invalidation and data synchronization.
 
 Invalidates AI insights cache when procurement data changes.
+
+All cache-invalidation side effects are deferred via ``transaction.on_commit``
+so they only fire after the surrounding transaction successfully commits. This
+prevents cold-cache + read-your-write inconsistency when the transaction rolls
+back (FK violation, partial batch failure, etc.). When no transaction is active
+(autocommit), Django's ``on_commit`` runs the callback immediately.
 """
 
 import logging
 
+from django.db import transaction
 from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 
@@ -33,6 +40,20 @@ def _invalidate_ai_cache(organization_id: int, reason: str) -> None:
         logger.error(f"Failed to invalidate AI cache: {e}")
 
 
+def _schedule_invalidation(organization_id: int, reason: str) -> None:
+    """
+    Defer cache invalidation until the surrounding transaction commits.
+
+    Outside a transaction, ``on_commit`` invokes the callback immediately, so
+    autocommit code paths are unaffected. Inside a transaction that rolls back,
+    the callback is discarded — the cache is never touched, preserving the
+    pre-rollback state.
+    """
+    transaction.on_commit(
+        lambda: _invalidate_ai_cache(organization_id, reason)
+    )
+
+
 @receiver(post_save, sender=DataUpload)
 def invalidate_ai_cache_on_upload(sender, instance, created, **kwargs):
     """
@@ -41,7 +62,7 @@ def invalidate_ai_cache_on_upload(sender, instance, created, **kwargs):
     Only triggers on completed uploads to avoid premature invalidation.
     """
     if instance.status == 'completed':
-        _invalidate_ai_cache(
+        _schedule_invalidation(
             instance.organization_id,
             f"DataUpload completed (id={instance.id})"
         )
@@ -50,7 +71,7 @@ def invalidate_ai_cache_on_upload(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=Transaction)
 def invalidate_ai_cache_on_transaction_delete(sender, instance, **kwargs):
     """Invalidate AI insights cache when transactions are deleted."""
-    _invalidate_ai_cache(
+    _schedule_invalidation(
         instance.organization_id,
         f"Transaction deleted (id={instance.id})"
     )
@@ -65,7 +86,7 @@ def invalidate_ai_cache_on_transaction_save(sender, instance, created, **kwargs)
     This handles individual transaction edits.
     """
     if not created:
-        _invalidate_ai_cache(
+        _schedule_invalidation(
             instance.organization_id,
             f"Transaction updated (id={instance.id})"
         )
