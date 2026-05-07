@@ -1355,7 +1355,11 @@ Provide actionable recommendations prioritized by impact and effort."""
         else:
             raise ValueError(f"Unknown insight type: {insight_type}")
 
-    def perform_deep_analysis(self, insight_data: dict) -> Optional[dict]:
+    def perform_deep_analysis(
+        self,
+        insight_data: dict,
+        user_id: Optional[int] = None,
+    ) -> Optional[dict]:
         """
         Perform comprehensive deep analysis on a specific insight.
 
@@ -1369,6 +1373,9 @@ Provide actionable recommendations prioritized by impact and effort."""
 
         Args:
             insight_data: The insight dictionary to analyze
+            user_id: Requester's user ID. Plumbed into the semantic cache key
+                so two users in the same org sharing an insight ID do not
+                receive each other's cached analytical responses (M-AI2).
 
         Returns:
             Deep analysis results dict or None on failure
@@ -1383,7 +1390,8 @@ Provide actionable recommendations prioritized by impact and effort."""
             return self._provider_manager.deep_analysis(
                 insight_data=insight_data,
                 context=context,
-                tool_schema=DEEP_ANALYSIS_TOOL
+                tool_schema=DEEP_ANALYSIS_TOOL,
+                user_id=user_id,
             )
 
         # Fallback to legacy single-provider behavior
